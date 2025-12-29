@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
@@ -10,6 +10,24 @@ function isEmail(s: string) {
 }
 
 export default function LoginHome() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-dvh bg-neutral-950 text-white">
+          <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pb-10 pt-10">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="text-sm text-white/70">Loading…</div>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const nextUrl = useMemo(() => sp.get("next") || "/chat", [sp]);
@@ -36,7 +54,7 @@ export default function LoginHome() {
     };
   }, [supabase, router]);
 
-  // Show auth errors from URL hash (otp_expired, etc.)
+  // Show auth errors from URL hash
   useEffect(() => {
     const hash = window.location.hash || "";
     if (!hash) return;
@@ -65,7 +83,6 @@ export default function LoginHome() {
         email: e,
         options: {
           shouldCreateUser: true,
-          // keep redirect for clients that still deliver a link
           emailRedirectTo:
             typeof window !== "undefined"
               ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextUrl)}`
@@ -76,7 +93,7 @@ export default function LoginHome() {
       if (error) throw error;
 
       setOtpSent(true);
-      setMsg("Enter the 8-digit code from your email.");
+      setMsg("Enter the 6-digit code from your email.");
     } catch (err: any) {
       setMsg(err?.message || "Couldn’t send code. Try again.");
     } finally {
@@ -148,7 +165,7 @@ export default function LoginHome() {
 
           {!otpSent ? (
             <div className="mt-3 flex items-center justify-between">
-              <div className="text-xs text-white/60">We’ll send a 8-digit code.</div>
+              <div className="text-xs text-white/60">We’ll send a 6-digit code.</div>
               <Link
                 href="/signup"
                 className="text-xs text-emerald-200 hover:text-emerald-100 underline-offset-4 hover:underline"
@@ -158,13 +175,13 @@ export default function LoginHome() {
             </div>
           ) : (
             <>
-              <label className="mt-4 block text-xs font-semibold text-white/70">8-digit code</label>
+              <label className="mt-4 block text-xs font-semibold text-white/70">6-digit code</label>
               <input
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="12345678"
+                placeholder="123456"
                 className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base outline-none placeholder:text-white/35 focus:border-emerald-300/30"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") verifyCode();
@@ -194,17 +211,6 @@ export default function LoginHome() {
               </div>
             </>
           )}
-
-          {/* Optional: keep this link but update the meaning */}
-          <div className="mt-4 flex items-center justify-between">
-            <Link
-              href="/forgot"
-              className="text-xs text-white/70 hover:text-white underline-offset-4 hover:underline"
-            >
-              Trouble getting a code?
-            </Link>
-            <span className="text-[11px] text-white/40">Code expires quickly</span>
-          </div>
 
           {msg && (
             <div className="mt-4 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/85">
