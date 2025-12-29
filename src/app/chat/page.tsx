@@ -79,7 +79,7 @@ export default function ChatPage() {
       // 2) Try read profile
       let { data: profile, error: profileErr } = await supabase
         .from("profiles")
-        .select("role,user_type,email")
+        .select("role,user_type")
         .eq("id", user.id)
         .maybeSingle();
 
