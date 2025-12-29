@@ -1,6 +1,7 @@
-// app/api/chat/route.ts
+// src/app/api/chat/route.ts
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -22,15 +23,9 @@ function normalize(s: string) {
 }
 
 function getBaseUrl(req: Request) {
-  const host =
-    req.headers.get("x-forwarded-host") ??
-    req.headers.get("host");
-
-  const proto =
-    req.headers.get("x-forwarded-proto") ?? "http";
-
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
   if (!host) throw new Error("Missing host header");
-
   return `${proto}://${host}`;
 }
 
@@ -41,11 +36,9 @@ function getBaseUrl(req: Request) {
 function detectFolders(message: string) {
   const m = normalize(message);
 
-  // Detect anchor series (u2400, u2600, etc.)
   const uMatch = m.match(/\bu(\d{4})\b/);
   const uSeries = uMatch ? `u${uMatch[1]}` : null;
 
-  // Membrane / variant detection
   const variants = [
     { key: "epdm", hits: ["epdm"] },
     { key: "kee", hits: ["kee"] },
@@ -58,10 +51,8 @@ function detectFolders(message: string) {
     { key: "plate", hits: ["plate"] },
   ];
 
-  const variant =
-    variants.find(v => v.hits.some(h => m.includes(h)))?.key ?? null;
+  const variant = variants.find((v) => v.hits.some((h) => m.includes(h)))?.key ?? null;
 
-  // Solution detection
   const solutions = [
     { key: "solutions/hvac", hits: ["hvac", "rtu"] },
     { key: "solutions/satellite-dish", hits: ["satellite", "dish"] },
@@ -74,16 +65,11 @@ function detectFolders(message: string) {
     { key: "solutions/lightning", hits: ["lightning"] },
   ];
 
-  const solutionFolder =
-    solutions.find(s => s.hits.some(h => m.includes(h)))?.key ?? null;
+  const solutionFolder = solutions.find((s) => s.hits.some((h) => m.includes(h)))?.key ?? null;
 
-  // Anchor folder
   let anchorFolder: string | null = null;
-  if (uSeries && variant) {
-    anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
-  } else if (uSeries) {
-    anchorFolder = `anchor/u-anchors/${uSeries}`;
-  }
+  if (uSeries && variant) anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
+  else if (uSeries) anchorFolder = `anchor/u-anchors/${uSeries}`;
 
   return [anchorFolder, solutionFolder].filter(Boolean).slice(0, 2) as string[];
 }
@@ -110,38 +96,46 @@ async function getDocsForFolder(req: Request, folder: string) {
 
 export async function POST(req: Request) {
   try {
+    // ✅ Auth gate (server-side)
+    const supabase = supabaseRoute(req);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const user = authData.user;
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
     const message = (body?.message || "").trim();
-    const userType: UserType =
-      body?.userType === "external" ? "external" : "internal";
 
     if (!message) {
       return NextResponse.json({ error: "Missing message" }, { status: 400 });
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "Missing OPENAI_API_KEY" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
     }
+
+    // ✅ Determine userType from profiles.user_type (ignore client-provided userType)
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type, role")
+      .eq("id", user.id)
+      .single();
+
+    const userType: UserType = profile?.user_type === "external" ? "external" : "internal";
 
     /* Detect folders + pull docs */
     const folders = detectFolders(message);
-    const folderDocs = await Promise.all(
-      folders.map(folder => getDocsForFolder(req, folder))
-    );
-
+    const folderDocs = await Promise.all(folders.map((folder) => getDocsForFolder(req, folder)));
     const recommendedDocs = folderDocs.flat().slice(0, 10);
 
     const docContext =
       recommendedDocs.length > 0
         ? recommendedDocs
             .map(
-              d =>
-                `- ${d.doc_type}: ${d.title} (${d.path})${
-                  d.url ? ` [${d.url}]` : ""
-                }`
+              (d) =>
+                `- ${d.doc_type}: ${d.title} (${d.path})${d.url ? ` [${d.url}]` : ""}`
             )
             .join("\n")
         : "- None matched yet.";
@@ -183,37 +177,27 @@ Provided documents:
 ${docContext}
 `.trim();
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const model = process.env.OPENAI_MODEL || "gpt-5-mini";
 
     const resp = await client.responses.create({
       model,
       input: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `userType=${userType}\n\nQuestion:\n${message}`,
-        },
+        { role: "user", content: `userType=${userType}\n\nQuestion:\n${message}` },
       ],
     });
 
-    const answer =
-      resp.output_text ??
-      "I couldn’t generate a response. Please try again.";
+    const answer = resp.output_text ?? "I couldn’t generate a response. Please try again.";
 
     return NextResponse.json({
       answer,
       foldersUsed: folders,
       recommendedDocs,
+      userType, // optional debug
     });
   } catch (err: any) {
     console.error("CHAT_ROUTE_ERROR:", err);
-    return NextResponse.json(
-      { error: err?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
   }
 }
