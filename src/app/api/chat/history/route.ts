@@ -3,59 +3,46 @@ import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+function withForwardedHeaders(base: NextResponse, out: NextResponse) {
+  base.headers.forEach((value, key) => out.headers.set(key, value));
+  return out;
+}
+
 export async function GET(req: Request) {
-  const res = NextResponse.next();
-  const supabase = supabaseRoute(req, res);
+  const base = NextResponse.next();
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const { searchParams } = new URL(req.url);
+    const conversationId = (searchParams.get("conversationId") || "").trim();
+    if (!conversationId) {
+      return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
+    }
 
-  const userId = auth.user.id;
+    const supabase = supabaseRoute(req, base);
 
-  // 1) get active session or create
-  let { data: session } = await supabase
-    .from("chat_sessions")
-    .select("id,title")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false })
-    .maybeSingle();
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!session) {
-    const { data: created, error } = await supabase
-      .from("chat_sessions")
-      .insert({ user_id: userId, title: "Sales Co-Pilot" })
-      .select("id,title")
-      .single();
+    const { data: rows, error } = await supabase
+      .from("messages")
+      .select("role,content,created_at")
+      .eq("user_id", user.id)
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(500);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    session = created;
+    if (error) throw error;
+
+    const out = NextResponse.json({ messages: rows || [] }, { status: 200 });
+    return withForwardedHeaders(base, out);
+  } catch (err: any) {
+    const out = NextResponse.json(
+      { error: err?.message || "Server error" },
+      { status: 500 }
+    );
+    return withForwardedHeaders(base, out);
   }
-
-  // 2) get summary (optional)
-  const { data: summaryRow } = await supabase
-    .from("chat_summaries")
-    .select("summary")
-    .eq("session_id", session.id)
-    .maybeSingle();
-
-  // 3) last 30 messages
-  const { data: messages, error: msgErr } = await supabase
-    .from("chat_messages")
-    .select("id,role,content,created_at")
-    .eq("session_id", session.id)
-    .order("created_at", { ascending: true })
-    .limit(30);
-
-  if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 });
-
-  return NextResponse.json(
-    {
-      sessionId: session.id,
-      title: session.title,
-      summary: summaryRow?.summary || "",
-      messages: messages || [],
-    },
-    { headers: res.headers }
-  );
 }

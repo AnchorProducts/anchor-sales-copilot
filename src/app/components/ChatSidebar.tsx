@@ -6,6 +6,12 @@ type ConversationRow = {
   updated_at: string | null;
 };
 
+function formatWhen(iso?: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function ChatSidebar({
   conversations,
   activeId,
@@ -56,7 +62,9 @@ export default function ChatSidebar({
                   <div className="truncate text-sm font-semibold">
                     {c.title?.trim() || "New chat"}
                   </div>
-                  <div className="text-[11px] text-white/50 truncate">{c.id}</div>
+                  <div className="text-[11px] text-white/50 truncate">
+                    {formatWhen(c.updated_at)}
+                  </div>
                 </button>
               );
             })}

@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type UserType = "internal" | "external";
 
@@ -51,6 +52,32 @@ function deriveAccessFromEmail(emailRaw: string | null | undefined) {
   return { email, user_type, role };
 }
 
+/**
+ * ✅ Forward cookies safely (don’t overwrite multiple Set-Cookie headers).
+ * Next's Headers has getSetCookie() in some runtimes; fall back to raw header.
+ */
+function forwardCookies(base: Response, out: NextResponse) {
+  const anyHeaders = base.headers as any;
+
+  const setCookies: string[] | null =
+    typeof anyHeaders.getSetCookie === "function" ? anyHeaders.getSetCookie() : null;
+
+  if (setCookies && setCookies.length) {
+    for (const c of setCookies) out.headers.append("set-cookie", c);
+    return out;
+  }
+
+  const sc = base.headers.get("set-cookie");
+  if (sc) out.headers.append("set-cookie", sc);
+
+  return out;
+}
+
+/** ✅ OpenAI latency helper */
+function msSince(start: bigint) {
+  return Number((process.hrtime.bigint() - start) / 1_000_000n);
+}
+
 /* ---------------------------------------------
    Folder detection (anchors + solutions)
 --------------------------------------------- */
@@ -58,11 +85,9 @@ function deriveAccessFromEmail(emailRaw: string | null | undefined) {
 function detectFolders(message: string) {
   const m = normalize(message);
 
-  // Detect anchor series (u2400, u2600, etc.)
   const uMatch = m.match(/\bu(\d{4})\b/);
   const uSeries = uMatch ? `u${uMatch[1]}` : null;
 
-  // Membrane / variant detection
   const variants = [
     { key: "epdm", hits: ["epdm"] },
     { key: "kee", hits: ["kee"] },
@@ -78,7 +103,6 @@ function detectFolders(message: string) {
   const variant =
     variants.find((v) => v.hits.some((h) => m.includes(h)))?.key ?? null;
 
-  // Solution detection
   const solutions = [
     { key: "solutions/hvac", hits: ["hvac", "rtu"] },
     { key: "solutions/satellite-dish", hits: ["satellite", "dish"] },
@@ -94,13 +118,9 @@ function detectFolders(message: string) {
   const solutionFolder =
     solutions.find((s) => s.hits.some((h) => m.includes(h)))?.key ?? null;
 
-  // Anchor folder
   let anchorFolder: string | null = null;
-  if (uSeries && variant) {
-    anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
-  } else if (uSeries) {
-    anchorFolder = `anchor/u-anchors/${uSeries}`;
-  }
+  if (uSeries && variant) anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
+  else if (uSeries) anchorFolder = `anchor/u-anchors/${uSeries}`;
 
   return [anchorFolder, solutionFolder].filter(Boolean).slice(0, 2) as string[];
 }
@@ -134,7 +154,6 @@ async function ensureConversation(
   userId: string,
   conversationId?: string | null
 ) {
-  // If client provided a conversationId, verify it belongs to this user
   if (conversationId) {
     const { data, error } = await supabase
       .from("conversations")
@@ -146,7 +165,6 @@ async function ensureConversation(
     if (!error && data?.id) return data.id as string;
   }
 
-  // Otherwise create a new one
   const { data: created, error: createErr } = await supabase
     .from("conversations")
     .insert({ user_id: userId, title: "New chat" })
@@ -180,8 +198,7 @@ async function loadRecentHistory(
 --------------------------------------------- */
 
 export async function POST(req: Request) {
-  // ✅ Create a response object so Supabase can attach cookie/header changes if needed
-  const res = NextResponse.next();
+  const base = new Response(null, { status: 200 });
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -200,7 +217,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = supabaseRoute(req, res);
+    const supabase = supabaseRoute(req, base as any);
 
     // ✅ Auth gate
     const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -251,9 +268,14 @@ export async function POST(req: Request) {
       conversationIdFromClient
     );
 
-    const history = await loadRecentHistory(supabase, user.id, conversationId, 12);
+    const history = await loadRecentHistory(
+      supabase,
+      user.id,
+      conversationId,
+      12
+    );
 
-    // ✅ Persist user message (don’t fail the whole request if insert fails)
+    // ✅ Persist user msg (don’t fail whole request if insert fails)
     const { error: userInsertErr } = await supabase.from("messages").insert({
       user_id: user.id,
       conversation_id: conversationId,
@@ -262,24 +284,32 @@ export async function POST(req: Request) {
     });
     if (userInsertErr) console.error("MSG_INSERT_USER_ERROR:", userInsertErr);
 
-    // ✅ Docs context
+    // ✅ Docs context + fallback when no folders detected
     const folders = detectFolders(message);
-    const folderDocs = await Promise.all(
-      folders.map((folder) => getDocsForFolder(req, folder))
-    );
-    const recommendedDocs = folderDocs.flat().slice(0, 10);
+
+    let recommendedDocs: RecommendedDoc[] = [];
+    if (folders.length) {
+      const folderDocs = await Promise.all(
+        folders.map((folder) => getDocsForFolder(req, folder))
+      );
+      recommendedDocs = folderDocs.flat().slice(0, 10);
+    }
+
+    const noFolderDetected = folders.length === 0;
 
     const docContext =
       recommendedDocs.length > 0
         ? recommendedDocs
             .map(
               (d) =>
-                `- ${d.doc_type}: ${d.title} (${d.path})${d.url ? ` [${d.url}]` : ""}`
+                `- ${d.doc_type}: ${d.title} (${d.path})${
+                  d.url ? ` [${d.url}]` : ""
+                }`
             )
             .join("\n")
-        : "- None matched yet.";
+        : "- None (insufficient info to match folders).";
 
-    // ✅ Prompt
+    // ✅ Prompt (nudges to ask for membrane + series if nothing matched)
     const systemPrompt = `
 You are "Anchor Sales Co-Pilot" — an expert Sales Engineer for Anchor Products.
 
@@ -289,6 +319,16 @@ Rules:
 - Be concise, confident, and sales-ready.
 - Follow the response format exactly.
 - End with "Recommended documents" using ONLY the provided list.
+
+${
+  noFolderDetected
+    ? `If the user's message doesn't include enough info to locate docs, you MUST ask for:
+- membrane type (EPDM/PVC/TPO/APP/SBS/etc.)
+- anchor series if known (example: "U2400")
+- what they're mounting (HVAC/pipe supports/snow retention/etc.)
+Ask no more than 2 questions.`
+    : ""
+}
 
 Visibility:
 - External users: no competitor comparisons.
@@ -316,7 +356,6 @@ Provided documents:
 ${docContext}
 `.trim();
 
-    // ✅ Build model input with short memory
     const memoryBlock =
       history.length > 0
         ? history.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n")
@@ -324,6 +363,9 @@ ${docContext}
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const model = process.env.OPENAI_MODEL || "gpt-5-mini";
+
+    // ✅ OpenAI latency + usage logging
+    const t0 = process.hrtime.bigint();
 
     const resp = await client.responses.create({
       model,
@@ -344,17 +386,41 @@ ${docContext}
       ],
     });
 
+    const latencyMs = msSince(t0);
+
+    const usage = (resp as any)?.usage;
+    const inputTokens = usage?.input_tokens ?? usage?.inputTokens ?? null;
+    const outputTokens = usage?.output_tokens ?? usage?.outputTokens ?? null;
+    const totalTokens =
+      usage?.total_tokens ??
+      usage?.totalTokens ??
+      (inputTokens && outputTokens ? inputTokens + outputTokens : null);
+
+    console.log("OPENAI_CHAT_METRICS", {
+      conversationId,
+      userId: user.id,
+      userType,
+      model,
+      latencyMs,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      foldersDetected: folders,
+      recommendedDocsCount: recommendedDocs.length,
+    });
+
     const answer =
       resp.output_text ?? "I couldn’t generate a response. Please try again.";
 
-    // ✅ Persist assistant message
+    // ✅ Persist assistant msg
     const { error: asstInsertErr } = await supabase.from("messages").insert({
       user_id: user.id,
       conversation_id: conversationId,
       role: "assistant",
       content: answer,
     });
-    if (asstInsertErr) console.error("MSG_INSERT_ASSISTANT_ERROR:", asstInsertErr);
+    if (asstInsertErr)
+      console.error("MSG_INSERT_ASSISTANT_ERROR:", asstInsertErr);
 
     // ✅ Update conversation title/updated_at
     const title = (message.slice(0, 48) || "New chat").trim();
@@ -364,21 +430,31 @@ ${docContext}
       .eq("id", conversationId)
       .eq("user_id", user.id);
 
-    if (convoUpdateErr) console.error("CONVERSATION_UPDATE_ERROR:", convoUpdateErr);
+    if (convoUpdateErr)
+      console.error("CONVERSATION_UPDATE_ERROR:", convoUpdateErr);
 
-    // ✅ Return JSON + preserve any headers/cookies from Supabase
-    return NextResponse.json(
+    const out = NextResponse.json(
       {
         conversationId,
         answer,
         foldersUsed: folders,
         recommendedDocs,
         userType, // optional debug
+        metrics: {
+          latencyMs,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          noFolderDetected,
+        },
       },
-      { headers: res.headers }
+      { status: 200 }
     );
+
+    return forwardCookies(base, out);
   } catch (err: any) {
     console.error("CHAT_ROUTE_ERROR:", err);
+
     return NextResponse.json(
       { error: err?.message || "Server error" },
       { status: 500 }
