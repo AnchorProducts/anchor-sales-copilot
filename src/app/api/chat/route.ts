@@ -75,8 +75,10 @@ function forwardCookies(base: Response, out: NextResponse) {
 
 /** ✅ OpenAI latency helper */
 function msSince(start: bigint) {
-  return Number((process.hrtime.bigint() - start) / 1_000_000n);
+  const diff = process.hrtime.bigint() - start; // bigint
+  return Number(diff) / 1_000_000; // convert to ms using a normal number
 }
+
 
 /* ---------------------------------------------
    Folder detection (anchors + solutions)
