@@ -36,9 +36,11 @@ function getBaseUrl(req: Request) {
 function detectFolders(message: string) {
   const m = normalize(message);
 
+  // Detect anchor series (u2400, u2600, etc.)
   const uMatch = m.match(/\bu(\d{4})\b/);
   const uSeries = uMatch ? `u${uMatch[1]}` : null;
 
+  // Membrane / variant detection
   const variants = [
     { key: "epdm", hits: ["epdm"] },
     { key: "kee", hits: ["kee"] },
@@ -51,8 +53,10 @@ function detectFolders(message: string) {
     { key: "plate", hits: ["plate"] },
   ];
 
-  const variant = variants.find((v) => v.hits.some((h) => m.includes(h)))?.key ?? null;
+  const variant =
+    variants.find((v) => v.hits.some((h) => m.includes(h)))?.key ?? null;
 
+  // Solution detection
   const solutions = [
     { key: "solutions/hvac", hits: ["hvac", "rtu"] },
     { key: "solutions/satellite-dish", hits: ["satellite", "dish"] },
@@ -65,11 +69,16 @@ function detectFolders(message: string) {
     { key: "solutions/lightning", hits: ["lightning"] },
   ];
 
-  const solutionFolder = solutions.find((s) => s.hits.some((h) => m.includes(h)))?.key ?? null;
+  const solutionFolder =
+    solutions.find((s) => s.hits.some((h) => m.includes(h)))?.key ?? null;
 
+  // Anchor folder
   let anchorFolder: string | null = null;
-  if (uSeries && variant) anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
-  else if (uSeries) anchorFolder = `anchor/u-anchors/${uSeries}`;
+  if (uSeries && variant) {
+    anchorFolder = `anchor/u-anchors/${uSeries}/${variant}`;
+  } else if (uSeries) {
+    anchorFolder = `anchor/u-anchors/${uSeries}`;
+  }
 
   return [anchorFolder, solutionFolder].filter(Boolean).slice(0, 2) as string[];
 }
@@ -95,17 +104,24 @@ async function getDocsForFolder(req: Request, folder: string) {
 --------------------------------------------- */
 
 export async function POST(req: Request) {
+  // ✅ create a response object so Supabase can mutate cookies/headers if needed
+  const res = NextResponse.next();
+
   try {
     // ✅ Auth gate (server-side)
-    const supabase = supabaseRoute(req);
-    const { data: authData } = await supabase.auth.getUser();
+    // IMPORTANT: supabaseRoute must accept (req, res)
+    const supabase = supabaseRoute(req, res);
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) console.error("API_CHAT_AUTH_ERROR:", authErr);
 
     const user = authData.user;
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const message = (body?.message || "").trim();
 
     if (!message) {
@@ -113,21 +129,58 @@ export async function POST(req: Request) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Missing OPENAI_API_KEY" },
+        { status: 500 }
+      );
     }
 
-    // ✅ Determine userType from profiles.user_type (ignore client-provided userType)
-    const { data: profile } = await supabase
+    // ✅ Determine access from profiles (ignore any client-provided userType)
+    let { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("user_type, role")
+      .select("email, user_type, role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    const userType: UserType = profile?.user_type === "external" ? "external" : "internal";
+    if (profileErr) console.error("API_CHAT_PROFILE_SELECT_ERROR:", profileErr);
+
+    // ✅ If profile missing, create one based on email domain
+    if (!profile) {
+      const email = (user.email || "").toLowerCase();
+      const user_type: UserType = email.endsWith("@anchorp.com")
+        ? "internal"
+        : "external";
+      const role = user_type === "internal" ? "anchor_rep" : "external_rep";
+
+      const { data: created, error: upsertErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            email,
+            user_type,
+            role,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        )
+        .select("email, user_type, role")
+        .single();
+
+      if (upsertErr) console.error("API_CHAT_PROFILE_UPSERT_ERROR:", upsertErr);
+
+      profile = created ?? null;
+    }
+
+    const userType: UserType =
+      profile?.user_type === "external" ? "external" : "internal";
 
     /* Detect folders + pull docs */
     const folders = detectFolders(message);
-    const folderDocs = await Promise.all(folders.map((folder) => getDocsForFolder(req, folder)));
+    const folderDocs = await Promise.all(
+      folders.map((folder) => getDocsForFolder(req, folder))
+    );
+
     const recommendedDocs = folderDocs.flat().slice(0, 10);
 
     const docContext =
@@ -135,7 +188,9 @@ export async function POST(req: Request) {
         ? recommendedDocs
             .map(
               (d) =>
-                `- ${d.doc_type}: ${d.title} (${d.path})${d.url ? ` [${d.url}]` : ""}`
+                `- ${d.doc_type}: ${d.title} (${d.path})${
+                  d.url ? ` [${d.url}]` : ""
+                }`
             )
             .join("\n")
         : "- None matched yet.";
@@ -184,20 +239,31 @@ ${docContext}
       model,
       input: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `userType=${userType}\n\nQuestion:\n${message}` },
+        {
+          role: "user",
+          content: `userType=${userType}\n\nQuestion:\n${message}`,
+        },
       ],
     });
 
-    const answer = resp.output_text ?? "I couldn’t generate a response. Please try again.";
+    const answer =
+      resp.output_text ?? "I couldn’t generate a response. Please try again.";
 
-    return NextResponse.json({
-      answer,
-      foldersUsed: folders,
-      recommendedDocs,
-      userType, // optional debug
-    });
+    // ✅ Return JSON, preserving any cookie/header changes from Supabase
+    return NextResponse.json(
+      {
+        answer,
+        foldersUsed: folders,
+        recommendedDocs,
+        userType, // optional debug
+      },
+      { headers: res.headers }
+    );
   } catch (err: any) {
     console.error("CHAT_ROUTE_ERROR:", err);
-    return NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }

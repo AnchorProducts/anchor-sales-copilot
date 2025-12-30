@@ -1,7 +1,9 @@
+// middleware.ts
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = [
-  "/",               // ✅ login
+  "/", // login
   "/signup",
   "/forgot",
   "/reset",
@@ -23,26 +25,43 @@ function isPublicPath(pathname: string) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // ✅ Let public routes through
+  // ✅ Public routes pass through
   if (isPublicPath(pathname)) return NextResponse.next();
 
-  // ✅ Protect /chat + /api/chat (and anything else you want)
-  const hasSbCookie =
-    req.cookies.get("sb-access-token") ||
-    req.cookies.get("sb-refresh-token") ||
-    // newer cookie naming can differ, so also just check for "sb-" presence
-    Array.from(req.cookies.getAll()).some((c) => c.name.startsWith("sb-"));
+  // ✅ Create response so Supabase can refresh cookies
+  const res = NextResponse.next();
 
-  if (!hasSbCookie) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
+
+  // ✅ Validate session (not just “cookie exists”)
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+
+  if (!user) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/";
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return res;
 }
 
 export const config = {
-  matcher: ["/chat/:path*", "/api/chat/:path*"],
+  matcher: ["/chat/:path*", "/api/chat/:path*", "/api/docs/:path*"],
 };

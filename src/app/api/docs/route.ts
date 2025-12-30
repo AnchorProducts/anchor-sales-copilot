@@ -1,5 +1,7 @@
+// src/app/api/docs/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { supabaseRoute } from "@/lib/supabase/server";
 
 type DocType =
   | "sales_sheet"
@@ -41,46 +43,109 @@ function titleFromPath(path: string) {
   return file.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ");
 }
 
+function isSafeFolder(folder: string) {
+  // block traversal & weird stuff
+  if (!folder) return false;
+  if (folder.includes("..")) return false;
+  if (folder.startsWith("/")) return false;
+  if (folder.includes("\\")) return false;
+  return true;
+}
+
+// Optional: simple folder access rules.
+// Adjust these prefixes to match how your bucket is structured.
+function folderAllowedForUserType(folder: string, userType: "internal" | "external") {
+  // Example:
+  // - anything under "internal/" is internal-only
+  // - everything else is allowed
+  if (folder.startsWith("internal/")) return userType === "internal";
+  return true;
+}
+
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const folder = searchParams.get("folder");
+  const res = NextResponse.next();
 
-  if (!folder) {
-    return NextResponse.json({ error: "Missing folder" }, { status: 400 });
-  }
+  try {
+    // ✅ Auth gate
+    const supabase = supabaseRoute(req, res);
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) console.error("DOCS_AUTH_ERROR:", authErr);
 
-  const bucket = "knowledge";
+    const user = authData.user;
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { data, error } = await supabaseAdmin.storage
-    .from(bucket)
-    .list(folder, { limit: 200, offset: 0, sortBy: { column: "name", order: "asc" } });
+    const { searchParams } = new URL(req.url);
+    const folder = searchParams.get("folder") || "";
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    if (!folder) {
+      return NextResponse.json({ error: "Missing folder" }, { status: 400 });
+    }
 
-  const files = (data || [])
-    .filter((x) => x.name && !x.name.startsWith("."))
-    .map((x) => {
-      const fullPath = `${folder}/${x.name}`;
-      return {
-        name: x.name,
-        path: fullPath,
-        doc_type: docTypeFromPath(fullPath),
-        title: titleFromPath(fullPath),
-      };
+    if (!isSafeFolder(folder)) {
+      return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
+    }
+
+    // ✅ Determine user_type from profiles (authoritative)
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr) console.error("DOCS_PROFILE_ERROR:", profileErr);
+
+    const userType = profile?.user_type === "internal" ? "internal" : "external";
+
+    // ✅ Optional enforcement (recommended if you have internal-only folders)
+    if (!folderAllowedForUserType(folder, userType)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // ✅ Service role listing/signing (safe because we gated above)
+    const bucket = "knowledge";
+
+    const { data, error } = await supabaseAdmin.storage.from(bucket).list(folder, {
+      limit: 200,
+      offset: 0,
+      sortBy: { column: "name", order: "asc" },
     });
 
-  // Sign each file (15 minutes)
-  const signed = await Promise.all(
-    files.map(async (f) => {
-      const { data: signedData } = await supabaseAdmin.storage
-        .from(bucket)
-        .createSignedUrl(f.path, 60 * 15);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-      return { ...f, url: signedData?.signedUrl || null };
-    })
-  );
+    const files = (data || [])
+      .filter((x) => x.name && !x.name.startsWith("."))
+      .map((x) => {
+        const fullPath = `${folder}/${x.name}`;
+        return {
+          name: x.name,
+          path: fullPath,
+          doc_type: docTypeFromPath(fullPath),
+          title: titleFromPath(fullPath),
+        };
+      });
 
-  return NextResponse.json({ folder, files: signed });
+    // Sign each file (15 minutes)
+    const signed = await Promise.all(
+      files.map(async (f) => {
+        const { data: signedData } = await supabaseAdmin.storage
+          .from(bucket)
+          .createSignedUrl(f.path, 60 * 15);
+
+        return { ...f, url: signedData?.signedUrl || null };
+      })
+    );
+
+    // ✅ Preserve any cookie mutations (rare here, but consistent)
+    return NextResponse.json(
+      { folder, files: signed },
+      { headers: res.headers }
+    );
+  } catch (e: any) {
+    console.error("DOCS_ROUTE_ERROR:", e);
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+  }
 }
