@@ -18,12 +18,16 @@ export default function ChatSidebar({
   loading,
   onNewChat,
   onSelect,
+  onRename,
+  onDelete,
 }: {
   conversations: ConversationRow[];
   activeId: string | null;
   loading: boolean;
   onNewChat: () => void;
   onSelect: (id: string) => void;
+  onRename: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   return (
     <aside className="hidden md:flex h-[calc(100vh-56px)] flex-col rounded-xl border border-white/10 bg-white/5 backdrop-blur shadow-[0_0_0_1px_rgba(255,255,255,0.06)] overflow-hidden">
@@ -47,25 +51,49 @@ export default function ChatSidebar({
           <div className="space-y-1">
             {conversations.map((c) => {
               const isActive = c.id === activeId;
+
               return (
-                <button
+                <div
                   key={c.id}
-                  type="button"
-                  onClick={() => onSelect(c.id)}
                   className={[
-                    "w-full text-left rounded-lg px-3 py-2 border transition",
+                    "w-full rounded-lg border transition",
                     isActive
                       ? "border-emerald-300/25 bg-emerald-400/10"
                       : "border-white/10 bg-black/30 hover:bg-black/45",
                   ].join(" ")}
                 >
-                  <div className="truncate text-sm font-semibold">
-                    {c.title?.trim() || "New chat"}
+                  <button
+                    type="button"
+                    onClick={() => onSelect(c.id)}
+                    className="w-full text-left px-3 py-2"
+                  >
+                    <div className="truncate text-sm font-semibold">
+                      {c.title?.trim() || "New chat"}
+                    </div>
+                    <div className="text-[11px] text-white/50 truncate">
+                      {formatWhen(c.updated_at)}
+                    </div>
+                  </button>
+
+                  <div className="flex gap-2 px-3 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => onRename(c.id)}
+                      className="rounded-md border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-white/70 hover:bg-black/55"
+                      title="Rename"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(c.id)}
+                      className="rounded-md border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-white/70 hover:bg-black/55"
+                      title="Delete"
+                    >
+                      Delete
+                    </button>
                   </div>
-                  <div className="text-[11px] text-white/50 truncate">
-                    {formatWhen(c.updated_at)}
-                  </div>
-                </button>
+                </div>
               );
             })}
           </div>

@@ -35,6 +35,7 @@ type ConversationRow = {
   title: string | null;
   updated_at: string | null;
   created_at: string | null;
+  deleted_at?: string | null; // ✅ optional if you add soft-delete
 };
 
 type MessageRow = {
@@ -136,15 +137,17 @@ export default function ChatPage() {
     },
     [supabase]
   );
-
+  
+  // ✅ NOW filters soft-deleted conversations (if you add deleted_at)
   const loadConversations = useCallback(
     async (uid: string) => {
       setConvoLoading(true);
       try {
         const { data, error } = await supabase
           .from("conversations")
-          .select("id,title,updated_at,created_at")
+          .select("id,title,updated_at,created_at,deleted_at")
           .eq("user_id", uid)
+          .is("deleted_at", null) // ✅ ignore deleted chats
           .order("updated_at", { ascending: false })
           .limit(50);
 
@@ -165,7 +168,7 @@ export default function ChatPage() {
       const { data: createdConv, error } = await supabase
         .from("conversations")
         .insert({ user_id: uid, title: "New chat" })
-        .select("id,title,updated_at,created_at")
+        .select("id,title,updated_at,created_at,deleted_at")
         .single();
 
       if (error) console.error("CONVERSATION_CREATE_ERROR:", error);
@@ -192,6 +195,134 @@ export default function ChatPage() {
       await loadConversationMessages(userId, cid);
     },
     [conversationId, loadConversationMessages, userId]
+  );
+
+  /* -------------------------------------------------
+     ✅ NEW: Rename + Delete (soft delete) actions
+  ------------------------------------------------- */
+
+  const renameConversation = useCallback(
+  async (cid: string, title: string) => {
+    if (!userId) return;
+
+    const trimmed = title.trim();
+    if (!trimmed) return;
+
+    const { error } = await supabase
+      .from("conversations")
+      .update({ title: trimmed, updated_at: new Date().toISOString() })
+      .eq("id", cid)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("CONVERSATION_RENAME_ERROR:", error.message, error.details);
+      return;
+    }
+
+    await loadConversations(userId);
+  },
+  [supabase, userId, loadConversations]
+);
+
+const removeConversation = useCallback(
+  async (cid: string) => {
+    if (!userId) return;
+
+    const ok = window.confirm("Delete this chat? This cannot be undone.");
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("conversations")
+      .delete()
+      .eq("id", cid)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("CONVERSATION_DELETE_ERROR:", error.message, error.details);
+      return;
+    }
+
+    // if deleting active chat, move to next available (or create new)
+    if (cid === conversationId) {
+      const refreshed = await loadConversations(userId);
+      const nextId = refreshed?.[0]?.id ?? null;
+
+      if (nextId) {
+        setConversationId(nextId);
+        setLastDocs([]);
+        setLastFolders([]);
+        setInput("");
+        await loadConversationMessages(userId, nextId);
+      } else {
+        const created = await createConversation(userId);
+        if (created?.id) {
+          setConversationId(created.id);
+          setMessages([DEFAULT_GREETING]);
+          await loadConversations(userId);
+        }
+      }
+    } else {
+      await loadConversations(userId);
+    }
+  },
+  [
+    conversationId,
+    createConversation,
+    loadConversationMessages,
+    loadConversations,
+    supabase,
+    userId,
+  ]
+);
+
+  const deleteConversation = useCallback(
+    async (cid: string) => {
+      if (!userId) return;
+
+      // soft delete (recommended) — requires conversations.deleted_at column
+      const { error } = await supabase
+        .from("conversations")
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", cid)
+        .eq("user_id", userId);
+
+      if (error) {
+        console.error("CONVERSATION_DELETE_ERROR:", error);
+        return;
+      }
+
+      // refresh list
+      const list = await loadConversations(userId);
+
+      // if we deleted the active chat, switch to the next one or create a new one
+      if (cid === conversationId) {
+        const nextId = list?.[0]?.id ?? null;
+        if (nextId) {
+          setConversationId(nextId);
+          setLastDocs([]);
+          setLastFolders([]);
+          setInput("");
+          await loadConversationMessages(userId, nextId);
+        } else {
+          const created = await createConversation(userId);
+          const newId = created?.id ?? null;
+          setConversationId(newId);
+          setMessages([DEFAULT_GREETING]);
+          setLastDocs([]);
+          setLastFolders([]);
+          setInput("");
+          await loadConversations(userId);
+        }
+      }
+    },
+    [
+      conversationId,
+      createConversation,
+      loadConversationMessages,
+      loadConversations,
+      supabase,
+      userId,
+    ]
   );
 
   // ✅ Boot: user + profile + conversations + latest messages
@@ -267,8 +398,6 @@ export default function ChatPage() {
       } finally {
         if (!alive) return;
         setProfileLoading(false);
-        // NOTE: loadConversationMessages handles historyLoading itself.
-        // We force it false here only as a safety in case boot fails before loadConversationMessages runs.
         setHistoryLoading(false);
       }
     })();
@@ -311,27 +440,20 @@ export default function ChatPage() {
     });
   }
 
-  // ✅ explicit readiness so send() actually runs
   const ready = !profileLoading && !historyLoading && !!userId && !!conversationId;
   const inputDisabled = !ready;
 
   async function send() {
     const text = input.trim();
-
-    // ✅ don’t let loading flags deadlock the app
     if (!text || loading) return;
     if (!userId || !conversationId) return;
     if (profileLoading || historyLoading) return;
 
-    // optimistic user message
     setMessages((m) => [...m, { role: "user", content: text }]);
     setInput("");
     setLoading(true);
 
     try {
-      // TEMP debug: confirm this is firing (remove later)
-      // console.log("SEND()", { text, userId, conversationId, userType });
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -364,6 +486,15 @@ export default function ChatPage() {
 
       setLastDocs(Array.isArray(data.recommendedDocs) ? data.recommendedDocs : []);
       setLastFolders(Array.isArray(data.foldersUsed) ? data.foldersUsed : []);
+
+      // ✅ Rename logic: first real user message sets the title if it's still "New chat"
+      const current = conversations.find((c) => c.id === conversationId);
+      const currentTitle = (current?.title || "").trim();
+      if (!currentTitle || currentTitle.toLowerCase() === "new chat") {
+        const nextTitle = text.slice(0, 48).trim() || "New chat";
+        // fire-and-forget (don’t block UI)
+        renameConversation(conversationId, nextTitle);
+      }
 
       if (data.conversationId && data.conversationId !== conversationId) {
         setConversationId(data.conversationId);
@@ -451,19 +582,22 @@ export default function ChatPage() {
         {/* Desktop sidebar */}
         <div className="hidden md:block">
           <ChatSidebar
-            conversations={conversations.map((c) => ({
-              id: c.id,
-              title: c.title,
-              updated_at: c.updated_at || c.created_at || null,
-            }))}
-            activeId={conversationId}
-            loading={convoLoading}
-            onNewChat={newChat}
-            onSelect={switchConversation}
-          />
+  conversations={conversations.map((c) => ({
+    id: c.id,
+    title: c.title,
+    updated_at: c.updated_at || c.created_at || null,
+  }))}
+  activeId={conversationId}
+  loading={convoLoading}
+  onNewChat={newChat}
+  onSelect={switchConversation}
+  onRename={renameConversation}
+  onDelete={removeConversation}
+/>
+
         </div>
 
-        {/* Mobile sidebar */}
+        {/* Mobile sidebar (basic list — optional to add rename/delete later) */}
         {sidebarOpen && (
           <aside className="md:hidden rounded-xl border border-white/10 bg-white/5 backdrop-blur shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
             <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between">
@@ -656,4 +790,5 @@ export default function ChatPage() {
       </div>
     </main>
   );
+
 }
