@@ -64,8 +64,9 @@ export default function ChatSidebar({
   }
 
   return (
-    <aside className="hidden md:flex h-[calc(100vh-56px)] flex-col rounded-xl border border-white/10 bg-white/5 backdrop-blur shadow-[0_0_0_1px_rgba(255,255,255,0.06)] overflow-hidden">
-      <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between gap-2">
+    <div className="h-full min-h-0 flex flex-col bg-transparent">
+      {/* Header */}
+      <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
         <div className="text-sm font-semibold">Chats</div>
         <button
           type="button"
@@ -76,7 +77,8 @@ export default function ChatSidebar({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      {/* List (scroll only when needed) */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 bg-transparent">
         {loading ? (
           <div className="p-3 text-sm text-white/60">Loading…</div>
         ) : conversations.length === 0 ? (
@@ -191,12 +193,15 @@ export default function ChatSidebar({
         )}
       </div>
 
-      <div className="border-t border-white/10 px-4 py-3 text-[11px] text-white/50">
+      {/* Footer */}
+      <div className="border-t border-white/10 px-4 py-3 text-[11px] text-white/50 shrink-0">
         Tip: Click a chat to continue where you left off.
         {activeIndex >= 0 ? (
-          <span className="ml-2 text-white/30">({activeIndex + 1}/{conversations.length})</span>
+          <span className="ml-2 text-white/30">
+            ({activeIndex + 1}/{conversations.length})
+          </span>
         ) : null}
       </div>
-    </aside>
+    </div>
   );
 }

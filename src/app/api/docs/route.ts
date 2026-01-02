@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { supabaseRoute } from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type DocType =
   | "sales_sheet"
   | "data_sheet"
@@ -18,183 +21,273 @@ type DocType =
   | "asset"
   | "unknown";
 
-function normalize(s: string) {
-  return (s || "").toLowerCase().trim();
+type DocOut = {
+  title: string;
+  doc_type: DocType;
+  path: string;
+  url: string | null;
+};
+
+/* ---------------------------------------------
+   Helpers
+--------------------------------------------- */
+
+function normalizePathInput(s: string) {
+  return decodeURIComponent((s || "").trim()).replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function extOf(path: string) {
+  const m = path.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : "";
+}
+
+function baseName(path: string) {
+  const last = path.split("/").pop() || path;
+  return last.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function titleCaseWords(s: string) {
+  return s
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function humanizeDocNameFromFile(path: string) {
+  const b = baseName(path).toLowerCase();
+
+  if (b.includes("sales-sheet")) return "Sales Sheet";
+  if (b.includes("product-data-sheet")) return "Product Data Sheet";
+  if (b.includes("data-sheet")) return "Data Sheet";
+  if (b.includes("install-manual")) return "Install Manual";
+  if (b.includes("install-sheet")) return "Install Sheet";
+  if (b.includes("install-video")) return "Install Video";
+  if (b.includes("product-drawing")) return "Product Drawing";
+  if (b.includes("product-image")) return "Product Image";
+  if (b.includes("render")) return "Render";
+  if (b === "cad") return "CAD";
+
+  return titleCaseWords(b.replace(/[-_]+/g, " "));
 }
 
 function docTypeFromPath(path: string): DocType {
   const p = path.toLowerCase();
+  const e = extOf(p);
 
+  // most specific first
   if (p.includes("sales-sheet")) return "sales_sheet";
-  if (p.includes("tech-data-sheet")) return "data_sheet";
-  if (p.includes("data-sheet")) return "data_sheet";
   if (p.includes("product-data-sheet")) return "product_data_sheet";
+  if (p.includes("data-sheet")) return "data_sheet";
   if (p.includes("install-manual")) return "install_manual";
   if (p.includes("install-sheet")) return "install_sheet";
-  if (p.includes("install-video") || p.endsWith(".mp4")) return "install_video";
+  if (p.includes("install-video") || ["mp4", "mov", "webm"].includes(e)) return "install_video";
+
   if (p.endsWith(".dwg")) return "cad_dwg";
   if (p.endsWith(".step") || p.endsWith(".stp")) return "cad_step";
-  if (p.includes("product-drawing") || p.endsWith(".svg")) return "product_drawing";
-  if (p.includes("product-image")) return "product_image";
-  if (p.includes("render")) return "render";
-  if (p.includes(".emptyfolderplaceholder")) return "unknown";
 
-  return "asset";
+  if (p.includes("product-drawing")) return "product_drawing";
+  if (p.includes("product-image") || ["png", "jpg", "jpeg", "webp"].includes(e)) return "product_image";
+  if (p.includes("render")) return "render";
+
+  if (e === "pdf") return "asset";
+
+  return "unknown";
 }
 
 function titleFromPath(path: string) {
-  const file = path.split("/").pop() || path;
-  return file.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ");
+  const parts = path.split("/").filter(Boolean);
+  const docName = humanizeDocNameFromFile(path);
+
+  // include last folder name when possible
+  const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+  const niceParent = parent ? titleCaseWords(parent.replace(/[-_]+/g, " ")) : "";
+
+  if (niceParent) return `${niceParent} — ${docName}`;
+  return docName;
 }
 
-function isSafeFolder(folder: string) {
-  // allow "" (root)
-  if (folder == null) return false;
+function buildSearchTokens(q: string) {
+  const STOP = new Set([
+    "doc",
+    "docs",
+    "document",
+    "documents",
+    "pdf",
+    "file",
+    "files",
+    "sheet",
+    "sheets",
+    "sales",
+    "data",
+    "submittal",
+    "spec",
+    "specs",
+    "details",
+    "manual",
+    "manuals",
+    "install",
+    "installation",
+    "instructions",
+    "drawing",
+    "drawings",
+    "render",
+    "image",
+    "images",
+    "cad",
+    "dwg",
+    "step",
+    "stp",
+  ]);
 
-  const f = folder.trim();
+  const raw = (q || "").toLowerCase().trim();
+  if (!raw) return [];
 
-  if (f.includes("..")) return false;
-  if (f.startsWith("/")) return false;
-  if (f.includes("\\")) return false;
+  const tokens = raw
+    .replace(/[^a-z0-9\-\/]+/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => t.length >= 2 && !STOP.has(t));
 
-  return true;
+  // common hyphen normalization
+  const extra: string[] = [];
+  if (raw.includes("camera mount")) extra.push("camera-mount");
+  if (raw.includes("light mount")) extra.push("light-mount");
+  if (raw.includes("hvac")) extra.push("hvac");
+
+  const out = Array.from(new Set([...tokens, ...extra])).filter(Boolean);
+
+  // if user only typed stopwords like "docs", fallback to raw
+  return out.length ? out : [raw];
 }
+
+async function signUrlsForPaths(req: Request, paths: string[], expiresIn = 60 * 30) {
+  const out: DocOut[] = [];
+
+  for (const p of paths) {
+    const doc_type = docTypeFromPath(p);
+    const title = titleFromPath(p);
+
+    let url: string | null = null;
+
+    // ✅ Use service role for signing (works for internal + external, desktop + mobile)
+    const { data, error } = await supabaseAdmin.storage
+      .from("knowledge")
+      .createSignedUrl(p, expiresIn);
+
+    if (!error) url = data?.signedUrl ?? null;
+
+    out.push({ title, doc_type, path: p, url });
+  }
+
+  return out;
+}
+
 
 /**
- * Recursively list a prefix in Supabase Storage.
- * - Works even when files are inside nested subfolders.
- * - Stops at maxFiles to avoid runaway.
+ * Recursively list ALL file paths in a bucket (optionally within a prefix folder).
+ * This avoids querying storage.objects (which fails if the "storage" schema isn't exposed in Supabase API settings).
  */
-async function listRecursive(opts: {
-  bucket: string;
-  prefix: string; // "" for root
-  maxFiles: number;
-}) {
-  const { bucket, prefix, maxFiles } = opts;
+async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
+  const admin = typeof supabaseAdmin === "function" ? supabaseAdmin() : supabaseAdmin;
+  const storage = admin.storage.from(bucket);
 
-  // BFS queue of prefixes to visit
-  const queue: string[] = [prefix || ""];
-  const outPaths: string[] = [];
+  const root = normalizePathInput(startPrefix || "");
+  const queue: string[] = [root]; // folder prefixes
+  const files: string[] = [];
 
-  while (queue.length && outPaths.length < maxFiles) {
-    const currentPrefix = queue.shift() ?? "";
-
-    const { data, error } = await supabaseAdmin.storage
-      .from(bucket)
-      .list(currentPrefix, {
-        limit: 200,
-        offset: 0,
-        sortBy: { column: "name", order: "asc" },
-      });
+  while (queue.length) {
+    const prefix = queue.shift() ?? "";
+    const { data, error } = await storage.list(prefix || "", {
+      limit: 1000, // safe (271 objects total)
+      sortBy: { column: "name", order: "asc" },
+    });
 
     if (error) {
-      throw new Error(error.message);
+      // if a prefix doesn't exist, just skip
+      continue;
     }
 
     for (const item of data || []) {
-      if (!item?.name) continue;
-      if (item.name.startsWith(".")) continue;
+      const name = item.name;
+      const full = prefix ? `${prefix}/${name}` : name;
 
-      // In Supabase Storage list(), folders generally have `id: null`
-      const isFolder = (item as any).id == null;
+      // Supabase storage.list returns folders as items with null metadata/id
+      const isFolder = !item.metadata && !extOf(name);
 
+      // If it looks like a folder, enqueue it.
+      // (Some systems can have folder names with dots; we still treat "no ext + no metadata" as folder.)
       if (isFolder) {
-        const nextPrefix = currentPrefix ? `${currentPrefix}/${item.name}` : item.name;
-        queue.push(nextPrefix);
+        queue.push(full);
       } else {
-        const fullPath = currentPrefix ? `${currentPrefix}/${item.name}` : item.name;
-
-        if (fullPath.toLowerCase().includes(".emptyfolderplaceholder")) continue;
-
-        outPaths.push(fullPath);
-        if (outPaths.length >= maxFiles) break;
+        files.push(full);
       }
     }
   }
 
-  return outPaths;
+  return files;
 }
 
 export async function GET(req: Request) {
-  // ✅ allow Supabase to refresh cookies if needed
-  const res = NextResponse.next();
-
   try {
-    // ✅ Auth gate (any logged-in user for now)
-    const supabase = supabaseRoute(req, res);
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr) console.error("DOCS_AUTH_ERROR:", authErr);
-
-    const user = authData.user;
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     const { searchParams } = new URL(req.url);
 
-    // folder is optional now
-    const folder = (searchParams.get("folder") || "").trim(); // "" = root
-    const qRaw = (searchParams.get("q") || "").trim(); // substring search
-    const q = normalize(qRaw);
+    const folderRaw = searchParams.get("folder");
+    const qRaw = searchParams.get("q");
+    const all = searchParams.get("all") === "1";
 
-    const limitParam = Number(searchParams.get("limit") || "200");
-    const maxFiles = Number.isFinite(limitParam)
-      ? Math.min(Math.max(limitParam, 1), 400)
-      : 200;
+    const page = Math.max(0, Number(searchParams.get("page") || 0));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 50)));
+    const offset = page * limit;
 
-    if (!isSafeFolder(folder)) {
-      return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
+    const folder = folderRaw ? normalizePathInput(folderRaw) : "";
+    const q = qRaw ? decodeURIComponent(qRaw).trim() : "";
+
+    // 1) Collect authoritative file paths from Storage (no storage schema query)
+    let paths: string[] = [];
+
+    if (folder) {
+      // ✅ recursive within folder
+      paths = await listAllPathsRecursive("knowledge", folder);
+    } else if (q) {
+      // ✅ recursive from root, then filter by tokens (OR semantics)
+      const allPaths = await listAllPathsRecursive("knowledge", "");
+      const tokens = buildSearchTokens(q);
+
+      const lowerTokens = tokens.map((t) => t.toLowerCase());
+      paths = allPaths.filter((p) => {
+        const lp = p.toLowerCase();
+        return lowerTokens.some((t) => lp.includes(t));
+      });
+    } else if (all) {
+      // ✅ list all (paginated below)
+      paths = await listAllPathsRecursive("knowledge", "");
+    } else {
+      // ✅ default safe slice: just list everything then take first "limit" alphabetically
+      const allPaths = await listAllPathsRecursive("knowledge", "");
+      allPaths.sort((a, b) => a.localeCompare(b));
+      const slice = allPaths.slice(0, limit);
+      const docs = await signUrlsForPaths(req, slice);
+      return NextResponse.json({ docs, page: 0, limit: docs.length, total: allPaths.length, hasMore: allPaths.length > limit });
     }
 
-    const bucket = "knowledge";
+    // 2) Sort + paginate
+    paths.sort((a, b) => a.localeCompare(b));
+    const total = paths.length;
+    const slice = paths.slice(offset, offset + limit);
 
-    // 1) list recursively from folder (or root)
-    const allPaths = await listRecursive({
-      bucket,
-      prefix: folder, // can be ""
-      maxFiles: q ? 400 : maxFiles, // when searching, grab more then filter down
+    // 3) Signed URLs
+    const docs = await signUrlsForPaths(req, slice);
+
+    return NextResponse.json({
+      docs,
+      page,
+      limit,
+      total,
+      hasMore: offset + limit < total,
     });
-
-    // 2) optional substring search
-    const filteredPaths = q
-      ? allPaths.filter((p) => {
-          const hay = normalize(`${titleFromPath(p)} ${docTypeFromPath(p)} ${p}`);
-          return hay.includes(q);
-        })
-      : allPaths;
-
-    const finalPaths = filteredPaths.slice(0, maxFiles);
-
-    const files = finalPaths.map((path) => ({
-      name: path.split("/").pop() || path,
-      path,
-      doc_type: docTypeFromPath(path),
-      title: titleFromPath(path),
-    }));
-
-    // Sign each file (15 minutes)
-    const signed = await Promise.all(
-      files.map(async (f) => {
-        const { data: signedData } = await supabaseAdmin.storage
-          .from(bucket)
-          .createSignedUrl(f.path, 60 * 15);
-
-        return { ...f, url: signedData?.signedUrl || null };
-      })
-    );
-
-    console.log("DOCS_ROUTE_DEBUG", {
-      folder: folder || "(root)",
-      q: qRaw || null,
-      listedPaths: allPaths.length,
-      returned: signed.length,
-      sample: signed.slice(0, 3).map((x) => x.path),
-    });
-
-    return NextResponse.json(
-      { folder: folder || "", q: qRaw || null, files: signed },
-      { headers: res.headers }
-    );
   } catch (e: any) {
-    console.error("DOCS_ROUTE_ERROR:", e);
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ docs: [], error: e?.message || "Unknown error" }, { status: 500 });
   }
 }
