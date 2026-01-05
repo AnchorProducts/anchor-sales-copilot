@@ -6,6 +6,26 @@ const withPWA = require("next-pwa")({
 /** @type {import('next').NextConfig} */
 module.exports = withPWA({
   reactStrictMode: true,
+  turbopack: {},
+
+  async headers() {
+    return [
+      {
+        source: "/manifest.webmanifest",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/manifest+json",
+          },
+        ],
+      },
+    ];
+  },
+});
+
+/** @type {import('next').NextConfig} */
+module.exports = withPWA({
+  reactStrictMode: true,
 
   // ✅ Tell Next "Turbopack is intentional"
   turbopack: {},
