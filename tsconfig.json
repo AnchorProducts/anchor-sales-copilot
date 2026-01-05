@@ -30,5 +30,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+
+    // 🚫 Supabase Edge Functions (Deno-only, not Node/Next)
+    "supabase/functions/**",
+    "src/supabase/functions/**"
+  ]
 }

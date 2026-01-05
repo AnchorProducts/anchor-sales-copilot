@@ -190,8 +190,7 @@ async function signUrlsForPaths(req: Request, paths: string[], expiresIn = 60 * 
  * This avoids querying storage.objects (which fails if the "storage" schema isn't exposed in Supabase API settings).
  */
 async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
-  const admin = typeof supabaseAdmin === "function" ? supabaseAdmin() : supabaseAdmin;
-  const storage = admin.storage.from(bucket);
+  const storage = supabaseAdmin.storage.from(bucket); // ✅ no function call
 
   const root = normalizePathInput(startPrefix || "");
   const queue: string[] = [root]; // folder prefixes
@@ -216,8 +215,6 @@ async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
       // Supabase storage.list returns folders as items with null metadata/id
       const isFolder = !item.metadata && !extOf(name);
 
-      // If it looks like a folder, enqueue it.
-      // (Some systems can have folder names with dots; we still treat "no ext + no metadata" as folder.)
       if (isFolder) {
         queue.push(full);
       } else {

@@ -1,9 +1,10 @@
-export const runtime = "nodejs";
-
+// src/lib/knowledge/save/route.ts
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
-import { chunkText } from "@/lib/knowledge/text";
-import { embed } from "@/lib/knowledge/embeddings";
+import { embedText } from "@/lib/learning/embeddings";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type Body = {
   title: string;
@@ -14,9 +15,45 @@ type Body = {
   source_type?: "chat" | "upload" | "manual_entry";
 };
 
+function chunkText(input: string, maxChars = 1200) {
+  const text = (input || "").trim();
+  if (!text) return [];
+
+  // split by paragraph-ish boundaries, then pack into maxChars chunks
+  const parts = text.split(/\n\s*\n+/).map((p) => p.trim()).filter(Boolean);
+
+  const chunks: string[] = [];
+  let buf = "";
+
+  for (const p of parts) {
+    const next = buf ? `${buf}\n\n${p}` : p;
+
+    if (next.length <= maxChars) {
+      buf = next;
+      continue;
+    }
+
+    // flush current buffer
+    if (buf) chunks.push(buf);
+
+    // if paragraph itself is huge, hard-slice it
+    if (p.length > maxChars) {
+      for (let i = 0; i < p.length; i += maxChars) {
+        chunks.push(p.slice(i, i + maxChars));
+      }
+      buf = "";
+    } else {
+      buf = p;
+    }
+  }
+
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
 export async function POST(req: Request) {
-  const res = NextResponse.next();
-  const supabase = supabaseRoute(req, res);
+  const base = NextResponse.next();
+  const supabase = supabaseRoute(req, base);
 
   const { data: auth, error: authErr } = await supabase.auth.getUser();
   const user = auth?.user;
@@ -24,7 +61,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json()) as Body;
+  let body: Body;
+  try {
+    body = (await req.json()) as Body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
   const title = (body.title || "").trim();
   const content = (body.content || "").trim();
 
@@ -50,16 +93,19 @@ export async function POST(req: Request) {
     .single();
 
   if (docErr || !doc?.id) {
-    return NextResponse.json({ error: docErr?.message || "Doc insert failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: docErr?.message || "Doc insert failed" },
+      { status: 500 }
+    );
   }
 
   // 2) chunk + embed + insert chunks
   const chunks = chunkText(content, 1200);
 
-  const rows = [];
+  const rows: any[] = [];
   for (let i = 0; i < chunks.length; i++) {
     const c = chunks[i];
-    const embedding = await embed(c);
+    const embedding = await embedText(c);
 
     rows.push({
       document_id: doc.id,
