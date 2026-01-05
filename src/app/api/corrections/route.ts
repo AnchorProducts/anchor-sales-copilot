@@ -9,7 +9,9 @@ function jsonError(message: string, status = 400) {
 }
 
 export async function POST(req: Request) {
-  const supabase = supabaseRoute();
+  const base = NextResponse.next();
+const supabase = supabaseRoute(req, base);
+
 
   const { data: auth, error: authErr } = await supabase.auth.getUser();
   if (authErr || !auth?.user) return jsonError("Unauthorized", 401);
