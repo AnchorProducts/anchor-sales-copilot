@@ -1,6 +1,7 @@
 // src/app/chat/page.tsx
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -42,7 +43,6 @@ type MsgMeta = {
 };
 
 type Msg = { role: "user" | "assistant"; content: string; meta?: MsgMeta | null };
-
 
 type ProfileRow = {
   role: "admin" | "anchor_rep" | "external_rep";
@@ -259,65 +259,63 @@ export default function ChatPage() {
         if (msgErr) console.error("MESSAGES_LOAD_ERROR:", msgErr);
 
         if (rows && rows.length > 0) {
-  // Build display messages (skip empty assistant bubbles),
-  // but keep docs meta by attaching it to the previous user message.
-  const display: Array<{ role: "user" | "assistant"; content: string; meta?: any }> = [];
-  const nextDocsReady: Record<number, boolean> = {};
+          // Build display messages (skip empty assistant bubbles),
+          // but keep docs meta by attaching it to the previous user message.
+          const display: Array<{ role: "user" | "assistant"; content: string; meta?: any }> = [];
+          const nextDocsReady: Record<number, boolean> = {};
 
-  let lastUserDisplayIndex: number | null = null;
+          let lastUserDisplayIndex: number | null = null;
 
-  for (const r of rows as any[]) {
-    const role = r.role as "user" | "assistant";
-    const content = (r.content ?? "").toString();
-    const meta = r.meta ?? null;
+          for (const r of rows as any[]) {
+            const role = r.role as "user" | "assistant";
+            const content = (r.content ?? "").toString();
+            const meta = r.meta ?? null;
 
-    // ✅ If this is a docs-only assistant row (empty content), don't render it
-    // but attach its meta to the previous user message.
-    if (role === "assistant" && !content.trim()) {
-      const docs = meta?.recommendedDocs;
-      const folders = meta?.foldersUsed;
+            // ✅ If this is a docs-only assistant row (empty content), don't render it
+            // but attach its meta to the previous user message.
+            if (role === "assistant" && !content.trim()) {
+              const docs = meta?.recommendedDocs;
+              const folders = meta?.foldersUsed;
 
-      if (
-        lastUserDisplayIndex !== null &&
-        (Array.isArray(docs) && docs.length > 0)
-      ) {
-        // attach docs meta to the last user bubble
-        display[lastUserDisplayIndex].meta = { ...(display[lastUserDisplayIndex].meta || {}), ...meta };
+              if (lastUserDisplayIndex !== null && Array.isArray(docs) && docs.length > 0) {
+                // attach docs meta to the last user bubble
+                display[lastUserDisplayIndex].meta = {
+                  ...(display[lastUserDisplayIndex].meta || {}),
+                  ...meta,
+                };
 
-        // mark that user bubble as having docs
-        nextDocsReady[lastUserDisplayIndex] = true;
+                // mark that user bubble as having docs
+                nextDocsReady[lastUserDisplayIndex] = true;
 
-        // also restore right panel to last seen docs
-        setLastDocs(docs);
-        setLastFolders(Array.isArray(folders) ? folders : []);
-      }
+                // also restore right panel to last seen docs
+                setLastDocs(docs);
+                setLastFolders(Array.isArray(folders) ? folders : []);
+              }
 
-      continue; // skip rendering this blank assistant bubble
-    }
+              continue; // skip rendering this blank assistant bubble
+            }
 
-    // Normal message bubble
-    const idx = display.length;
-    display.push({ role, content, meta });
+            // Normal message bubble
+            const idx = display.length;
+            display.push({ role, content, meta });
 
-    if (role === "user") lastUserDisplayIndex = idx;
+            if (role === "user") lastUserDisplayIndex = idx;
 
-    // If an assistant answer has docs meta, mark the previous user bubble
-    if (role === "assistant") {
-      const docs = meta?.recommendedDocs;
-      if (lastUserDisplayIndex !== null && Array.isArray(docs) && docs.length > 0) {
-        nextDocsReady[lastUserDisplayIndex] = true;
-      }
-    }
-  }
+            // If an assistant answer has docs meta, mark the previous user bubble
+            if (role === "assistant") {
+              const docs = meta?.recommendedDocs;
+              if (lastUserDisplayIndex !== null && Array.isArray(docs) && docs.length > 0) {
+                nextDocsReady[lastUserDisplayIndex] = true;
+              }
+            }
+          }
 
-  setMessages(display as any);
-  setDocsReadyFor(nextDocsReady);
-} else {
-  setMessages([DEFAULT_GREETING] as any);
-  setDocsReadyFor({});
-}
-
-
+          setMessages(display as any);
+          setDocsReadyFor(nextDocsReady);
+        } else {
+          setMessages([DEFAULT_GREETING] as any);
+          setDocsReadyFor({});
+        }
 
         // clear per-response panels when switching history
         setLastSources([]);
@@ -791,33 +789,33 @@ export default function ChatPage() {
 
       await loadConversations(userId);
     } catch (e: any) {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: `Network error: ${e?.message || String(e)}` },
-      ]);
+      setMessages((m) => [...m, { role: "assistant", content: `Network error: ${e?.message || String(e)}` }]);
     } finally {
       setLoading(false);
     }
   }
 
-  // Shared UI tokens (ChatGPT-ish)
-  const PANEL =
-    "rounded-2xl border border-white/10 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.06)] backdrop-blur";
-  const PANEL_HEADER = "border-b border-white/10 px-4 py-3 shrink-0";
+  // Shared UI tokens (Anchor dashboard scheme)
+  const PANEL = "rounded-3xl border border-black/10 bg-white shadow-sm";
+  const PANEL_HEADER = "border-b border-black/10 px-4 py-3 shrink-0";
   const PANEL_BODY = "flex-1 min-h-0";
   const SOFT_SCROLL = "overflow-y-auto [scrollbar-width:thin]";
 
+  // Common colors
+  const MUTED = "text-[#76777B]";
+  const GREEN = "text-[#047835]";
+
   return (
-    <main className="h-[100svh] anchor-app-bg text-white flex flex-col overflow-hidden">
-      {/* Top bar (ChatGPT-like) */}
-      <header className="sticky top-0 z-30 anchor-topbar shrink-0">
+    <main className="h-[100svh] bg-[#F6F7F8] text-black flex flex-col overflow-hidden">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 shrink-0 border-b border-black/10 bg-gradient-to-r from-[#11500F] via-[#047835] to-[#047835]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile menu button */}
             <button
               type="button"
               onClick={() => setSidebarOpen((v) => !v)}
-              className="md:hidden h-9 rounded-md border border-white/10 bg-black/40 px-3 text-[12px] font-semibold text-white/80 hover:bg-black/60 transition"
+              className="md:hidden h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
             >
               Menu
             </button>
@@ -825,7 +823,7 @@ export default function ChatPage() {
             {/* Brand */}
             <button
               onClick={() => window.location.reload()}
-              className="h-9 w-9 rounded-md bg-black/60 border border-white/10 flex items-center justify-center hover:bg-black/80 transition shrink-0"
+              className="h-9 w-9 rounded-md bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/15 transition shrink-0"
               type="button"
               title="Refresh"
               aria-label="Refresh"
@@ -834,10 +832,12 @@ export default function ChatPage() {
             </button>
 
             <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate">
+              <div className="text-sm font-semibold tracking-wide truncate text-white">
                 Anchor Sales Co-Pilot
               </div>
-              <div className="text-[12px] text-white/60 truncate">Docs • Specs • Install • Downloads</div>
+              <div className="text-[12px] text-white/80 truncate">
+                Docs • Specs • Install • Downloads
+              </div>
             </div>
           </div>
 
@@ -846,21 +846,29 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={goAdmin}
-                className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/10 bg-black/40 px-3 text-[12px] font-semibold text-white/80 hover:bg-black/60 transition"
+                className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
                 title="Open admin dashboard"
               >
                 Admin
               </button>
             ) : (
-              <div className="hidden sm:inline-flex rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-white/70">
+              <div className="hidden sm:inline-flex rounded-md border border-white/20 bg-white/10 px-2 py-1 text-[11px] text-white/90">
                 {profileLoading ? "…" : roleLabel}
               </div>
             )}
 
+            <Link
+              href="/dashboard"
+              className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+              title="Back to Dashboard"
+            >
+              Dashboard
+            </Link>
+
             <button
               type="button"
               onClick={newChat}
-              className="h-9 rounded-md border border-white/10 bg-black/40 px-3 text-[12px] font-semibold text-white/80 hover:bg-black/60 transition"
+              className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
               title="Start a new chat"
             >
               New
@@ -869,7 +877,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={signOut}
-              className="h-9 rounded-md border border-white/10 bg-black/40 px-3 text-[12px] font-semibold text-white/80 hover:bg-black/60 transition"
+              className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
             >
               Sign out
             </button>
@@ -880,11 +888,9 @@ export default function ChatPage() {
       {/* Body */}
       <div className="flex-1 min-h-0">
         <div className="mx-auto h-full max-w-6xl px-4 py-4">
-          {/* Desktop: 3 panels same height. Mobile: chat only; sidebar via menu; docs only when hasDocs */}
           <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-[280px_1fr_320px]">
             {/* Desktop sidebar */}
             <aside className={`hidden md:flex ${PANEL} flex-col min-h-0`}>
-              {/* Scroll only when overflow */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} bg-transparent`}>
                 <ChatSidebar
                   conversations={conversations.map((c) => ({
@@ -913,7 +919,7 @@ export default function ChatPage() {
                       <button
                         type="button"
                         onClick={() => setSidebarOpen(false)}
-                        className="rounded-md border border-white/10 bg-black/35 px-3 py-1 text-[12px] text-white/80 hover:bg-black/55 transition"
+                        className="rounded-md border border-black/10 bg-white px-3 py-1 text-[12px] text-black/80 hover:bg-black/[0.03] transition"
                       >
                         Close
                       </button>
@@ -931,14 +937,14 @@ export default function ChatPage() {
                           className={[
                             "w-full rounded-lg border px-3 py-2 text-left transition mb-1",
                             active
-                              ? "border-emerald-300/25 bg-emerald-400/10"
-                              : "border-white/10 bg-black/20 hover:bg-black/35",
+                              ? "border-[#047835]/35 bg-[#9CE2BB]"
+                              : "border-black/10 bg-white hover:bg-black/[0.03]",
                           ].join(" ")}
                         >
-                          <div className="truncate text-[12px] font-semibold text-white/90">
+                          <div className="truncate text-[12px] font-semibold text-black">
                             {titleOrNew(c.title)}
                           </div>
-                          <div className="text-[11px] text-white/55">
+                          <div className="text-[11px] text-[#76777B]">
                             {formatWhen(c.updated_at || c.created_at)}
                           </div>
                         </button>
@@ -952,12 +958,12 @@ export default function ChatPage() {
             {/* Chat panel */}
             <section className={`${PANEL} flex flex-col h-full min-h-0`}>
               <div className={PANEL_HEADER}>
-                <div className="text-xs text-white/70">
+                <div className={`text-xs ${MUTED}`}>
                   Ask like: “U2400 EPDM install manual + data sheet” or “HVAC solution docs”
                 </div>
               </div>
 
-              {/* Messages (scroll only if overflow) */}
+              {/* Messages */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} px-4 py-4 bg-transparent`}>
                 <div className="space-y-3">
                   {messages.map((m, idx) => (
@@ -966,19 +972,19 @@ export default function ChatPage() {
                       className={[
                         "max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
                         m.role === "user"
-                          ? "ml-auto bg-emerald-400/15 border border-emerald-300/15"
-                          : "bg-black/40 border border-white/10",
+                          ? "ml-auto bg-[#9CE2BB] border border-black/10"
+                          : "bg-white border border-black/10",
                       ].join(" ")}
                     >
-                      <div>{m.content}</div>
+                      <div className="text-black">{m.content}</div>
 
-                      {/* ✅ User message actions (only show if this message yielded docs) */}
+                      {/* ✅ User message actions */}
                       {m.role === "user" && !!docsReadyFor[idx] && (
                         <div className="mt-2 flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => seeDocsFor(idx, m.content)}
-                            className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/75 hover:bg-black/45 transition"
+                            className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-black/70 hover:bg-black/[0.03] transition"
                             title="Show documents for this message"
                           >
                             See docs
@@ -988,10 +994,10 @@ export default function ChatPage() {
                     </div>
                   ))}
 
-                  {/* Feedback is opt-in and only after real assistant answers */}
+                  {/* Feedback (opt-in) */}
                   {canShowFeedback && (
                     <div className="max-w-[92%]">
-                      <div className="mt-2 flex items-center gap-2 text-[12px] text-white/60">
+                      <div className={`mt-2 flex items-center gap-2 text-[12px] ${MUTED}`}>
                         <span>Was that correct?</span>
 
                         <button
@@ -1000,8 +1006,8 @@ export default function ChatPage() {
                           className={[
                             "rounded-md border px-2 py-1 transition",
                             !showFeedback
-                              ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
-                              : "border-white/10 bg-black/30 hover:bg-black/40 text-white/70",
+                              ? "border-[#047835]/35 bg-[#9CE2BB] text-[#11500F]"
+                              : "border-black/10 bg-white hover:bg-black/[0.03] text-black/70",
                           ].join(" ")}
                         >
                           Yes
@@ -1013,8 +1019,8 @@ export default function ChatPage() {
                           className={[
                             "rounded-md border px-2 py-1 transition",
                             showFeedback
-                              ? "border-red-300/25 bg-red-400/10 text-red-100"
-                              : "border-white/10 bg-black/30 hover:bg-black/40 text-white/70",
+                              ? "border-red-300/40 bg-red-50 text-red-700"
+                              : "border-black/10 bg-white hover:bg-black/[0.03] text-black/70",
                           ].join(" ")}
                         >
                           Wrong / Needs correction
@@ -1024,7 +1030,7 @@ export default function ChatPage() {
                           <button
                             type="button"
                             onClick={() => setShowFeedback(false)}
-                            className="ml-auto rounded-md border border-white/10 bg-black/30 px-2 py-1 text-white/70 hover:bg-black/40 transition"
+                            className="ml-auto rounded-md border border-black/10 bg-white px-2 py-1 text-black/70 hover:bg-black/[0.03] transition"
                           >
                             Hide
                           </button>
@@ -1046,7 +1052,7 @@ export default function ChatPage() {
                   )}
 
                   {(historyLoading || loading) && (
-                    <div className="max-w-[92%] rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white/80">
+                    <div className="max-w-[92%] rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/80">
                       {historyLoading ? "Loading chat…" : "Thinking…"}
                     </div>
                   )}
@@ -1055,8 +1061,8 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Composer (ChatGPT-ish) */}
-              <div className="border-t border-white/10 shrink-0">
+              {/* Composer */}
+              <div className="border-t border-black/10 shrink-0">
                 <div className="px-3 pt-3">
                   <div className="max-h-[92px] overflow-y-auto overflow-x-hidden pb-2 pr-1">
                     <div className="flex flex-wrap gap-2">
@@ -1065,7 +1071,7 @@ export default function ChatPage() {
                           key={label}
                           type="button"
                           onClick={() => pushQuickPick(label)}
-                          className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-[12px] text-emerald-100 hover:bg-emerald-400/15 disabled:opacity-60 transition"
+                          className="rounded-full border border-black/10 bg-white px-3 py-1 text-[12px] text-[#047835] hover:bg-black/[0.03] disabled:opacity-60 transition"
                           disabled={inputDisabled}
                         >
                           {label}
@@ -1078,7 +1084,7 @@ export default function ChatPage() {
                 <div className="p-3">
                   <div className="flex w-full gap-2">
                     <input
-                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-sm outline-none placeholder:text-white/40 focus:border-emerald-300/30 disabled:opacity-60"
+                      className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white px-3 py-3 text-sm outline-none placeholder:text-[#76777B] focus:border-[#047835] disabled:opacity-60"
                       placeholder={inputDisabled ? "Loading your chat…" : 'Try: "U3400 PVC sales sheet"'}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
@@ -1093,41 +1099,38 @@ export default function ChatPage() {
                     <button
                       onClick={send}
                       disabled={loading || inputDisabled}
-                      className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-400 to-lime-400 px-5 py-3 text-sm font-semibold text-black shadow disabled:opacity-50"
+                      className="shrink-0 rounded-xl bg-[#047835] px-5 py-3 text-sm font-semibold text-white shadow hover:bg-[#11500F] disabled:opacity-50"
                       type="button"
                     >
                       Send
                     </button>
                   </div>
 
-                  <div className="mt-2 text-[11px] text-white/50">
+                  <div className="mt-2 text-[11px] text-[#76777B]">
                     Tip: include membrane + series (ex: “U2600 SBS Torch”) so I can pull the exact folder.
                   </div>
 
                   {!profileLoading && (
-                    <div className="mt-2 text-[11px] text-white/40">
-                      Access mode: <span className="text-white/60">{userType}</span>
+                    <div className="mt-2 text-[11px] text-black/50">
+                      Access mode: <span className="text-black/70">{userType}</span>
                     </div>
                   )}
                 </div>
               </div>
             </section>
 
-            {/* Docs panel:
-                - Desktop: always there (same size)
-                - Mobile: only render when hasDocs
-            */}
+            {/* Docs panel */}
             <aside
               className={[
                 PANEL,
                 "flex flex-col h-full min-h-0",
-                hasDocs ? "block" : "hidden", // hide on mobile unless there are docs
-                "md:flex md:block", // always show on desktop
+                hasDocs ? "block" : "hidden",
+                "md:flex md:block",
               ].join(" ")}
             >
               <div className={PANEL_HEADER}>
                 <div className="text-sm font-semibold">Recommended documents</div>
-                <div className="mt-1 text-[12px] text-white/60">Tap to download/share</div>
+                <div className={`mt-1 text-[12px] ${MUTED}`}>Tap to download/share</div>
               </div>
 
               <div
@@ -1139,17 +1142,18 @@ export default function ChatPage() {
                   if (nearBottom) loadMoreDocs();
                 }}
               >
-                {/* If no docs, show empty state (desktop only; on mobile panel is hidden anyway) */}
                 {!hasDocs ? (
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/70">
+                  <div className="rounded-xl border border-black/10 bg-white p-3 text-sm text-[#76777B]">
                     No docs yet. Ask a question to pull files from Storage.
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {/* Recent docs */}
                     {recentDocs.length > 0 && (
-                      <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                        <div className="text-[11px] font-semibold text-white/70">Recent docs you opened</div>
+                      <div className="rounded-xl border border-black/10 bg-white p-3">
+                        <div className="text-[11px] font-semibold text-black/70">
+                          Recent docs you opened
+                        </div>
                         <div className="mt-2 space-y-1">
                           {recentDocs.map((r) => (
                             <button
@@ -1158,12 +1162,12 @@ export default function ChatPage() {
                               onClick={() =>
                                 r.doc_url && window.open(r.doc_url, "_blank", "noopener,noreferrer")
                               }
-                              className="w-full text-left rounded-lg border border-white/10 bg-black/30 px-3 py-2 hover:bg-black/45 transition"
+                              className="w-full text-left rounded-lg border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
                             >
-                              <div className="truncate text-[12px] font-semibold text-white/85">
+                              <div className="truncate text-[12px] font-semibold text-black/85">
                                 {r.doc_title || r.doc_path}
                               </div>
-                              <div className="text-[11px] text-white/55 truncate">
+                              <div className="text-[11px] text-[#76777B] truncate">
                                 {r.doc_type || "doc"} • {r.doc_path}
                               </div>
                             </button>
@@ -1191,19 +1195,21 @@ export default function ChatPage() {
                           className={[
                             "w-full text-left rounded-xl border px-3 py-2 transition",
                             d.url
-                              ? "border-white/10 bg-black/35 hover:border-emerald-300/25 hover:bg-black/50"
-                              : "border-white/10 bg-black/20 opacity-60 cursor-not-allowed",
+                              ? "border-black/10 bg-white hover:border-[#047835]/40 hover:bg-black/[0.03]"
+                              : "border-black/10 bg-white opacity-60 cursor-not-allowed",
                           ].join(" ")}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold">{d.title}</div>
-                              <div className="text-[11px] text-white/60">
+                              <div className="truncate text-sm font-semibold text-black">
+                                {d.title}
+                              </div>
+                              <div className="text-[11px] text-[#76777B]">
                                 {d.doc_type} • {d.path}
                               </div>
                             </div>
 
-                            <div className="shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80">
+                            <div className="shrink-0 rounded-md border border-black/10 bg-[#9CE2BB] px-2 py-1 text-[11px] font-semibold text-[#11500F]">
                               Open
                             </div>
                           </div>
@@ -1212,19 +1218,19 @@ export default function ChatPage() {
                     </div>
 
                     {(docsLoadingMore || docsHasMore) && (
-                      <div className="mt-1 rounded-xl border border-white/10 bg-black/30 p-3 text-[12px] text-white/70">
+                      <div className="mt-1 rounded-xl border border-black/10 bg-white p-3 text-[12px] text-[#76777B]">
                         {docsLoadingMore ? "Loading more…" : "Scroll for more…"}
                       </div>
                     )}
 
                     {!docsHasMore && lastDocs.length > 0 && (
-                      <div className="text-[11px] text-white/45">End of results.</div>
+                      <div className="text-[11px] text-[#76777B]">End of results.</div>
                     )}
 
                     {lastFolders?.length ? (
-                      <div className="rounded-xl border border-white/10 bg-black/30 p-3">
-                        <div className="text-[11px] font-semibold text-white/70">Folders used</div>
-                        <div className="mt-1 space-y-1 text-[11px] text-white/55">
+                      <div className="rounded-xl border border-black/10 bg-white p-3">
+                        <div className="text-[11px] font-semibold text-black/70">Folders used</div>
+                        <div className="mt-1 space-y-1 text-[11px] text-[#76777B]">
                           {lastFolders.map((f) => (
                             <div key={f} className="break-words">
                               {f}

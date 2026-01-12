@@ -9,6 +9,8 @@ function isEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+
+
 export default function LoginHome() {
   return (
     <Suspense
@@ -30,7 +32,7 @@ export default function LoginHome() {
 function LoginInner() {
   const router = useRouter();
   const sp = useSearchParams();
-  const nextUrl = useMemo(() => sp.get("next") || "/chat", [sp]);
+  const nextUrl = useMemo(() => sp.get("next") || "/dashboard", [sp]);
 
   const supabase = useMemo(() => supabaseBrowser(), []);
 
@@ -47,7 +49,7 @@ function LoginInner() {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!alive) return;
-      if (data.session) router.replace("/chat");
+      if (data.session) router.replace("/dashboard");
     })();
     return () => {
       alive = false;
