@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 
 type ConversationRow = {
   id: string;
@@ -45,6 +45,18 @@ export default function ChatSidebar({
     [conversations, activeId]
   );
 
+  // Close the 3-dot menu when you click anywhere else
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const el = rootRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setMenuOpenId(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
   function startRename(id: string, currentTitle: string) {
     setMenuOpenId(null);
     setEditingId(id);
@@ -63,26 +75,32 @@ export default function ChatSidebar({
     await onDelete?.(id);
   }
 
+  // Anchor dashboard palette
+  const PANEL_HEADER = "border-b border-black/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0";
+  const MUTED = "text-[#76777B]";
+
   return (
-    <div className="h-full min-h-0 flex flex-col bg-transparent">
+    <div ref={rootRef} className="h-full min-h-0 flex flex-col bg-transparent">
       {/* Header */}
-      <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
-        <div className="text-sm font-semibold">Chats</div>
+      <div className={PANEL_HEADER}>
+        <div className="text-sm font-semibold text-black">Chats</div>
+
         <button
           type="button"
           onClick={onNewChat}
-          className="rounded-md border border-white/10 bg-black/35 px-3 py-1 text-[12px] text-white/80 hover:bg-black/55"
+          className="rounded-md border border-black/10 bg-white px-3 py-1 text-[12px] font-semibold text-[#047835] hover:bg-black/[0.03] transition"
+          title="Start a new chat"
         >
-          New
+          New chat
         </button>
       </div>
 
-      {/* List (scroll only when needed) */}
+      {/* List */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 bg-transparent">
         {loading ? (
-          <div className="p-3 text-sm text-white/60">Loading…</div>
+          <div className={`p-3 text-sm ${MUTED}`}>Loading…</div>
         ) : conversations.length === 0 ? (
-          <div className="p-3 text-sm text-white/60">No chats yet.</div>
+          <div className={`p-3 text-sm ${MUTED}`}>No chats yet.</div>
         ) : (
           <div className="space-y-1">
             {conversations.map((c) => {
@@ -95,10 +113,10 @@ export default function ChatSidebar({
                     type="button"
                     onClick={() => onSelect(c.id)}
                     className={[
-                      "w-full text-left rounded-lg px-3 py-2 border transition pr-10",
+                      "w-full text-left rounded-xl px-3 py-2 border transition pr-10",
                       isActive
-                        ? "border-emerald-300/25 bg-emerald-400/10"
-                        : "border-white/10 bg-black/30 hover:bg-black/45",
+                        ? "border-[#047835]/35 bg-[#9CE2BB]"
+                        : "border-black/10 bg-white hover:bg-black/[0.03]",
                     ].join(" ")}
                   >
                     {isEditing ? (
@@ -107,11 +125,12 @@ export default function ChatSidebar({
                           autoFocus
                           value={draftTitle}
                           onChange={(e) => setDraftTitle(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") commitRename(c.id);
                             if (e.key === "Escape") setEditingId(null);
                           }}
-                          className="w-full rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[12px] text-white/90 outline-none"
+                          className="w-full rounded-md border border-black/10 bg-white px-2 py-1 text-[12px] text-black outline-none focus:border-[#047835]"
                         />
                         <div className="flex gap-2">
                           <button
@@ -120,7 +139,7 @@ export default function ChatSidebar({
                               e.stopPropagation();
                               commitRename(c.id);
                             }}
-                            className="rounded-md border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-400/15"
+                            className="rounded-md border border-black/10 bg-[#047835] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#11500F] transition"
                           >
                             Save
                           </button>
@@ -130,7 +149,7 @@ export default function ChatSidebar({
                               e.stopPropagation();
                               setEditingId(null);
                             }}
-                            className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/70 hover:bg-black/45"
+                            className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-black/70 hover:bg-black/[0.03] transition"
                           >
                             Cancel
                           </button>
@@ -138,10 +157,10 @@ export default function ChatSidebar({
                       </div>
                     ) : (
                       <>
-                        <div className="truncate text-sm font-semibold">
+                        <div className="truncate text-[13px] font-semibold text-black">
                           {titleOrNew(c.title)}
                         </div>
-                        <div className="text-[11px] text-white/50 truncate">
+                        <div className={`text-[11px] ${MUTED} truncate`}>
                           {formatWhen(c.updated_at)}
                         </div>
                       </>
@@ -155,7 +174,7 @@ export default function ChatSidebar({
                       e.stopPropagation();
                       setMenuOpenId((v) => (v === c.id ? null : c.id));
                     }}
-                    className="absolute right-2 top-2 h-7 w-7 rounded-md border border-white/10 bg-black/35 text-white/70 hover:bg-black/55"
+                    className="absolute right-2 top-2 h-7 w-7 rounded-md border border-black/10 bg-white text-black/70 hover:bg-black/[0.03] transition"
                     aria-label="Chat actions"
                     title="Actions"
                   >
@@ -163,24 +182,21 @@ export default function ChatSidebar({
                   </button>
 
                   {menuOpenId === c.id && (
-                    <div className="absolute right-2 top-10 z-20 w-36 overflow-hidden rounded-lg border border-white/10 bg-[#0b0f14] shadow">
+                    <div
+                      className="absolute right-2 top-10 z-20 w-40 overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(c.id, titleOrNew(c.title));
-                        }}
-                        className="w-full px-3 py-2 text-left text-[12px] text-white/85 hover:bg-white/5"
+                        onClick={() => startRename(c.id, titleOrNew(c.title))}
+                        className="w-full px-3 py-2 text-left text-[12px] text-black hover:bg-black/[0.03] transition"
                       >
                         Rename
                       </button>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(c.id);
-                        }}
-                        className="w-full px-3 py-2 text-left text-[12px] text-red-200 hover:bg-white/5"
+                        onClick={() => handleDelete(c.id)}
+                        className="w-full px-3 py-2 text-left text-[12px] text-red-600 hover:bg-black/[0.03] transition"
                       >
                         Delete
                       </button>
@@ -194,10 +210,10 @@ export default function ChatSidebar({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-white/10 px-4 py-3 text-[11px] text-white/50 shrink-0">
+      <div className="border-t border-black/10 px-4 py-3 text-[11px] text-[#76777B] shrink-0">
         Tip: Click a chat to continue where you left off.
         {activeIndex >= 0 ? (
-          <span className="ml-2 text-white/30">
+          <span className="ml-2 text-black/40">
             ({activeIndex + 1}/{conversations.length})
           </span>
         ) : null}

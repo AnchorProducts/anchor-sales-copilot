@@ -6,15 +6,18 @@ export default function manifest(): MetadataRoute.Manifest {
     /* Identity */
     id: "/",
     name: "Anchor Sales Co-Pilot",
-    short_name: "Anchor Co-Pilot",
-    description: "Anchor Products sales assistant with instant docs, specs, installs, and downloads.",
+    short_name: "Anchor",
+    description:
+      "Anchor Products sales assistant with instant docs, specs, installs, and downloads.",
 
     /* App behavior */
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#050505",
+
+    // ✅ MUST be light / brand color
+    background_color: "#047835",
     theme_color: "#047835",
 
     /* Icons */
@@ -42,7 +45,7 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
 
-    /* Install UI screenshots (fixes Chrome warnings) */
+    /* Install UI screenshots */
     screenshots: [
       {
         src: "/pwa-wide.png",

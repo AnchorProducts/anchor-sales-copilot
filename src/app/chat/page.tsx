@@ -597,6 +597,12 @@ export default function ChatPage() {
     })();
   }, [userId]);
 
+function returnToDesktop() {
+  // Persist preference for ~30 days
+  document.cookie = `force_desktop=1; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
+  window.location.reload();
+}
+
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/");
@@ -809,81 +815,82 @@ export default function ChatPage() {
     <main className="h-[100svh] bg-[#F6F7F8] text-black flex flex-col overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-30 shrink-0 border-b border-black/10 bg-gradient-to-r from-[#11500F] via-[#047835] to-[#047835]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Mobile menu button */}
-            <button
-              type="button"
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="md:hidden h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-            >
-              Menu
-            </button>
+  <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+    {/* Left: brand + menu */}
+    <div className="flex min-w-0 items-center gap-3">
+      {/* Mobile menu */}
+      <button
+        type="button"
+        onClick={() => setSidebarOpen((v) => !v)}
+        className="md:hidden h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+        aria-label="Open chat menu"
+      >
+        Menu
+      </button>
 
-            {/* Brand */}
-            <button
-              onClick={() => window.location.reload()}
-              className="h-9 w-9 rounded-md bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/15 transition shrink-0"
-              type="button"
-              title="Refresh"
-              aria-label="Refresh"
-            >
-              <img src="/anchorp.svg" alt="Anchor Products" className="h-10 w-auto" />
-            </button>
+      {/* Brand */}
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="h-9 w-9 shrink-0 rounded-md border border-white/20 bg-white/10 flex items-center justify-center hover:bg-white/15 transition"
+        title="Refresh"
+        aria-label="Refresh"
+      >
+        <img src="/anchorp.svg" alt="Anchor Products" className="h-10 w-auto" />
+      </button>
 
-            <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate text-white">
-                Anchor Sales Co-Pilot
-              </div>
-              <div className="text-[12px] text-white/80 truncate">
-                Docs • Specs • Install • Downloads
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {!profileLoading && role === "admin" ? (
-              <button
-                type="button"
-                onClick={goAdmin}
-                className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-                title="Open admin dashboard"
-              >
-                Admin
-              </button>
-            ) : (
-              <div className="hidden sm:inline-flex rounded-md border border-white/20 bg-white/10 px-2 py-1 text-[11px] text-white/90">
-                {profileLoading ? "…" : roleLabel}
-              </div>
-            )}
-
-            <Link
-              href="/dashboard"
-              className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-              title="Back to Dashboard"
-            >
-              Dashboard
-            </Link>
-
-            <button
-              type="button"
-              onClick={newChat}
-              className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-              title="Start a new chat"
-            >
-              New
-            </button>
-
-            <button
-              type="button"
-              onClick={signOut}
-              className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-            >
-              Sign out
-            </button>
-          </div>
+      <div className="min-w-0 leading-tight">
+        <div className="truncate text-sm font-semibold tracking-wide text-white">
+          Anchor Sales Co-Pilot
         </div>
-      </header>
+        <div className="truncate text-[12px] text-white/80">
+          Docs • Specs • Install • Downloads
+        </div>
+      </div>
+    </div>
+
+    {/* Right: actions */}
+    <div className="flex shrink-0 items-center gap-2">
+      {/* Role badge / Admin */}
+      {!profileLoading && role === "admin" ? (
+        <button
+          type="button"
+          onClick={goAdmin}
+          className="hidden sm:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+          title="Open admin dashboard"
+        >
+          Admin
+        </button>
+      ) : (
+        <div className="hidden sm:inline-flex rounded-md border border-white/20 bg-white/10 px-2 py-1 text-[11px] text-white/90">
+          {profileLoading ? "…" : roleLabel}
+        </div>
+      )}
+
+      {/* Return to Dashboard (desktop) */}
+<Link
+  href="/dashboard"
+  className="hidden md:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+  title="Return to Dashboard"
+>
+  Dashboard
+</Link>
+
+
+
+
+
+      <button
+        type="button"
+        onClick={signOut}
+        className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+      >
+        Sign out
+      </button>
+    </div>
+  </div>
+</header>
+
 
       {/* Body */}
       <div className="flex-1 min-h-0">
