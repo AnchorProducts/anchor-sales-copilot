@@ -911,51 +911,37 @@ function returnToDesktop() {
             </aside>
 
             {/* Mobile sidebar drawer */}
-            {sidebarOpen && (
-              <div className="md:hidden fixed inset-0 z-40">
-                <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
-                <aside className={`absolute left-3 right-3 top-16 bottom-3 ${PANEL} flex flex-col min-h-0`}>
-                  <div className={PANEL_HEADER}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold">Chats</div>
-                      <button
-                        type="button"
-                        onClick={() => setSidebarOpen(false)}
-                        className="rounded-md border border-black/10 bg-white px-3 py-1 text-[12px] text-black/80 hover:bg-black/[0.03] transition"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
+{sidebarOpen && (
+  <div className="md:hidden fixed inset-0 z-40">
+    <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
 
-                  <div className={`${PANEL_BODY} ${SOFT_SCROLL} p-2`}>
-                    {conversations.map((c) => {
-                      const active = c.id === conversationId;
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => switchConversation(c.id)}
-                          className={[
-                            "w-full rounded-lg border px-3 py-2 text-left transition mb-1",
-                            active
-                              ? "border-[#047835]/35 bg-[#9CE2BB]"
-                              : "border-black/10 bg-white hover:bg-black/[0.03]",
-                          ].join(" ")}
-                        >
-                          <div className="truncate text-[12px] font-semibold text-black">
-                            {titleOrNew(c.title)}
-                          </div>
-                          <div className="text-[11px] text-[#76777B]">
-                            {formatWhen(c.updated_at || c.created_at)}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </aside>
-              </div>
-            )}
+    <aside className={`absolute left-3 right-3 top-16 bottom-3 ${PANEL} flex flex-col min-h-0`}>
+      <ChatSidebar
+        conversations={conversations.map((c) => ({
+          id: c.id,
+          title: c.title,
+          updated_at: c.updated_at || c.created_at || null,
+        }))}
+        activeId={conversationId}
+        loading={convoLoading}
+        onNewChat={() => {
+          newChat();
+          setSidebarOpen(false);
+        }}
+        onClose={() => setSidebarOpen(false)} // ✅ shows "Close" button in header
+        onSelect={(id) => {
+          switchConversation(id);
+          setSidebarOpen(false);
+        }}
+        onRename={renameConversation}
+        onDelete={deleteConversation}
+      />
+    </aside>
+  </div>
+)}
+
+
+
 
             {/* Chat panel */}
             <section

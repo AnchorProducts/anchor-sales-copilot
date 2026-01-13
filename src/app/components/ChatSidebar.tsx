@@ -27,6 +27,7 @@ export default function ChatSidebar({
   onSelect,
   onRename,
   onDelete,
+  onClose, // ✅ NEW
 }: {
   conversations: ConversationRow[];
   activeId: string | null;
@@ -35,6 +36,7 @@ export default function ChatSidebar({
   onSelect: (id: string) => void;
   onRename?: (id: string, title: string) => void | Promise<void>;
   onDelete?: (id: string) => void | Promise<void>;
+  onClose?: () => void; // ✅ NEW (optional)
 }) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,8 +77,8 @@ export default function ChatSidebar({
     await onDelete?.(id);
   }
 
-  // Anchor dashboard palette
-  const PANEL_HEADER = "border-b border-black/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0";
+  const PANEL_HEADER =
+    "border-b border-black/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0";
   const MUTED = "text-[#76777B]";
 
   return (
@@ -85,14 +87,28 @@ export default function ChatSidebar({
       <div className={PANEL_HEADER}>
         <div className="text-sm font-semibold text-black">Chats</div>
 
-        <button
-          type="button"
-          onClick={onNewChat}
-          className="rounded-md border border-black/10 bg-white px-3 py-1 text-[12px] font-semibold text-[#047835] hover:bg-black/[0.03] transition"
-          title="Start a new chat"
-        >
-          New chat
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="h-8 rounded-md border border-black/10 bg-white px-3 text-[12px] font-semibold text-[#047835] hover:bg-black/[0.03] transition"
+            title="Start a new chat"
+          >
+            New chat
+          </button>
+
+          {/* ✅ Only shows on mobile drawer when you pass onClose */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 rounded-md border border-black/10 bg-white px-3 text-[12px] text-black/80 hover:bg-black/[0.03] transition"
+              title="Close"
+            >
+              Close
+            </button>
+          )}
+        </div>
       </div>
 
       {/* List */}
