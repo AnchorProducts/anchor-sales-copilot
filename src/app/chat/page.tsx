@@ -603,12 +603,6 @@ function returnToDesktop() {
   window.location.reload();
 }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.replace("/");
-    router.refresh();
-  }
-
   async function newChat() {
     if (!userId) return;
 
@@ -876,17 +870,15 @@ function returnToDesktop() {
   Dashboard
 </Link>
 
+{/* Mobile: Return to Dashboard (replaces Sign out) */}
+<Link
+  href="/dashboard"
+  className="sm:hidden h-9 min-w-[96px] inline-flex items-center justify-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+  title="Return to Dashboard"
+>
+  Dashboard
+</Link>
 
-
-
-
-      <button
-        type="button"
-        onClick={signOut}
-        className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-      >
-        Sign out
-      </button>
     </div>
   </div>
 </header>

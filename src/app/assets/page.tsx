@@ -33,13 +33,7 @@ export default function AssetsPage() {
               Dashboard
             </Link>
 
-            <Link
-              href="/chat"
-              className="h-9 inline-flex items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-              title="Go to Copilot"
-            >
-              Copilot
-            </Link>
+            
           </div>
         </div>
       </header>
