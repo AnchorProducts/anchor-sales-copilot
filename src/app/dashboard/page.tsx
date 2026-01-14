@@ -70,29 +70,6 @@ const [statusWhen, setStatusWhen] = useState<string | null>(null);
 
 const [loadingRecentDocs, setLoadingRecentDocs] = useState(true);
 
-async function openDoc(path: string) {
-  try {
-    const res = await fetch(`/api/doc-open?path=${encodeURIComponent(path)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    if (res.status === 401) {
-      router.replace("/");
-      router.refresh();
-      return;
-    }
-
-    const data = await readJsonSafely<{ url?: string; error?: string }>(res);
-    const signed = data?.url;
-    if (!res.ok || !signed) return;
-
-    window.open(signed, "_blank", "noopener,noreferrer");
-  } catch {
-    // ignore
-  }
-}
-
 useEffect(() => {
   let alive = true;
 
@@ -352,9 +329,7 @@ useEffect(() => {
 
       {/* Recent docs opened */}
 <div>
-  <div className="text-[11px] font-semibold text-black/70">
-    Recent docs opened
-  </div>
+  <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
 
   {loadingRecentDocs ? (
     <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
@@ -363,25 +338,26 @@ useEffect(() => {
   ) : (
     <div className="mt-2 space-y-2">
       {recentDocs.slice(0, 5).map((r) => (
-        <button
+        <a
           key={`${r.doc_path}-${r.created_at}`}
-          type="button"
-          onClick={() => openDoc(r.doc_path)}   // ✅ re-sign on click
-          className="w-full text-left rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
+          href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
           title="Open document"
         >
           <div className="truncate text-[12px] font-semibold text-black/85">
             {r.doc_title || r.doc_path}
           </div>
-
           <div className="text-[11px] text-[#76777B] truncate">
             {(r.doc_type || "doc")} • {r.doc_path}
           </div>
-        </button>
+        </a>
       ))}
     </div>
   )}
 </div>
+
 
 
 

@@ -6,12 +6,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BUCKET = "knowledge";
-const EXPIRES_IN_SECONDS = 60 * 10; // 10 minutes
-
 export async function GET(req: Request) {
   try {
-    // Auth check (must be signed in)
     const base = NextResponse.next();
     const supabase = supabaseRoute(req, base);
 
@@ -20,19 +16,23 @@ export async function GET(req: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const url = new URL(req.url);
-    const path = String(url.searchParams.get("path") || "").trim();
+    const path = (url.searchParams.get("path") || "").trim();
     if (!path) return NextResponse.json({ error: "Missing path" }, { status: 400 });
 
-    // Create a fresh signed URL using service role
+    const BUCKET = "knowledge";
+
+    // short expiry so links don’t die later
     const { data, error } = await supabaseAdmin.storage
       .from(BUCKET)
-      .createSignedUrl(path, EXPIRES_IN_SECONDS);
+      .createSignedUrl(path, 60 * 10); // 10 minutes
 
-    if (error || !data?.signedUrl) {
-      return NextResponse.json({ error: error?.message || "Could not sign URL" }, { status: 500 });
+    const signed = data?.signedUrl;
+    if (error || !signed) {
+      return NextResponse.json({ error: error?.message || "Sign failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ url: data.signedUrl }, { status: 200 });
+    // ✅ This is the key: redirect so mobile opens the actual file
+    return NextResponse.redirect(signed, { status: 302 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }

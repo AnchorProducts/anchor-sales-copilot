@@ -1162,33 +1162,7 @@ function returnToDesktop() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* Recent docs */}
-                    {recentDocs.length > 0 && (
-                      <div className="rounded-xl border border-black/10 bg-white p-3">
-                        <div className="text-[11px] font-semibold text-black/70">
-                          Recent docs you opened
-                        </div>
-                        <div className="mt-2 space-y-1">
-                          {recentDocs.map((r) => (
-                            <button
-                              key={`${r.doc_path}-${r.created_at}`}
-                              type="button"
-                              onClick={() =>
-                                r.doc_url && window.open(r.doc_url, "_blank", "noopener,noreferrer")
-                              }
-                              className="w-full text-left rounded-lg border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-                            >
-                              <div className="truncate text-[12px] font-semibold text-black/85">
-                                {r.doc_title || r.doc_path}
-                              </div>
-                              <div className="text-[11px] text-[#76777B] truncate">
-                                {r.doc_type || "doc"} • {r.doc_path}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    
 
                     {/* Recommended docs */}
                     <div className="space-y-2">
@@ -1204,7 +1178,7 @@ function returnToDesktop() {
                               JSON.stringify({ conversationId, doc: d })
                             );
 
-                            window.open(d.url, "_blank", "noopener,noreferrer");
+                            window.open(`/api/doc-open?path=${encodeURIComponent(d.path)}`, "_blank", "noopener,noreferrer");
                           }}
                           className={[
                             "w-full text-left rounded-xl border px-3 py-2 transition",
