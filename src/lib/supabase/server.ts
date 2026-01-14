@@ -1,44 +1,42 @@
 // src/lib/supabase/server.ts
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
-/**
- * Use this in Route Handlers (app/api/*).
- * Reads cookies from the request and lets Supabase set cookies on the response.
- */
-export function supabaseRoute(req: Request, res: NextResponse) {
-  const cookieHeader = req.headers.get("cookie") || "";
+export async function supabaseRoute() {
+  // Next 16: cookies() is async
+  const cookieStore = await cookies();
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          if (!cookieHeader) return [];
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-          return cookieHeader
-            .split(";")
-            .map((c) => c.trim())
-            .filter(Boolean)
-            .map((c) => {
-              const idx = c.indexOf("=");
-              return idx === -1
-                ? { name: c, value: "" }
-                : {
-                    name: c.slice(0, idx),
-                    value: decodeURIComponent(c.slice(idx + 1)),
-                  };
-            });
-        },
+  if (!url || !anonKey) {
+    throw new Error(
+      "Missing env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
+  }
 
-        setAll(cookiesToSet) {
-          // ✅ critical: allow Supabase to persist refreshed session cookies
-          cookiesToSet.forEach(({ name, value, options }) => {
-            res.cookies.set(name, value, options);
-          });
-        },
+  return createServerClient(url, anonKey, {
+    cookies: {
+      // ✅ REQUIRED by newer @supabase/ssr
+      getAll() {
+        // next/headers cookies().getAll() returns objects w/ name/value already
+        return cookieStore.getAll().map((c) => ({ name: c.name, value: c.value }));
       },
-    }
-  );
+
+      // ✅ REQUIRED by newer @supabase/ssr
+      setAll(cookiesToSet) {
+        try {
+          for (const c of cookiesToSet) {
+            cookieStore.set({
+              name: c.name,
+              value: c.value,
+              ...(c.options || {}),
+            });
+          }
+        } catch {
+          // Some render paths disallow setting cookies; reads still work.
+        }
+      },
+    },
+  });
 }

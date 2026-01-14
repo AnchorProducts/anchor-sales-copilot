@@ -141,9 +141,9 @@ function extractUserText(body: any, messages: Array<{ role: string; content: str
    Minimal persistence helpers (do not break chat)
 --------------------------------------------- */
 
-async function getAuthedUserAndMaybeConvoId(req: Request, base: NextResponse, body: any) {
+async function getAuthedUserAndMaybeConvoId(req: Request, body: any) {
   try {
-    const supabase = supabaseRoute(req, base);
+    const supabase = await supabaseRoute(); // ✅ 0 args
     const { data: authData } = await supabase.auth.getUser();
     const user = authData.user;
     if (!user) return { supabase: null as any, user: null as any, conversationId: "" };
@@ -207,7 +207,7 @@ async function persistMessage(
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({} as any));
-    const mode = String(body?.mode || "").trim(); // "" | "docs"
+    const mode = String(body?.mode || "").trim();
     const isDocsMode = mode === "docs";
 
     const incomingMessages = Array.isArray(body?.messages)
@@ -225,8 +225,8 @@ export async function POST(req: Request) {
       return NextResponse.json(out, { status: 200 });
     }
 
-    const base = NextResponse.next();
-    const { supabase, user, conversationId } = await getAuthedUserAndMaybeConvoId(req, base, body);
+    // ✅ no NextResponse.next()
+    const { supabase, user, conversationId } = await getAuthedUserAndMaybeConvoId(req, body);
 
     // ✅ Persist ONLY for real chat sends, not See Docs
     if (!isDocsMode && user && conversationId) {

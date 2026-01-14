@@ -5,11 +5,6 @@ import { supabaseRoute } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function withForwardedHeaders(base: NextResponse, out: NextResponse) {
-  base.headers.forEach((value, key) => out.headers.set(key, value));
-  return out;
-}
-
 /**
  * Back-compat:
  * Some older assistant rows may have stored docs payload as JSON in `content`
@@ -31,7 +26,6 @@ function normalizeRow(row: any) {
     try {
       const parsed = JSON.parse(content);
 
-      // Only accept the shapes we expect
       const hasDocs =
         parsed &&
         typeof parsed === "object" &&
@@ -45,13 +39,8 @@ function normalizeRow(row: any) {
           foldersUsed: Array.isArray(parsed.foldersUsed) ? parsed.foldersUsed : [],
         };
 
-        // Keep `content` readable for your UI:
-        // - docs_only -> ""
-        // - assistant_with_docs -> parsed.answer (or "")
         const nextContent =
-          parsed.type === "assistant_with_docs"
-            ? (parsed.answer ?? "").toString()
-            : "";
+          parsed.type === "assistant_with_docs" ? (parsed.answer ?? "").toString() : "";
 
         return { ...row, content: nextContent, meta: nextMeta };
       }
@@ -60,34 +49,27 @@ function normalizeRow(row: any) {
     }
   }
 
-  // Default: ensure meta is at least an object (not null) for easier UI handling
   return { ...row, meta: {} };
 }
 
 export async function GET(req: Request) {
-  const base = NextResponse.next();
-
   try {
     const { searchParams } = new URL(req.url);
     const conversationId = (searchParams.get("conversationId") || "").trim();
 
     if (!conversationId) {
-      const out = NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
-      return withForwardedHeaders(base, out);
+      return NextResponse.json({ error: "Missing conversationId" }, { status: 400 });
     }
 
-    const supabase = supabaseRoute(req, base);
+    const supabase = await supabaseRoute(); // ✅ 0 args + await
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     const user = authData?.user;
 
     if (authErr || !user) {
-      const out = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      return withForwardedHeaders(base, out);
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ✅ include meta so UI can rehydrate docs/buttons
-    // ✅ also include id for stable client keys
     const { data: rows, error } = await supabase
       .from("messages")
       .select("id,role,content,meta,created_at")
@@ -100,17 +82,11 @@ export async function GET(req: Request) {
 
     const normalized = (rows || []).map(normalizeRow);
 
-    const out = NextResponse.json(
-      {
-        conversationId,
-        messages: normalized,
-      },
+    return NextResponse.json(
+      { conversationId, messages: normalized },
       { status: 200 }
     );
-
-    return withForwardedHeaders(base, out);
   } catch (err: any) {
-    const out = NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
-    return withForwardedHeaders(base, out);
+    return NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
   }
 }

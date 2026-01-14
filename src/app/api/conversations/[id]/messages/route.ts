@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type MessageRow = {
   role: "user" | "assistant";
@@ -11,30 +12,31 @@ type MessageRow = {
 };
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> } // ✅ Next 15 fix
 ) {
-  const res = NextResponse.next();
-
   try {
     const { id } = await params; // ✅ await params
 
-    const supabase = supabaseRoute(req, res);
+    const supabase = await supabaseRoute(); // ✅ 0 args + await
 
     // Auth gate
-    const { data: authData } = await supabase.auth.getUser();
-    const user = authData.user;
-    if (!user) {
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (authErr || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Ensure conversation belongs to user
-    const { data: convo } = await supabase
+    const { data: convo, error: convoErr } = await supabase
       .from("conversations")
       .select("id")
       .eq("id", id)
       .eq("user_id", user.id)
       .maybeSingle();
+
+    if (convoErr) throw convoErr;
 
     if (!convo?.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -53,13 +55,10 @@ export async function GET(
 
     return NextResponse.json(
       { conversationId: id, messages: (data || []) as MessageRow[] },
-      { headers: res.headers } // preserve any supabase header/cookie changes
+      { status: 200 }
     );
   } catch (err: any) {
     console.error("CONVO_MESSAGES_GET_ERROR:", err);
-    return NextResponse.json(
-      { error: err?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
   }
 }

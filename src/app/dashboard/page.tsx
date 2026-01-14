@@ -49,99 +49,59 @@ export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
 
-  const [loadingRecent, setLoadingRecent] = useState(true);
-  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
+  const [loadingChats, setLoadingChats] = useState(true);
   const [recentChats, setRecentChats] = useState<ConversationRow[]>([]);
+
+  const [loadingRecentDocs, setLoadingRecentDocs] = useState(true);
+  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
+
   const [status, setStatus] = useState<"checking" | "online" | "offline">("checking");
-const [statusWhen, setStatusWhen] = useState<string | null>(null);
+  const [statusWhen, setStatusWhen] = useState<string | null>(null);
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/");
     router.refresh();
   }
-  type RecentDoc = {
-  doc_title: string | null;
-  doc_type: string | null;
-  doc_path: string;
-  doc_url: string | null;
-  created_at: string;
-};
 
-const [loadingRecentDocs, setLoadingRecentDocs] = useState(true);
-
-useEffect(() => {
-  let alive = true;
-
-  (async () => {
-    try {
-      setLoadingRecentDocs(true);
-
-      const res = await fetch("/api/recent-docs", { method: "GET", cache: "no-store" });
-      const text = await res.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!alive) return;
-      if (!res.ok) {
-        setRecentDocs([]);
-        return;
-      }
-
-      const docs = Array.isArray(data?.docs) ? data.docs : [];
-      setRecentDocs(docs.slice(0, 5)); // ✅ last 5 only
-    } catch {
-      if (!alive) return;
-      setRecentDocs([]);
-    } finally {
-      if (!alive) return;
-      setLoadingRecentDocs(false);
-    }
-  })();
-
-  return () => {
-    alive = false;
-  };
-}, []);
-
-
+  // System status ping
   useEffect(() => {
-  let alive = true;
+    let alive = true;
 
-  async function check() {
-    try {
-      const res = await fetch("/api/health", { cache: "no-store" });
-      if (!alive) return;
+    async function check() {
+      try {
+        const res = await fetch("/api/health", { cache: "no-store" });
+        if (!alive) return;
 
-      setStatus(res.ok ? "online" : "offline");
-      setStatusWhen(
-        new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      );
-    } catch {
-      if (!alive) return;
-      setStatus("offline");
-      setStatusWhen(
-        new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      );
+        setStatus(res.ok ? "online" : "offline");
+        setStatusWhen(
+          new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        );
+      } catch {
+        if (!alive) return;
+        setStatus("offline");
+        setStatusWhen(
+          new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        );
+      }
     }
-  }
 
-  check(); // run immediately
-  const t = window.setInterval(check, 30000); // every 30 seconds
+    check();
+    const t = window.setInterval(check, 30000);
 
-  return () => {
-    alive = false;
-    window.clearInterval(t);
-  };
-}, []);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
 
-  // Recent activity: chats + docs
+  // Recent chats (Supabase client-side)
   useEffect(() => {
     let alive = true;
 
     (async () => {
-      setLoadingRecent(true);
+      setLoadingChats(true);
       try {
-        // ensure authed
         const { data: userData } = await supabase.auth.getUser();
         if (!alive) return;
 
@@ -151,8 +111,7 @@ useEffect(() => {
           return;
         }
 
-        // 1) recent chats (client-side Supabase query)
-        const { data: chats } = await supabase
+        const { data: chats, error } = await supabase
           .from("conversations")
           .select("id,title,updated_at,created_at")
           .eq("user_id", user.id)
@@ -161,22 +120,15 @@ useEffect(() => {
           .limit(5);
 
         if (!alive) return;
-        setRecentChats((chats || []) as ConversationRow[]);
 
-        // 2) recent docs (reuse your existing endpoint from chat)
-        try {
-          const res = await fetch("/api/recent-docs", { method: "GET", cache: "no-store" });
-          const data = await readJsonSafely<any>(res);
-          if (!alive) return;
-          if (res.ok) setRecentDocs(Array.isArray(data?.docs) ? data.docs : []);
-        } catch {
-          // ok if endpoint isn't available yet
-          if (!alive) return;
-          setRecentDocs([]);
+        if (error) {
+          setRecentChats([]);
+        } else {
+          setRecentChats((chats || []) as ConversationRow[]);
         }
       } finally {
         if (!alive) return;
-        setLoadingRecent(false);
+        setLoadingChats(false);
       }
     })();
 
@@ -184,6 +136,40 @@ useEffect(() => {
       alive = false;
     };
   }, [router, supabase]);
+
+  // Recent docs opened (API route)
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setLoadingRecentDocs(true);
+
+        const res = await fetch("/api/recent-docs", { method: "GET", cache: "no-store" });
+        const data = await readJsonSafely<any>(res);
+
+        if (!alive) return;
+
+        if (!res.ok) {
+          setRecentDocs([]);
+          return;
+        }
+
+        const docs = Array.isArray(data?.docs) ? (data.docs as RecentDoc[]) : [];
+        setRecentDocs(docs.slice(0, 5));
+      } catch {
+        if (!alive) return;
+        setRecentDocs([]);
+      } finally {
+        if (!alive) return;
+        setLoadingRecentDocs(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <main className="min-h-[100svh] min-h-dvh bg-[#FFFFFF] text-[#000000]">
@@ -288,136 +274,129 @@ useEffect(() => {
         </div>
 
         {/* Secondary section */}
-<div className="mt-6 grid gap-5 md:grid-cols-[1fr_360px]">
-  {/* Left: Recent activity (big card) */}
-  <div className="rounded-3xl border border-black/10 bg-white p-5">
-    <div className="flex items-center justify-between">
-      <div className="text-sm font-semibold">Recent activity</div>
-      
-    </div>
+        <div className="mt-6 grid gap-5 md:grid-cols-[1fr_360px]">
+          {/* Left: Recent activity */}
+          <div className="rounded-3xl border border-black/10 bg-white p-5">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Recent activity</div>
+            </div>
 
-    <div className="mt-3 space-y-4">
-      {/* Recent chats */}
-      <div>
-        <div className="text-[11px] font-semibold text-black/70">Recent chats</div>
+            <div className="mt-3 space-y-4">
+              {/* Recent chats */}
+              <div>
+                <div className="text-[11px] font-semibold text-black/70">Recent chats</div>
 
-        {loadingRecent ? (
-          <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-        ) : recentChats.length === 0 ? (
-          <div className="mt-2 text-sm text-[#76777B]">No chats yet.</div>
-        ) : (
-          <div className="mt-2 space-y-2">
-            {recentChats.slice(0, 3).map((c) => (
-  <Link
-    key={c.id}
-    href={`/chat?cid=${encodeURIComponent(c.id)}`}
-    className="block rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-    title="Open chat"
-  >
-    <div className="truncate text-[12px] font-semibold text-black/85">
-      {titleOrNew(c.title)}
-    </div>
-    <div className="text-[11px] text-[#76777B]">
-      {formatWhen(c.updated_at || c.created_at)}
-    </div>
-  </Link>
-))}
+                {loadingChats ? (
+                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
+                ) : recentChats.length === 0 ? (
+                  <div className="mt-2 text-sm text-[#76777B]">No chats yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {recentChats.slice(0, 3).map((c) => (
+                      <Link
+                        key={c.id}
+                        href={`/chat?cid=${encodeURIComponent(c.id)}`}
+                        className="block rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
+                        title="Open chat"
+                      >
+                        <div className="truncate text-[12px] font-semibold text-black/85">
+                          {titleOrNew(c.title)}
+                        </div>
+                        <div className="text-[11px] text-[#76777B]">
+                          {formatWhen(c.updated_at || c.created_at)}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
 
+              {/* Recent docs opened */}
+              <div>
+                <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
+
+                {loadingRecentDocs ? (
+                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
+                ) : recentDocs.length === 0 ? (
+                  <div className="mt-2 text-sm text-[#76777B]">No docs opened yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {recentDocs.slice(0, 5).map((r) => (
+                      <a
+                        key={`${r.doc_path}-${r.created_at}`}
+                        href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
+                        title="Open document"
+                      >
+                        <div className="truncate text-[12px] font-semibold text-black/85">
+                          {r.doc_title || r.doc_path}
+                        </div>
+                        <div className="text-[11px] text-[#76777B] truncate">
+                          {(r.doc_type || "doc")} • {r.doc_path}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Assets viewed (placeholder) */}
+              <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-3">
+                <div className="text-[11px] font-semibold text-black/70">Assets viewed</div>
+                <div className="mt-1 text-sm text-[#76777B]">
+                  Coming next (once Asset Management events are wired).
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Recent docs opened */}
-<div>
-  <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
+          {/* Right: stack small cards */}
+          <div className="grid gap-5 self-start">
+            <div className="rounded-3xl border border-black/10 bg-white p-5">
+              <div className="text-sm font-semibold">Quick links</div>
+              <div className="mt-3 flex flex-col gap-2 text-sm">
+                <Link className="text-[#047835] hover:underline" href="/chat">
+                  Go to Copilot
+                </Link>
+                <Link className="text-[#047835] hover:underline" href="/assets">
+                  Open Asset Library
+                </Link>
+              </div>
+            </div>
 
-  {loadingRecentDocs ? (
-    <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-  ) : recentDocs.length === 0 ? (
-    <div className="mt-2 text-sm text-[#76777B]">No docs opened yet.</div>
-  ) : (
-    <div className="mt-2 space-y-2">
-      {recentDocs.slice(0, 5).map((r) => (
-        <a
-          key={`${r.doc_path}-${r.created_at}`}
-          href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block w-full rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-          title="Open document"
-        >
-          <div className="truncate text-[12px] font-semibold text-black/85">
-            {r.doc_title || r.doc_path}
+            <div className="rounded-3xl border border-black/10 bg-white p-5">
+              <div className="text-sm font-semibold">System status</div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <span
+                  className={[
+                    "h-2.5 w-2.5 rounded-full",
+                    status === "online"
+                      ? "bg-[#047835]"
+                      : status === "offline"
+                      ? "bg-red-500"
+                      : "bg-amber-400",
+                  ].join(" ")}
+                />
+                <span className="text-sm text-[#76777B]">
+                  {status === "checking"
+                    ? "Checking…"
+                    : status === "online"
+                    ? "Online"
+                    : "Offline"}
+                </span>
+              </div>
+
+              {statusWhen && (
+                <div className="mt-2 text-[11px] text-[#76777B]">
+                  Last checked: {statusWhen}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="text-[11px] text-[#76777B] truncate">
-            {(r.doc_type || "doc")} • {r.doc_path}
-          </div>
-        </a>
-      ))}
-    </div>
-  )}
-</div>
-
-
-
-
-      {/* Assets viewed (placeholder) */}
-      <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-3">
-        <div className="text-[11px] font-semibold text-black/70">Assets viewed</div>
-        <div className="mt-1 text-sm text-[#76777B]">
-          Coming next (once Asset Management events are wired).
         </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Right: stack small cards so they don’t stretch */}
-  <div className="grid gap-5 self-start">
-    <div className="rounded-3xl border border-black/10 bg-white p-5">
-      <div className="text-sm font-semibold">Quick links</div>
-      <div className="mt-3 flex flex-col gap-2 text-sm">
-        <Link className="text-[#047835] hover:underline" href="/chat">
-          Go to Copilot
-        </Link>
-        <Link className="text-[#047835] hover:underline" href="/assets">
-          Open Asset Library
-        </Link>
-      </div>
-    </div>
-
-    <div className="rounded-3xl border border-black/10 bg-white p-5">
-  <div className="text-sm font-semibold">System status</div>
-
-  <div className="mt-2 flex items-center gap-2">
-    <span
-      className={[
-        "h-2.5 w-2.5 rounded-full",
-        status === "online"
-          ? "bg-[#047835]"
-          : status === "offline"
-          ? "bg-red-500"
-          : "bg-amber-400",
-      ].join(" ")}
-    />
-    <span className="text-sm text-[#76777B]">
-      {status === "checking"
-        ? "Checking…"
-        : status === "online"
-        ? "Online"
-        : "Offline"}
-    </span>
-  </div>
-
-  {statusWhen && (
-    <div className="mt-2 text-[11px] text-[#76777B]">
-      Last checked: {statusWhen}
-    </div>
-  )}
-</div>
-
-  </div>
-</div>
-
 
         <div className="mt-8 text-[12px] text-[#76777B]">
           Tip: Add a “Dashboard” button to the Chat top bar so reps can bounce between tools.

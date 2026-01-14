@@ -13,20 +13,13 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function withForwardedHeaders(base: NextResponse, out: NextResponse) {
-  base.headers.forEach((value, key) => out.headers.set(key, value));
-  return out;
-}
-
 export async function POST(req: Request) {
-  const base = NextResponse.next(); // ✅ NEW
-
   try {
-    const supabase = supabaseRoute(req, base); // ✅ FIX
+    const supabase = await supabaseRoute(); // ✅ 0 args + await
 
     const { data: auth, error: authErr } = await supabase.auth.getUser();
     if (authErr || !auth?.user) {
-      return withForwardedHeaders(base, jsonError("Unauthorized", 401));
+      return jsonError("Unauthorized", 401);
     }
 
     const user = auth.user;
@@ -35,7 +28,7 @@ export async function POST(req: Request) {
     try {
       body = await req.json();
     } catch {
-      return withForwardedHeaders(base, jsonError("Invalid JSON"));
+      return jsonError("Invalid JSON");
     }
 
     const conversation_id = body.conversationId ?? body.conversation_id ?? null;
@@ -45,9 +38,10 @@ export async function POST(req: Request) {
     const document_id = body.documentId ?? body.document_id ?? null;
 
     const ratingRaw = Number(body.rating ?? body.thumb ?? body.score);
-    if (!conversation_id) return withForwardedHeaders(base, jsonError("conversationId is required"));
-    if (!session_id) return withForwardedHeaders(base, jsonError("sessionId is required"));
-    if (!Number.isFinite(ratingRaw)) return withForwardedHeaders(base, jsonError("rating is required"));
+
+    if (!conversation_id) return jsonError("conversationId is required");
+    if (!session_id) return jsonError("sessionId is required");
+    if (!Number.isFinite(ratingRaw)) return jsonError("rating is required");
 
     const rating = clamp(Math.round(ratingRaw), 1, 5);
     const note = typeof body.note === "string" ? body.note.trim() : null;
@@ -64,7 +58,8 @@ export async function POST(req: Request) {
     };
 
     if (body.assistantMessageId || body.assistant_message_id) {
-      insertRow.assistant_message_id = body.assistantMessageId ?? body.assistant_message_id;
+      insertRow.assistant_message_id =
+        body.assistantMessageId ?? body.assistant_message_id;
     }
 
     const { data: inserted, error } = await supabase
@@ -73,13 +68,10 @@ export async function POST(req: Request) {
       .select("id")
       .maybeSingle();
 
-    if (error) {
-      return withForwardedHeaders(base, jsonError(error.message, 500));
-    }
+    if (error) return jsonError(error.message, 500);
 
-    const out = NextResponse.json({ ok: true, id: inserted?.id ?? null });
-    return withForwardedHeaders(base, out);
+    return NextResponse.json({ ok: true, id: inserted?.id ?? null }, { status: 200 });
   } catch (e: any) {
-    return withForwardedHeaders(base, jsonError(e?.message || "Server error", 500));
+    return jsonError(e?.message || "Server error", 500);
   }
 }

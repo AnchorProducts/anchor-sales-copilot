@@ -15,12 +15,9 @@ function safeJsonParse(input: string) {
 }
 
 export async function POST(req: Request) {
-  // ✅ Create a real response object for Supabase cookie refresh handling
-  const res = NextResponse.json({ ok: true });
-
   try {
     // 1) Read user session (cookies come from the browser)
-    const supabase = supabaseRoute(req, res);
+    const supabase = await supabaseRoute(); // ✅ 0 args + await
 
     const { data: auth, error: authErr } = await supabase.auth.getUser();
     const user = auth?.user;
@@ -66,12 +63,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
 
-    // ✅ Return the response object we created (so any auth cookie refresh can be applied)
-    return res;
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || String(e) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }
