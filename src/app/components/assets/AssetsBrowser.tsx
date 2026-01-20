@@ -40,11 +40,8 @@ function productHref(p: ProductRow) {
     if (p.internal_kind === "contacts_list") {
       return `/internal-assets/contacts/${encodeURIComponent(p.id)}`;
     }
-    // default internal behavior
     return `/internal-assets/docs/${encodeURIComponent(p.id)}`;
   }
-
-  // normal products
   return `/assets/${encodeURIComponent(p.id)}`;
 }
 
@@ -58,6 +55,109 @@ function btnClass(on: boolean) {
       ? "border-[#047835] bg-[#047835] text-white"
       : "border-black/10 bg-white text-black hover:bg-black/[0.03]",
   ].join(" ");
+}
+
+function slugify(input: string) {
+  return String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function ensureTrailingSlash(prefix: string) {
+  const p = String(prefix || "").trim();
+  if (!p) return "";
+  return p.endsWith("/") ? p : `${p}/`;
+}
+
+function storagePrefixForProduct(p: ProductRow) {
+  const slug = slugify(p.name);
+
+  // folders in bucket: solutions/<slug>/..., anchor/<slug>/..., internal/<slug>/...
+  if (p.section === "solution") return ensureTrailingSlash(`solutions/${slug}`);
+  if (p.section === "anchor") return ensureTrailingSlash(`anchor/${slug}`);
+  return ensureTrailingSlash(`internal/${slug}`);
+}
+
+function specPrefixForSection(section: ProductSection) {
+  // folders in bucket: spec/solutions/, spec/anchor/, spec/internal/
+  if (section === "solution") return ensureTrailingSlash("spec/solutions");
+  if (section === "anchor") return ensureTrailingSlash("spec/anchor");
+  return ensureTrailingSlash("spec/internal");
+}
+
+/**
+ * Parse /api/knowledge-counts response safely (supports a few shapes).
+ */
+function parseCounts(payload: any): { public: number; internal: number } {
+  const p = payload ?? {};
+  const pub =
+    Number(
+      p.public ??
+        p.publicCount ??
+        p.public_count ??
+        p.count_public ??
+        p.counts?.public ??
+        p.counts?.publicCount ??
+        0
+    ) || 0;
+
+  const internal =
+    Number(
+      p.internal ??
+        p.internalCount ??
+        p.internal_count ??
+        p.count_internal ??
+        p.counts?.internal ??
+        p.counts?.internalCount ??
+        0
+    ) || 0;
+
+  const total = Number(p.total ?? p.count ?? p.totalCount ?? 0) || 0;
+
+  if (pub === 0 && internal === 0 && total > 0) {
+    return { public: total, internal: 0 };
+  }
+
+  return { public: pub, internal };
+}
+
+async function fetchKnowledgeCounts(prefix: string) {
+  const pref = ensureTrailingSlash(prefix);
+
+  const res = await fetch(`/api/knowledge-counts?prefix=${encodeURIComponent(pref)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { "cache-control": "no-store" },
+  });
+
+  if (!res.ok) {
+    return { public: 0, internal: 0 };
+  }
+
+  const json = await res.json().catch(() => ({}));
+  return parseCounts(json);
+}
+
+/**
+ * Small concurrency limiter so we don't spam the API with 100+ calls at once.
+ */
+async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let i = 0;
+
+  const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (true) {
+      const idx = i++;
+      if (idx >= items.length) break;
+      results[idx] = await fn(items[idx]);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 export default function AssetsBrowser() {
@@ -150,17 +250,43 @@ export default function AssetsBrowser() {
         const list = (prodRows || []) as ProductRow[];
         setProducts(list);
 
-        // COUNTS
-        const { data: assetRows } = await supabase.from("assets").select("product_id,visibility");
+        /**
+         * ✅ COUNTS FROM STORAGE (same idea as ProductTackleBox)
+         * - folder counts per product
+         * - PLUS spec counts per section (spec everywhere)
+         */
+        const sectionsInList = Array.from(new Set(list.map((p) => p.section)));
+
+        // spec counts once per section
+        const specBySection: Record<string, { public: number; internal: number }> = {};
+        await Promise.all(
+          sectionsInList.map(async (sec) => {
+            specBySection[sec] = await fetchKnowledgeCounts(specPrefixForSection(sec));
+          })
+        );
+
+        // per-product folder counts (limit concurrency)
+        const perProduct = await mapWithLimit(
+          list,
+          6,
+          async (p): Promise<[string, { public: number; internal: number }]> => {
+            const folderCounts = await fetchKnowledgeCounts(storagePrefixForProduct(p));
+            const specCounts = specBySection[p.section] || { public: 0, internal: 0 };
+
+            return [
+              p.id,
+              {
+                public: folderCounts.public + specCounts.public,
+                internal: folderCounts.internal + specCounts.internal,
+              },
+            ];
+          }
+        );
+
         if (!alive) return;
 
         const map: Record<string, { public: number; internal: number }> = {};
-        for (const r of (assetRows || []) as { product_id: string; visibility: "public" | "internal" }[]) {
-          if (!r.product_id) continue;
-          if (!map[r.product_id]) map[r.product_id] = { public: 0, internal: 0 };
-          if (r.visibility === "internal") map[r.product_id].internal += 1;
-          else map[r.product_id].public += 1;
-        }
+        for (const [id, c] of perProduct) map[id] = c;
         setCounts(map);
 
         setLoading(false);
@@ -200,8 +326,6 @@ export default function AssetsBrowser() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          
-
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -242,7 +366,6 @@ export default function AssetsBrowser() {
 
         <div className="flex justify-end">
           <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-            {/* keep your original desktop copy; shorten only on mobile */}
             <span className="sm:hidden">Showing: Pub{isInternalUser ? " + Int" : ""}</span>
             <span className="hidden sm:inline">Showing: Public{isInternalUser ? " + Internal" : ""}</span>
           </span>
@@ -267,47 +390,31 @@ export default function AssetsBrowser() {
 
               return (
                 <Link
-  key={p.id}
-  href={productHref(p)}
-  title="Open tackle box"
-  className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 transition hover:bg-black/[0.03]"
->
-  {/* Mobile stacks; desktop stays side-by-side */}
-  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-    <div className="min-w-0">
-      <div className="text-sm font-semibold text-black truncate">{p.name}</div>
+                  key={p.id}
+                  href={productHref(p)}
+                  title="Open tackle box"
+                  className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 transition hover:bg-black/[0.03]"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-black truncate">{p.name}</div>
 
-      <div className="mt-1 text-[12px] text-[#76777B] truncate">
-        {p.sku ? `SKU: ${p.sku}` : "No SKU"}
-        {p.series ? ` • Series: ${p.series}` : ""}
-        {p.section ? ` • ${p.section}` : ""}
-      </div>
+                      <div className="mt-1 text-[12px] text-[#76777B] truncate">
+                        
+                        {p.series ? ` Series: ${p.series}` : ""}
+                        {p.section ? ` • ${p.section}` : ""}
+                      </div>
 
-      {/* Count pills (your mobile-safe version) */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 min-w-0">
-        <span className="inline-flex items-center rounded-full bg-black/5 py-1 text-[11px] font-semibold text-black/70 px-2 sm:px-3 max-w-full">
-          <span className="sm:hidden whitespace-nowrap">Public {c.publicCount}</span>
-          <span className="hidden sm:inline whitespace-nowrap">{c.publicCount} public</span>
-        </span>
+                      
+                    </div>
 
-        {isInternalUser && (
-          <span className="inline-flex items-center rounded-full bg-[#9CE2BB] py-1 text-[11px] font-semibold text-[#11500F] px-2 sm:px-3 max-w-full">
-            <span className="sm:hidden whitespace-nowrap">Int {c.internalCount}</span>
-            <span className="hidden sm:inline whitespace-nowrap">{c.internalCount} internal</span>
-          </span>
-        )}
-      </div>
-    </div>
-
-    {/* Mobile: full width button so it can’t force overflow */}
-    <div className="w-full sm:w-auto sm:shrink-0">
-      <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-        Open →
-      </div>
-    </div>
-  </div>
-</Link>
-
+                    <div className="w-full sm:w-auto sm:shrink-0">
+                      <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+                        Open →
+                      </div>
+                    </div>
+                  </div>
+                </Link>
               );
             })}
           </div>
