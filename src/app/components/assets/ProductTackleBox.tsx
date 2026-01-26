@@ -1,4 +1,3 @@
-// src/components/assets/ProductTackleBox.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -6,6 +5,10 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 
 const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
+
+/* ---------------------------------------------
+   Types
+--------------------------------------------- */
 
 type ProductRow = {
   id: string;
@@ -28,58 +31,44 @@ type AssetRow = {
   created_at: string;
 };
 
-type ProfileRow = {
-  id: string;
-  role: string;
-};
+type ProfileRow = { id: string; role: string };
 
-const TAB_DEFS: {
-  key: string;
-  label: string;
-  categoryKeys: string[];
-  visibility?: "public" | "internal";
-}[] = [
-  {
-    key: "spec",
-    label: "Spec Document",
-    categoryKeys: ["spec_document", "spec", "specs", "spec_sheet"],
-    visibility: "public",
-  },
-  { key: "data", label: "Data Sheet", categoryKeys: ["data_sheet", "product_data_sheet"], visibility: "public" },
-  { key: "install", label: "Install Guide", categoryKeys: ["install_manual", "install_sheet"], visibility: "public" },
-  { key: "sales", label: "Sales Sheet", categoryKeys: ["sales_sheet"], visibility: "public" },
-  { key: "intake", label: "Intake Form", categoryKeys: ["solution_intake_form", "intake_form"], visibility: "public" },
-  { key: "pics", label: "Pictures", categoryKeys: ["product_image", "image", "pictures"], visibility: "public" },
-  { key: "case", label: "Case Studies", categoryKeys: ["case_study"], visibility: "public" },
-  { key: "pres", label: "Presentations", categoryKeys: ["presentation"], visibility: "public" },
-  {
-    key: "letters",
-    label: "Approval Letters",
-    categoryKeys: ["manufacturer_approval_letter"],
-    visibility: "public",
-  },
+type TabKey = "all" | "spec" | "data" | "install" | "sales" | "pics" | "other";
 
-  { key: "tests", label: "Test Reports", categoryKeys: ["test_report"], visibility: "internal" },
-  { key: "price", label: "Pricebook", categoryKeys: ["pricebook"], visibility: "internal" },
-
-  { key: "other", label: "Other", categoryKeys: ["asset", "other", "unknown", ""], visibility: "public" },
+const TAB_DEFS: { key: TabKey; label: string; visibility?: "public" | "internal" }[] = [
+  { key: "all", label: "All", visibility: "public" },
+  { key: "spec", label: "Spec", visibility: "public" },
+  { key: "data", label: "Data Sheet", visibility: "public" },
+  { key: "install", label: "Install Guide", visibility: "public" },
+  { key: "sales", label: "Sales Sheet", visibility: "public" },
+  { key: "pics", label: "Pictures", visibility: "public" },
+  { key: "other", label: "Other", visibility: "public" },
 ];
+
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
+
+/* ---------------------------------------------
+   Helpers
+--------------------------------------------- */
+
+function normalizePrefix(p: string) {
+  return String(p || "").trim().replace(/^\/+|\/+$/g, "");
+}
 
 function docOpenHref(path: string, download = true) {
   const p = String(path || "").trim();
   return `/api/doc-open?path=${encodeURIComponent(p)}${download ? "&download=1" : ""}`;
 }
 
-// legacy/back-compat category normalization
-function canonicalCategory(a: AssetRow) {
-  const raw = String(a.category_key || a.type || "").toLowerCase().trim();
-  if (raw === "spec" || raw === "specs" || raw === "spec_sheet") return "spec_document";
-  return raw;
-}
-
 function basename(path: string) {
   const clean = String(path || "").split("?")[0];
   return clean.split("/").pop() || clean;
+}
+
+function extOf(pathOrName: string) {
+  const n = basename(pathOrName).toLowerCase();
+  const m = n.match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : "";
 }
 
 function titleFromPath(path: string) {
@@ -100,60 +89,13 @@ function slugifyName(name: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-/**
- * ✅ IMPORTANT: These overrides must match your actual Storage structure.
- * From your screenshots:
- * - solutions/2pipe/2pipe/...
- * - solutions/2pipe/snow-fence/...
- */
-const PREFIX_OVERRIDES_BY_SLUG: Record<string, string> = {
-  "2-pipe-snow-fence": "solutions/2pipe/2pipe",
-  "unitized-snow-fence": "solutions/2pipe/snow-fence",
-};
-
-function storagePrefixForProduct(p: ProductRow) {
-  const slug = slugifyName(p.name);
-  const override = PREFIX_OVERRIDES_BY_SLUG[slug];
-  if (override) return override;
-
-  const section = String(p.section || "").toLowerCase().trim();
-  if (section === "solution" || section === "solutions") return `solutions/${slug}`;
-  if (section === "anchor" || section === "anchors") return `anchor/${slug}`;
-  if (section === "internal" || section === "internal_assets") return `internal/${slug}`;
-  return "";
-}
-
-function categoryFromStoragePath(path: string): { category_key: string; type: string } {
-  const p = String(path || "").toLowerCase();
-
-  // match your real filenames in storage
-  if (p.endsWith("data-sheet.pdf")) return { category_key: "data_sheet", type: "document" };
-  if (p.endsWith("product-data-sheet.pdf")) return { category_key: "product_data_sheet", type: "document" };
-  if (p.endsWith("install-manual.pdf")) return { category_key: "install_manual", type: "document" };
-  if (p.endsWith("install-sheet.pdf")) return { category_key: "install_sheet", type: "document" };
-  if (p.endsWith("sales-sheet.pdf")) return { category_key: "sales_sheet", type: "document" };
-
-  if (p.includes("intake") && p.endsWith(".pdf")) return { category_key: "solution_intake_form", type: "document" };
-
-  if (p.endsWith(".png") || p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".webp") || p.endsWith(".svg")) {
-    return { category_key: "product_image", type: "image" };
-  }
-
-  if (p.endsWith(".ppt") || p.endsWith(".pptx")) return { category_key: "presentation", type: "document" };
-
-  if (p.includes("approval") && (p.endsWith(".pdf") || p.endsWith(".doc") || p.endsWith(".docx"))) {
-    return { category_key: "manufacturer_approval_letter", type: "document" };
-  }
-
-  if (p.includes("case") && (p.endsWith(".pdf") || p.endsWith(".doc") || p.endsWith(".docx"))) {
-    return { category_key: "case_study", type: "document" };
-  }
-
-  if (p.includes("spec") && (p.endsWith(".pdf") || p.endsWith(".doc") || p.endsWith(".docx"))) {
-    return { category_key: "spec_document", type: "document" };
-  }
-
-  return { category_key: "other", type: "document" };
+// Defensive (your API already filters folders, but keep safe)
+function isFolderLike(path: string) {
+  const p = String(path || "").trim();
+  if (!p) return true;
+  if (p.endsWith("/")) return true;
+  const b = basename(p);
+  return !b.includes(".");
 }
 
 function visibilityFromPath(path: string): "public" | "internal" {
@@ -162,20 +104,98 @@ function visibilityFromPath(path: string): "public" | "internal" {
   return "public";
 }
 
-function isFolderLike(path: string) {
-  const p = String(path || "").trim();
-  if (!p) return true;
-  if (p.endsWith("/")) return true;
-  const base = basename(p);
-  return !base.includes(".");
+function typeFromPath(path: string) {
+  const ext = extOf(path);
+  return IMAGE_EXTS.has(ext) ? "image" : "document";
 }
 
+/**
+ * ✅ Frame label (for Pipe Frame)
+ * Your storage uses BOTH:
+ * - attached/exisiting/... (typo)
+ * - attached/attached/...
+ */
+function frameLabelFromPath(path: string): "Existing" | "Attached" | null {
+  const p = String(path || "").toLowerCase();
+  if (p.includes("/exisiting/") || p.includes("/existing/")) return "Existing";
+  if (p.includes("/attached/")) return "Attached";
+  return null;
+}
+
+/* ---------------------------------------------
+   ✅ Storage Routing Rules (FIXED)
+--------------------------------------------- */
+
+/**
+ * ✅ Exact product name → exact storage prefix
+ * IMPORTANT: these must match real folders in the knowledge bucket
+ * Your screenshot shows 2pipe lives under: solutions/snow-retention/2pipe
+ */
+const SPECIAL_PREFIX_BY_NAME: Record<string, string> = {
+  "2 Pipe Snow Fence": "solutions/snow-retention/2pipe",
+  "Unitized Snow Fence": "solutions/snow-retention/snow-fence",
+};
+
+/**
+ * ✅ Multi-prefix products (Pipe Frame pulls from TWO roots)
+ * NOTE: includes "attached/existing" for future-proofing if you ever fix the folder typo.
+ */
+const MULTI_PREFIX_BY_NAME: Record<string, string[]> = {
+  "Pipe Frame": ["attached/exisiting", "attached/existing", "attached/attached"],
+};
+
+/**
+ * ✅ "Series" (business category) → category folder (under solutions/)
+ * From your screenshots:
+ * - Snow Retention lives at solutions/snow-retention/<product>
+ * - HVAC lives at solutions/hvac/<product>
+ */
+const CATEGORY_PREFIX_BY_SERIES: Record<string, string> = {
+  HVAC: "solutions/hvac",
+  "HVAC Solutions": "solutions/hvac",
+
+  "Snow Retention": "solutions/snow-retention",
+  "Snow Retention Solutions": "solutions/snow-retention",
+  "2 Pipe": "solutions/snow-retention",
+};
+
+/* ---------------------------------------------
+   Tabs
+--------------------------------------------- */
+
+function tabFromPath(path: string): TabKey {
+  const file = basename(path).toLowerCase();
+
+  if (file === basename(GLOBAL_SPEC_PATH).toLowerCase()) return "spec";
+
+  if (file === "data-sheet.pdf") return "data";
+  if (file === "sales-sheet.pdf") return "sales";
+
+  // support both patterns
+  if (file === "install-sheet.pdf" || file === "install-manual.pdf") return "install";
+
+  const ext = extOf(file);
+  if (IMAGE_EXTS.has(ext)) return "pics";
+
+  return "other";
+}
+
+/* ---------------------------------------------
+   API fetch
+--------------------------------------------- */
+
+/**
+ * ✅ Knowledge list fetch that matches YOUR API: prefix=
+ * NOTE: expects prefix like "solutions/snow-retention/2pipe" (no trailing slash)
+ */
 async function fetchKnowledgePaths(prefix: string) {
-  const cleanPrefix = prefix.replace(/^\/+|\/+$/g, "");
+  const cleanPrefix = normalizePrefix(prefix);
   const res = await fetch(`/api/knowledge-list?prefix=${encodeURIComponent(cleanPrefix)}`, {
     method: "GET",
     credentials: "include",
+    cache: "no-store",
   });
+
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error || `knowledge-list failed: ${res.status}`);
 
@@ -183,8 +203,91 @@ async function fetchKnowledgePaths(prefix: string) {
   return paths.filter((p) => !isFolderLike(p));
 }
 
+/* ---------------------------------------------
+   Prefix probing (✅ FIXED for all layouts)
+--------------------------------------------- */
+
+/**
+ * We probe in a very deliberate order:
+ * 0) Multi-prefix products (Pipe Frame)
+ * 1) Special exact mapping (product name → known folder)
+ * 2) Category folder + product slug:
+ *    solutions/<category>/<slug>/
+ *    solutions/<category>/<slug>/<slug>/
+ * 3) Classic layouts:
+ *    solutions/<slug>/
+ *    solutions/<slug>/<slug>/
+ *    anchor/<slug>/
+ *    ...
+ *
+ * IMPORTANT: never return trailing slashes here; your API expects folder names without "/".
+ */
+function prefixCandidatesForProduct(p: ProductRow): string[] {
+  const out: string[] = [];
+  const push = (x: string) => {
+    const clean = normalizePrefix(x);
+    if (clean) out.push(clean);
+  };
+
+  // 0) Multi-prefix override
+  const multi = MULTI_PREFIX_BY_NAME[p.name];
+  if (multi?.length) {
+    for (const m of multi) push(m);
+    return Array.from(new Set(out));
+  }
+
+  // 1) Exact override
+  const special = SPECIAL_PREFIX_BY_NAME[p.name];
+  if (special) return [normalizePrefix(special)];
+
+  const slug = slugifyName(p.name);
+
+  const seriesKey = String(p.series || "").trim();
+  const section = String(p.section || "").toLowerCase().trim();
+
+  // 2) Category folder layout (Option A)
+  const categoryRoot = CATEGORY_PREFIX_BY_SERIES[seriesKey];
+  if (categoryRoot) {
+    // categoryRoot/<slug>
+    push(`${categoryRoot}/${slug}`);
+    push(`${categoryRoot}/${slug}/${slug}`);
+
+    // sometimes teams store directly at category root (rare, but harmless)
+    push(`${categoryRoot}`);
+  }
+
+  // 3) Standard solutions layout
+  if (section === "solution" || section === "solutions") {
+    push(`solutions/${slug}`);
+    push(`solutions/${slug}/${slug}`);
+  }
+
+  // 4) Anchors layout
+  if (section === "anchor" || section === "anchors") {
+    push(`anchor/${slug}`);
+    push(`anchor/${slug}/${slug}`);
+  }
+
+  // 5) Internal layout
+  if (section === "internal" || section === "internal_assets") {
+    push(`internal/${slug}`);
+    push(`internal/${slug}/${slug}`);
+  }
+
+  // 6) Safe fallback
+  push(`solutions/${slug}`);
+  push(`solutions/${slug}/${slug}`);
+
+  return Array.from(new Set(out));
+}
+
+/* ---------------------------------------------
+   Component
+--------------------------------------------- */
+
 export default function ProductTackleBox({ productId }: { productId: string }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<ProductRow | null>(null);
@@ -193,12 +296,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [storageAssets, setStorageAssets] = useState<AssetRow[]>([]);
   const [storagePrefix, setStoragePrefix] = useState<string>("");
 
-  const [activeTab, setActiveTab] = useState(TAB_DEFS[0].key);
+  const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [error, setError] = useState<string | null>(null);
 
   const [isInternalUser, setIsInternalUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const router = useRouter();
+
+  const [triedPrefixes, setTriedPrefixes] = useState<string[]>([]);
 
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({
@@ -213,8 +317,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   async function load() {
     setLoading(true);
     setError(null);
+    setTriedPrefixes([]);
 
     try {
+      // Auth / role
       const { data: auth } = await supabase.auth.getUser();
       const user = auth.user;
 
@@ -233,6 +339,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setIsAdmin(false);
       }
 
+      // Product
       const { data: p, error: pErr } = await supabase
         .from("products")
         .select("id,name,sku,series,section,internal_kind,active")
@@ -250,6 +357,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         return;
       }
 
+      // Internal assets redirect
       if (p.section === "internal_assets") {
         const kind = (p as ProductRow).internal_kind;
         if (kind === "contacts_list") router.replace(`/internal-assets/contacts/${encodeURIComponent(p.id)}`);
@@ -258,6 +366,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         return;
       }
 
+      // DB assets
       const { data: a, error: aErr } = await supabase
         .from("assets")
         .select("id,product_id,title,type,category_key,path,visibility,created_at")
@@ -273,51 +382,61 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       setProduct(p as ProductRow);
       setDbAssets((a as AssetRow[]) ?? []);
 
-      // ✅ Use override-aware prefix
-      const basePrefix = storagePrefixForProduct(p as ProductRow);
-      setStoragePrefix(basePrefix);
+      // ✅ Probe storage prefixes
+      const candidates = prefixCandidatesForProduct(p as ProductRow);
+      setTriedPrefixes(candidates.map((x) => `${normalizePrefix(x)}/`));
 
-      let derived: AssetRow[] = [];
+      const isMulti = !!MULTI_PREFIX_BY_NAME[(p as ProductRow).name];
 
-      if (basePrefix) {
+      let pickedPrefix = candidates[0] || "";
+      let paths: string[] = [];
+
+      for (const candidate of candidates) {
         try {
-          const paths = await fetchKnowledgePaths(basePrefix);
-
-          derived = paths.map((path) => {
-            const { category_key, type } = categoryFromStoragePath(path);
-            return {
-              id: `storage:${path}`,
-              product_id: (p as ProductRow).id,
-              title: titleFromPath(path),
-              type,
-              category_key,
-              path,
-              visibility: visibilityFromPath(path),
-              created_at: new Date().toISOString(),
-            };
-          });
-        } catch (e) {
-          console.warn("knowledge-list failed for prefix:", basePrefix, e);
-          derived = [];
+          const got = await fetchKnowledgePaths(candidate);
+          if (got.length > 0) {
+            if (isMulti) {
+              paths = paths.concat(got);
+              pickedPrefix = "multiple folders";
+            } else {
+              pickedPrefix = candidate;
+              paths = got;
+              break;
+            }
+          }
+        } catch {
+          // ignore
         }
       }
 
-      // ✅ Always inject global spec if none exists (across storage + db)
-      const hasSpec = [...derived, ...(a as AssetRow[])].some((x) => canonicalCategory(x) === "spec_document");
-      if (!hasSpec) {
-        derived.unshift({
-          id: `storage:${GLOBAL_SPEC_PATH}`,
-          product_id: (p as ProductRow).id,
-          title: "Anchor Products Spec (v1)",
-          type: "document",
-          category_key: "spec_document",
-          path: GLOBAL_SPEC_PATH,
-          visibility: "public",
-          created_at: new Date().toISOString(),
-        });
-      }
+      // show a nice prefix display
+      setStoragePrefix(normalizePrefix(pickedPrefix));
 
-      // de-dupe by path
+      // ✅ Build storage-derived assets
+      const derived: AssetRow[] = paths.map((path) => ({
+        id: `storage:${path}`,
+        product_id: (p as ProductRow).id,
+        title: titleFromPath(path),
+        type: typeFromPath(path),
+        category_key: tabFromPath(path),
+        path,
+        visibility: visibilityFromPath(path),
+        created_at: new Date().toISOString(),
+      }));
+
+      // ✅ Always include global spec
+      derived.unshift({
+        id: `storage:${GLOBAL_SPEC_PATH}`,
+        product_id: (p as ProductRow).id,
+        title: "Anchor Products Spec (v1)",
+        type: "document",
+        category_key: "spec",
+        path: GLOBAL_SPEC_PATH,
+        visibility: "public",
+        created_at: new Date().toISOString(),
+      });
+
+      // De-dupe by path (important for multi-prefix)
       const seen = new Set<string>();
       const deduped = derived.filter((x) => {
         const path = String(x.path || "").trim();
@@ -340,19 +459,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  const tab = TAB_DEFS.find((t) => t.key === activeTab) ?? TAB_DEFS[0];
-
-  const visibleTabs = useMemo(() => {
-    return TAB_DEFS.filter((t) => (t.visibility === "internal" ? isInternalUser : true));
-  }, [isInternalUser]);
-
-  useEffect(() => {
-    if (!visibleTabs.some((t) => t.key === activeTab)) {
-      setActiveTab(visibleTabs[0]?.key || TAB_DEFS[0].key);
-    }
-  }, [visibleTabs, activeTab]);
-
-  // final list = storage first, then db extras
+  // Storage first, then DB extras
   const assets = useMemo(() => {
     const byPath = new Map<string, AssetRow>();
     for (const s of storageAssets) byPath.set(s.path, s);
@@ -368,11 +475,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   }, [assets, isInternalUser]);
 
   const filtered = useMemo(() => {
-    const allowed = new Set(tab.categoryKeys.map((k) => String(k || "").toLowerCase().trim()));
-    const list = assets.filter((x) => allowed.has(canonicalCategory(x)));
-    if (!isInternalUser) return list.filter((x) => x.visibility !== "internal");
-    return list;
-  }, [assets, tab.categoryKeys, isInternalUser]);
+    const visible = isInternalUser ? assets : assets.filter((a) => a.visibility !== "internal");
+    if (activeTab === "all") return visible;
+    return visible.filter((a) => tabFromPath(a.path) === activeTab);
+  }, [assets, isInternalUser, activeTab]);
 
   async function submitAddAsset(e: React.FormEvent) {
     e.preventDefault();
@@ -434,6 +540,18 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   {product?.series ? ` • Series: ${product.series}` : ""}
                   {product?.section ? ` • ${product.section}` : ""}
                 </div>
+
+                {storagePrefix ? (
+                  <div className="mt-2 text-[12px] text-black/40">
+                    Storage prefix (picked): <span className="font-mono">{storagePrefix}/</span>
+                  </div>
+                ) : null}
+
+                {triedPrefixes.length ? (
+                  <div className="mt-1 text-[12px] text-black/35">
+                    Tried: <span className="font-mono">{triedPrefixes.join(" • ")}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="shrink-0 flex flex-wrap items-center gap-2">
@@ -458,7 +576,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
           {/* Tabs */}
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {visibleTabs.map((t) => {
+            {TAB_DEFS.map((t) => {
               const on = t.key === activeTab;
               return (
                 <button
@@ -481,7 +599,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-black">{tab.label}</div>
+                <div className="text-sm font-semibold text-black">{TAB_DEFS.find((t) => t.key === activeTab)?.label}</div>
                 <div className="mt-1 text-sm text-[#76777B]">Click an item to open/download via signed URL.</div>
               </div>
 
@@ -496,35 +614,56 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   Nothing in this tab yet.
                   {storagePrefix ? (
                     <div className="mt-2 text-[12px] text-black/40">
-                      Storage prefix: <span className="font-mono">{storagePrefix}/</span>
+                      Picked prefix: <span className="font-mono">{storagePrefix}/</span>
                     </div>
                   ) : null}
                 </div>
               ) : (
-                filtered.map((a) => (
-                  <a
-                    key={a.id}
-                    href={docOpenHref(a.path, true)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full overflow-hidden text-left rounded-2xl border border-black/10 bg-white p-4 hover:bg-black/[0.03] transition"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
-                        <div className="mt-1 text-[12px] text-[#76777B] truncate">
-                          {(a.category_key || a.type) ?? ""} • {a.visibility} • {a.path}
-                        </div>
-                      </div>
+                filtered.map((a) => {
+                  const frameLabel = product?.name === "Pipe Frame" ? frameLabelFromPath(a.path) : null;
 
-                      <div className="w-full sm:w-auto sm:shrink-0">
-                        <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-                          Download →
+                  return (
+                    <a
+                      key={a.id}
+                      href={docOpenHref(a.path, true)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full overflow-hidden text-left rounded-2xl border border-black/10 bg-white p-4 hover:bg-black/[0.03] transition"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
+
+                          <div className="mt-1 text-[12px] text-[#76777B] truncate">
+                            {typeFromPath(a.path)} • {a.visibility}
+                            {frameLabel ? (
+                              <>
+                                {" "}
+                                •{" "}
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    frameLabel === "Existing"
+                                      ? "bg-black/5 text-black/70"
+                                      : "bg-[#9CE2BB] text-[#11500F]"
+                                  }`}
+                                >
+                                  {frameLabel} Frame
+                                </span>
+                              </>
+                            ) : null}{" "}
+                            • {a.path}
+                          </div>
+                        </div>
+
+                        <div className="w-full sm:w-auto sm:shrink-0">
+                          <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+                            Download →
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </a>
-                ))
+                    </a>
+                  );
+                })
               )}
             </div>
           </div>
@@ -552,17 +691,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 >
                   <option value="spec_document">spec_document</option>
                   <option value="data_sheet">data_sheet</option>
-                  <option value="product_data_sheet">product_data_sheet</option>
-                  <option value="install_manual">install_manual</option>
                   <option value="install_sheet">install_sheet</option>
                   <option value="sales_sheet">sales_sheet</option>
-                  <option value="solution_intake_form">solution_intake_form</option>
-                  <option value="product_image">product_image</option>
-                  <option value="case_study">case_study</option>
-                  <option value="presentation">presentation</option>
-                  <option value="manufacturer_approval_letter">manufacturer_approval_letter</option>
-                  <option value="test_report">test_report</option>
-                  <option value="pricebook">pricebook</option>
                   <option value="other">other</option>
                 </select>
 
