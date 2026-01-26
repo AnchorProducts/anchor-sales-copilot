@@ -758,10 +758,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-black">{TAB_LABELS[activeTab]}</div>
-                <div className="mt-1 text-sm text-[#76777B]">
-                  Tap <span className="font-semibold">Open</span> to view inline (best for mobile). Use{" "}
-                  <span className="font-semibold">Share</span> to send like iOS.
-                </div>
+                
               </div>
 
               <div className="text-[12px] text-black/50 shrink-0">
@@ -809,39 +806,56 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                         {/* Actions */}
 <div className="w-full sm:w-auto sm:shrink-0">
   <div className="flex w-full gap-2 sm:justify-end">
-    {/* Open only for inline-friendly files */}
-    {["pdf", "png", "jpg", "jpeg"].includes(extOf(a.path)) && (
-      <button
-        type="button"
-        onClick={() => openInline(a.path)}
-        className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
-      >
-        Open →
-      </button>
-    )}
+    {(() => {
+      const ext = extOf(a.path);
+      const canOpenInline = ["pdf", "png", "jpg", "jpeg"].includes(ext);
 
-    {/* Share (iOS / mobile friendly) */}
-    <button
-      type="button"
-      onClick={() => shareAsset(a.path)}
-      className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-    >
-      Share
-    </button>
+      return (
+        <>
+          {/* Open (inline-friendly files) */}
+          {canOpenInline && (
+            <button
+              type="button"
+              onClick={() => openInline(a.path)}
+              className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
+            >
+              Open →
+            </button>
+          )}
 
-    {/* Always allow download */}
-    <button
-      type="button"
-      onClick={() => forceDownload(a.path)}
-      className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-    >
-      Download
-    </button>
+          {/* Download (mobile only when Open is NOT available) */}
+          {!canOpenInline && (
+            <button
+              type="button"
+              onClick={() => forceDownload(a.path)}
+              className="inline-flex flex-1 sm:hidden items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
+            >
+              Download
+            </button>
+          )}
+
+          {/* Share (desktop only) */}
+          <button
+            type="button"
+            onClick={() => shareAsset(a.path)}
+            className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
+          >
+            Share
+          </button>
+
+          {/* Download (desktop always) */}
+          <button
+            type="button"
+            onClick={() => forceDownload(a.path)}
+            className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
+          >
+            Download
+          </button>
+        </>
+      );
+    })()}
   </div>
-</div>
-
-
-                          
+</div>          
                         </div>
                       </div>
                     
