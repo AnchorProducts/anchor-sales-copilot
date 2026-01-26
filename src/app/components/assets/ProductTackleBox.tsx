@@ -188,6 +188,7 @@ const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "Roof Mounted Guardrail": ["solutions/roof-guardrail"],
   "Wall Mounted Guardrail": ["solutions/wall-guardrail"],
   "Wall Mounted Box": ["solutions/wall-box"],
+  "Weather Stations": ["solutions/weather-station"],
 
   // ✅ Anchors (add these if your Product names match exactly)
   "U2000 KEE": ["anchor/u-anchors/u2000/kee"],
