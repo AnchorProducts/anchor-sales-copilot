@@ -109,55 +109,111 @@ function typeFromPath(path: string) {
   return IMAGE_EXTS.has(ext) ? "image" : "document";
 }
 
-/**
- * ✅ Frame label (for Pipe Frame)
- * Your storage uses BOTH:
- * - attached/exisiting/... (typo)
- * - attached/attached/...
- */
-function frameLabelFromPath(path: string): "Existing" | "Attached" | null {
-  const p = String(path || "").toLowerCase();
-  if (p.includes("/exisiting/") || p.includes("/existing/")) return "Existing";
-  if (p.includes("/attached/")) return "Attached";
-  return null;
-}
-
 /* ---------------------------------------------
-   ✅ Storage Routing Rules (FIXED)
+   Storage Routing Rules
 --------------------------------------------- */
 
 /**
- * ✅ Exact product name → exact storage prefix
- * IMPORTANT: these must match real folders in the knowledge bucket
- * Your screenshot shows 2pipe lives under: solutions/snow-retention/2pipe
+ * ✅ YOUR BUCKET REALITY (based on your screenshots)
+ * - Solutions are under roots like: hvac/, pipe-frame/, roof-box/, etc.
+ * - Anchors are NOT under anchor/<slug>/...
+ *   They are under membrane roots like:
+ *   - tpo/...
+ *   - pvc/...
+ *   - kee/...
+ *   …and inside that you have nested folders like:
+ *   tpo/u-anchors/u2000/kee/tpo/ (example you showed)
+ *
+ * So for anchors, we generate smart candidates from:
+ * - membrane root (tpo/pvc/kee)
+ * - family (u-anchors)
+ * - model (u2000/u2200/...)
+ * - possible “leaf membrane” folder again (tpo/pvc/kee)
+ * - plus legacy fallbacks
  */
-const SPECIAL_PREFIX_BY_NAME: Record<string, string> = {
-  "2 Pipe Snow Fence": "solutions/snow-retention/2pipe",
-  "Unitized Snow Fence": "solutions/snow-retention/snow-fence",
+
+/**
+ * Exact product name → known folder(s)
+ * (Use this for any weird one-off cases.)
+ */
+const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
+  "2 Pipe Snow Fence": ["2pipe/2pipe", "solutions/snow-retention/2pipe", "solutions/2pipe/2pipe"],
+  "Snow Fence": ["2pipe/snow-fence", "solutions/snow-retention/snow-fence", "solutions/2pipe/snow-fence"],
+  "HVAC Tie Down": ["solutions/hvac"],
+
+  "Roof Mounted Box": ["solutions/roof-box"],
+
+  "Attached Pipe Frame": ["pipe-frame/attached", "solutions/pipe-frame/attached", "attached"],
+  "Existing Pipe Frame": [
+    // ✅ fix your typo: existing (not exisiting)
+    "pipe-frame/existing",
+    "solutions/pipe-frame/existing",
+    "existing",
+  ],
+
+  "Roof Mounted Guardrail": ["solutions/roof-guardrail"],
+  "Wall Mounted Guardrail": ["solutions/wall-guardrail"],
+  "Wall Mounted Box": ["solutions/wall-box"],
 };
 
 /**
- * ✅ Multi-prefix products (Pipe Frame pulls from TWO roots)
- * NOTE: includes "attached/existing" for future-proofing if you ever fix the folder typo.
+ * Series → possible roots (solutions)
+ * Keep these minimal and true.
  */
-const MULTI_PREFIX_BY_NAME: Record<string, string[]> = {
-  "Pipe Frame": ["attached/exisiting", "attached/existing", "attached/attached"],
+const SERIES_ROOTS_BY_SERIES: Record<string, string[]> = {
+  HVAC: ["solutions/hvac"],
+  "HVAC Solutions": ["solutions/hvac"],
+
+  "Snow Retention": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
+  "Snow Retention Solutions": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
+  "2 Pipe": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
 };
 
-/**
- * ✅ "Series" (business category) → category folder (under solutions/)
- * From your screenshots:
- * - Snow Retention lives at solutions/snow-retention/<product>
- * - HVAC lives at solutions/hvac/<product>
- */
-const CATEGORY_PREFIX_BY_SERIES: Record<string, string> = {
-  HVAC: "solutions/hvac",
-  "HVAC Solutions": "solutions/hvac",
+/* ---------------------------------------------
+   Anchor routing (NEW)
+--------------------------------------------- */
 
-  "Snow Retention": "solutions/snow-retention",
-  "Snow Retention Solutions": "solutions/snow-retention",
-  "2 Pipe": "solutions/snow-retention",
-};
+const MEMBRANE_ROOTS = ["tpo", "pvc", "kee"] as const;
+
+function normalizeSeriesKey(s: string) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function detectMembrane(p: ProductRow): (typeof MEMBRANE_ROOTS)[number] | null {
+  const series = normalizeSeriesKey(p.series || "");
+  const name = String(p.name || "").toLowerCase();
+
+  // prefer series if it contains it
+  for (const m of MEMBRANE_ROOTS) {
+    if (series.includes(m)) return m;
+  }
+  // fallback: detect in name
+  for (const m of MEMBRANE_ROOTS) {
+    if (name.includes(m)) return m;
+  }
+  return null;
+}
+
+function detectAnchorModelFolder(p: ProductRow): string | null {
+  const name = String(p.name || "").toLowerCase();
+
+  // matches: U-2000, U2000, u 2000, etc.
+  const m = name.match(/\bu\s*[- ]?\s*(\d{4})\b/);
+  if (m?.[1]) return `u${m[1]}`; // u2000
+  return null;
+}
+
+function detectAnchorFamilyFolder(p: ProductRow): string | null {
+  const name = String(p.name || "").toLowerCase();
+  // right now your screenshot shows u-anchors. Keep it simple:
+  if (name.includes("u-") || name.includes("u ")) return "u-anchors";
+  if (name.includes("u anchor") || name.includes("uanchor")) return "u-anchors";
+  // if you add other families later, add detection here.
+  return "u-anchors";
+}
 
 /* ---------------------------------------------
    Tabs
@@ -168,11 +224,13 @@ function tabFromPath(path: string): TabKey {
 
   if (file === basename(GLOBAL_SPEC_PATH).toLowerCase()) return "spec";
 
+  // standard filenames you’re using
   if (file === "data-sheet.pdf") return "data";
   if (file === "sales-sheet.pdf") return "sales";
-
-  // support both patterns
   if (file === "install-sheet.pdf" || file === "install-manual.pdf") return "install";
+
+  // you showed a file named product-data-sheet.pdf too
+  if (file === "product-data-sheet.pdf") return "data";
 
   const ext = extOf(file);
   if (IMAGE_EXTS.has(ext)) return "pics";
@@ -180,14 +238,17 @@ function tabFromPath(path: string): TabKey {
   return "other";
 }
 
+function groupBadgeFromPath(path: string): string | null {
+  const p = String(path || "").toLowerCase();
+  if (p.includes("/attached/") || p.startsWith("attached/") || p.includes("pipe-frame/attached/")) return "Attached";
+  if (p.includes("/existing/") || p.startsWith("existing/") || p.includes("pipe-frame/existing/")) return "Existing";
+  return null;
+}
+
 /* ---------------------------------------------
    API fetch
 --------------------------------------------- */
 
-/**
- * ✅ Knowledge list fetch that matches YOUR API: prefix=
- * NOTE: expects prefix like "solutions/snow-retention/2pipe" (no trailing slash)
- */
 async function fetchKnowledgePaths(prefix: string) {
   const cleanPrefix = normalizePrefix(prefix);
   const res = await fetch(`/api/knowledge-list?prefix=${encodeURIComponent(cleanPrefix)}`, {
@@ -204,24 +265,9 @@ async function fetchKnowledgePaths(prefix: string) {
 }
 
 /* ---------------------------------------------
-   Prefix probing (✅ FIXED for all layouts)
+   Prefix probing
 --------------------------------------------- */
 
-/**
- * We probe in a very deliberate order:
- * 0) Multi-prefix products (Pipe Frame)
- * 1) Special exact mapping (product name → known folder)
- * 2) Category folder + product slug:
- *    solutions/<category>/<slug>/
- *    solutions/<category>/<slug>/<slug>/
- * 3) Classic layouts:
- *    solutions/<slug>/
- *    solutions/<slug>/<slug>/
- *    anchor/<slug>/
- *    ...
- *
- * IMPORTANT: never return trailing slashes here; your API expects folder names without "/".
- */
 function prefixCandidatesForProduct(p: ProductRow): string[] {
   const out: string[] = [];
   const push = (x: string) => {
@@ -229,54 +275,78 @@ function prefixCandidatesForProduct(p: ProductRow): string[] {
     if (clean) out.push(clean);
   };
 
-  // 0) Multi-prefix override
-  const multi = MULTI_PREFIX_BY_NAME[p.name];
-  if (multi?.length) {
-    for (const m of multi) push(m);
-    return Array.from(new Set(out));
-  }
-
-  // 1) Exact override
-  const special = SPECIAL_PREFIX_BY_NAME[p.name];
-  if (special) return [normalizePrefix(special)];
+  // 1) Exact overrides
+  const specials = SPECIAL_PREFIXES_BY_NAME[p.name];
+  if (specials?.length) return Array.from(new Set(specials.map(normalizePrefix)));
 
   const slug = slugifyName(p.name);
-
   const seriesKey = String(p.series || "").trim();
   const section = String(p.section || "").toLowerCase().trim();
 
-  // 2) Category folder layout (Option A)
-  const categoryRoot = CATEGORY_PREFIX_BY_SERIES[seriesKey];
-  if (categoryRoot) {
-    // categoryRoot/<slug>
-    push(`${categoryRoot}/${slug}`);
-    push(`${categoryRoot}/${slug}/${slug}`);
+  // 2) ✅ ANCHORS: use the real bucket layout you showed
+  if (section === "anchor" || section === "anchors") {
+    const membrane = detectMembrane(p); // tpo|pvc|kee
+    const family = detectAnchorFamilyFolder(p); // u-anchors
+    const model = detectAnchorModelFolder(p); // u2000, u2200...
 
-    // sometimes teams store directly at category root (rare, but harmless)
-    push(`${categoryRoot}`);
+    // These are ordered MOST likely → least likely based on your screenshot pattern
+    if (membrane && family && model) {
+      // matches: tpo/u-anchors/u2000/tpo
+      push(`${membrane}/${family}/${model}/${membrane}`);
+
+      // matches: tpo/u-anchors/u2000
+      push(`${membrane}/${family}/${model}`);
+
+      // matches: u-anchors/u2000/tpo
+      push(`${family}/${model}/${membrane}`);
+
+      // matches: u-anchors/u2000
+      push(`${family}/${model}`);
+
+      // matches: tpo/u2000/tpo (if you ever remove family level)
+      push(`${membrane}/${model}/${membrane}`);
+
+      // matches: tpo/u2000
+      push(`${membrane}/${model}`);
+    }
+
+    // If we ONLY know membrane, still try sane options:
+    if (membrane) {
+      push(`${membrane}/${slug}`);
+      push(`${membrane}`);
+    }
+
+    // legacy fallbacks (if you ever move anchors under anchor/)
+    push(`anchor/${slug}`);
+    push(`anchor/${slug}/${slug}`);
+
+    // last-ditch
+    push(`${slug}`);
+
+    return Array.from(new Set(out));
   }
 
-  // 3) Standard solutions layout
+  // 3) ✅ SOLUTIONS (existing behavior)
+  const roots = SERIES_ROOTS_BY_SERIES[seriesKey] || [];
+  for (const root of roots) {
+    push(`${root}/${slug}`);
+    push(`${root}/${slug}/${slug}`);
+    push(`${root}`); // safe fallback
+  }
+
   if (section === "solution" || section === "solutions") {
     push(`solutions/${slug}`);
     push(`solutions/${slug}/${slug}`);
   }
 
-  // 4) Anchors layout
-  if (section === "anchor" || section === "anchors") {
-    push(`anchor/${slug}`);
-    push(`anchor/${slug}/${slug}`);
-  }
-
-  // 5) Internal layout
   if (section === "internal" || section === "internal_assets") {
     push(`internal/${slug}`);
     push(`internal/${slug}/${slug}`);
   }
 
-  // 6) Safe fallback
-  push(`solutions/${slug}`);
-  push(`solutions/${slug}/${slug}`);
+  // 4) Extra safe fallbacks
+  push(`${slug}`);
+  push(`${slug}/${slug}`);
 
   return Array.from(new Set(out));
 }
@@ -382,11 +452,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       setProduct(p as ProductRow);
       setDbAssets((a as AssetRow[]) ?? []);
 
-      // ✅ Probe storage prefixes
+      // Probe storage prefixes
       const candidates = prefixCandidatesForProduct(p as ProductRow);
       setTriedPrefixes(candidates.map((x) => `${normalizePrefix(x)}/`));
-
-      const isMulti = !!MULTI_PREFIX_BY_NAME[(p as ProductRow).name];
 
       let pickedPrefix = candidates[0] || "";
       let paths: string[] = [];
@@ -395,24 +463,18 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         try {
           const got = await fetchKnowledgePaths(candidate);
           if (got.length > 0) {
-            if (isMulti) {
-              paths = paths.concat(got);
-              pickedPrefix = "multiple folders";
-            } else {
-              pickedPrefix = candidate;
-              paths = got;
-              break;
-            }
+            pickedPrefix = candidate;
+            paths = got;
+            break;
           }
         } catch {
           // ignore
         }
       }
 
-      // show a nice prefix display
       setStoragePrefix(normalizePrefix(pickedPrefix));
 
-      // ✅ Build storage-derived assets
+      // Build storage-derived assets
       const derived: AssetRow[] = paths.map((path) => ({
         id: `storage:${path}`,
         product_id: (p as ProductRow).id,
@@ -424,7 +486,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         created_at: new Date().toISOString(),
       }));
 
-      // ✅ Always include global spec
+      // Always include global spec
       derived.unshift({
         id: `storage:${GLOBAL_SPEC_PATH}`,
         product_id: (p as ProductRow).id,
@@ -436,7 +498,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         created_at: new Date().toISOString(),
       });
 
-      // De-dupe by path (important for multi-prefix)
+      // De-dupe by path
       const seen = new Set<string>();
       const deduped = derived.filter((x) => {
         const path = String(x.path || "").trim();
@@ -523,9 +585,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       ) : loading ? (
-        <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-          Loading tackle box…
-        </div>
+        <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">Loading tackle box…</div>
       ) : (
         <>
           {/* Header */}
@@ -583,9 +643,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   key={t.key}
                   onClick={() => setActiveTab(t.key)}
                   className={`shrink-0 rounded-full border px-4 py-2 text-[12px] font-semibold transition ${
-                    on
-                      ? "border-[#047835] bg-[#047835] text-white"
-                      : "border-black/10 bg-white text-black hover:bg-black/[0.03]"
+                    on ? "border-[#047835] bg-[#047835] text-white" : "border-black/10 bg-white text-black hover:bg-black/[0.03]"
                   }`}
                   type="button"
                 >
@@ -620,38 +678,27 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 </div>
               ) : (
                 filtered.map((a) => {
-                  const frameLabel = product?.name === "Pipe Frame" ? frameLabelFromPath(a.path) : null;
-
+                  const badge = groupBadgeFromPath(a.path);
                   return (
                     <a
                       key={a.id}
                       href={docOpenHref(a.path, true)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block w-full overflow-hidden text-left rounded-2xl border border-black/10 bg-white p-4 hover:bg-black/[0.03] transition"
+                      className="block w-full overflow-hidden tfext-left rounded-2xl border border-black/10 bg-white p-4 hover:bg-black/[0.03] transition"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
-
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
+                            {badge ? (
+                              <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">
+                                {badge}
+                              </span>
+                            ) : null}
+                          </div>
                           <div className="mt-1 text-[12px] text-[#76777B] truncate">
-                            {typeFromPath(a.path)} • {a.visibility}
-                            {frameLabel ? (
-                              <>
-                                {" "}
-                                •{" "}
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                                    frameLabel === "Existing"
-                                      ? "bg-black/5 text-black/70"
-                                      : "bg-[#9CE2BB] text-[#11500F]"
-                                  }`}
-                                >
-                                  {frameLabel} Frame
-                                </span>
-                              </>
-                            ) : null}{" "}
-                            • {a.path}
+                            {typeFromPath(a.path)} • {a.visibility} • {a.path}
                           </div>
                         </div>
 
@@ -719,7 +766,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <input
                   value={form.path}
                   onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
-                  placeholder="knowledge path (e.g. solutions/camera-mount/data-sheet.pdf)"
+                  placeholder="knowledge path (e.g. tpo/u-anchors/u2000/tpo/data-sheet.pdf)"
                   className="h-10 sm:col-span-4 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                 />
 
