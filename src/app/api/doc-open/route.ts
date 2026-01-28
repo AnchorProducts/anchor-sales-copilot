@@ -296,7 +296,7 @@ export async function POST(req: Request) {
       : [];
 
     const userText = extractUserText(body, incomingMessages);
-    const foldersUsed: string[] = ["anchors/u-anchors"];
+    const foldersUsed: string[] = ["anchor/u-anchors"];
 
     if (!userText) {
       return NextResponse.json(

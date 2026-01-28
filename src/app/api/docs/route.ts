@@ -25,7 +25,7 @@ type DocOut = {
   doc_type: DocType;
   path: string;
   url: string | null;
-  excerpt?: string; // optional
+  excerpt?: string;
 };
 
 /* ---------------------------------------------
@@ -105,112 +105,14 @@ function titleFromPath(path: string) {
   return docName;
 }
 
-function buildSearchTokens(q: string) {
-  const STOP = new Set([
-    "doc",
-    "docs",
-    "document",
-    "documents",
-    "pdf",
-    "file",
-    "files",
-    "sheet",
-    "sheets",
-    "sales",
-    "data",
-    "submittal",
-    "spec",
-    "specs",
-    "details",
-    "manual",
-    "manuals",
-    "install",
-    "installation",
-    "instructions",
-    "drawing",
-    "drawings",
-    "render",
-    "image",
-    "images",
-    "cad",
-    "dwg",
-    "step",
-    "stp",
-  ]);
-
-  const raw = (q || "").toLowerCase().trim();
-  if (!raw) return [];
-
-  const tokens = raw
-    .replace(/[^a-z0-9\-\/]+/g, " ")
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .filter((t) => t.length >= 2 && !STOP.has(t));
-
-  const extra: string[] = [];
-  if (raw.includes("u anchor")) extra.push("u-anchor");
-  if (raw.includes("u-anchor")) extra.push("u anchor");
-  if (raw.includes("camera mount")) extra.push("camera-mount");
-  if (raw.includes("light mount")) extra.push("light-mount");
-  if (raw.includes("hvac")) extra.push("hvac");
-
-  const out = Array.from(new Set([...tokens, ...extra])).filter(Boolean);
-  return out.length ? out : [raw];
-}
-
-/**
- * Recursively list all file paths in a bucket (optionally within a prefix folder).
- */
-async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
-  const storage = supabaseAdmin.storage.from(bucket);
-
-  const root = normalizePathInput(startPrefix || "");
-  const queue: string[] = [root];
-  const files: string[] = [];
-
-  while (queue.length) {
-    const prefix = queue.shift() ?? "";
-    const { data, error } = await storage.list(prefix || "", {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" },
-    });
-
-    if (error) continue;
-
-    for (const item of data || []) {
-      const name = item.name;
-      const full = prefix ? `${prefix}/${name}` : name;
-
-      // Supabase list returns folders without metadata (and no extension)
-      const isFolder = !item.metadata && !extOf(name);
-      if (isFolder) queue.push(full);
-      else files.push(full);
-    }
-  }
-
-  return files;
-}
-
-/* ---------------------------------------------
-   Text extraction (NO pdf/docx deps)
-   - We only extract txt + md
-   - pdf/docx returns empty string to avoid build-time deps
---------------------------------------------- */
-
 function cleanExcerpt(text: string, maxLen: number) {
-  const t = (text || "")
-    .replace(/\s+/g, " ")
-    .replace(/\u0000/g, "")
-    .trim();
+  const t = (text || "").replace(/\s+/g, " ").replace(/\u0000/g, "").trim();
   if (!t) return "";
   return t.length > maxLen ? t.slice(0, maxLen).trim() : t;
 }
 
 async function extractTextFromStoragePath(path: string, maxLen: number) {
   const e = extOf(path);
-
-  // Only extract from txt/md to keep builds dependency-free
   if (!["txt", "md"].includes(e)) return "";
 
   const { data, error } = await supabaseAdmin.storage.from("knowledge").download(path);
@@ -225,10 +127,6 @@ async function extractTextFromStoragePath(path: string, maxLen: number) {
     return "";
   }
 }
-
-/* ---------------------------------------------
-   Signing + output
---------------------------------------------- */
 
 async function signUrlsForPaths(paths: string[], expiresIn: number, withText: boolean, excerptLen: number) {
   const out: DocOut[] = [];
@@ -253,6 +151,69 @@ async function signUrlsForPaths(paths: string[], expiresIn: number, withText: bo
   return out;
 }
 
+/**
+ * Fast path listing via Postgres: storage.objects
+ * Requires service role (supabaseAdmin).
+ */
+async function listPathsViaDb(opts: {
+  prefix?: string;
+  q?: string;
+  page: number;
+  limit: number;
+}) {
+  const { prefix, q, page, limit } = opts;
+
+  const from = supabaseAdmin.schema("storage").from("objects");
+
+  // Base filter
+  let query = from.select("name", { count: "exact" }).eq("bucket_id", "knowledge");
+
+  // Prefix filter
+  if (prefix) {
+    const p = normalizePathInput(prefix);
+    // Like 'anchor/u-anchors/u3400/epdm/%'
+    query = query.like("name", `${p}%`);
+  }
+
+  // Simple name search
+  if (q) {
+    const qq = String(q).toLowerCase().trim();
+    if (qq) query = query.ilike("name", `%${qq}%`);
+  }
+
+  const offset = page * limit;
+  const { data, error, count } = await query
+    .order("name", { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (error) throw error;
+
+  const names = (data || []).map((r: any) => String(r?.name || "")).filter(Boolean);
+  return { names, total: count ?? names.length };
+}
+
+/**
+ * Convenience: build folder from structured params
+ * product=u-anchors&model=u3400&membrane=epdm -> anchor/u-anchors/u3400/epdm/
+ */
+function folderFromStructuredParams(sp: URLSearchParams) {
+  const product = (sp.get("product") || "").trim().toLowerCase();
+  const model = (sp.get("model") || "").trim().toLowerCase();
+  const membrane = (sp.get("membrane") || "").trim().toLowerCase();
+
+  if (!product) return "";
+
+  // only one product for now, but keep it extensible
+  if (product === "u-anchors" || product === "u-anchor" || product === "uanchor" || product === "uanchors") {
+    let folder = "anchor/u-anchors/";
+    if (model) folder += `${model}/`;
+    if (membrane) folder += `${membrane}/`;
+    return folder;
+  }
+
+  return "";
+}
+
 /* ---------------------------------------------
    Handler
 --------------------------------------------- */
@@ -261,61 +222,40 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
+    // Inputs
     const folderRaw = searchParams.get("folder");
     const qRaw = searchParams.get("q");
-    const all = searchParams.get("all") === "1";
 
     const withText = searchParams.get("withText") === "1";
     const excerptLen = Math.min(2000, Math.max(200, Number(searchParams.get("excerptLen") || 700)));
 
     const page = Math.max(0, Number(searchParams.get("page") || 0));
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 20)));
-    const offset = page * limit;
 
-    const folder = folderRaw ? normalizePathInput(folderRaw) : "";
+    // Build folder (priority: explicit folder, else structured params)
+    const structuredFolder = folderFromStructuredParams(searchParams);
+    const folder = folderRaw ? normalizePathInput(folderRaw) : structuredFolder;
+
     const q = qRaw ? decodeURIComponent(qRaw).trim() : "";
 
-    let paths: string[] = [];
+    // ✅ List paths from DB
+    const { names, total } = await listPathsViaDb({
+      prefix: folder || undefined,
+      q: q || undefined,
+      page,
+      limit,
+    });
 
-    if (folder) {
-      paths = await listAllPathsRecursive("knowledge", folder);
-    } else if (q) {
-      const allPaths = await listAllPathsRecursive("knowledge", "");
-      const tokens = buildSearchTokens(q).map((t) => t.toLowerCase());
-      paths = allPaths.filter((p) => {
-        const lp = p.toLowerCase();
-        return tokens.some((t) => lp.includes(t));
-      });
-    } else if (all) {
-      paths = await listAllPathsRecursive("knowledge", "");
-    } else {
-      const allPaths = await listAllPathsRecursive("knowledge", "");
-      allPaths.sort((a, b) => a.localeCompare(b));
-      const slice = allPaths.slice(0, limit);
-
-      const docs = await signUrlsForPaths(slice, 60 * 30, withText, excerptLen);
-
-      return NextResponse.json({
-        docs,
-        page: 0,
-        limit: docs.length,
-        total: allPaths.length,
-        hasMore: allPaths.length > limit,
-      });
-    }
-
-    paths.sort((a, b) => a.localeCompare(b));
-    const total = paths.length;
-    const slice = paths.slice(offset, offset + limit);
-
-    const docs = await signUrlsForPaths(slice, 60 * 30, withText, excerptLen);
+    const docs = await signUrlsForPaths(names, 60 * 30, withText, excerptLen);
 
     return NextResponse.json({
       docs,
       page,
-      limit,
+      limit: docs.length,
       total,
-      hasMore: offset + limit < total,
+      hasMore: (page + 1) * limit < total,
+      folder: folder || "",
+      q: q || "",
     });
   } catch (e: any) {
     return NextResponse.json({ docs: [], error: e?.message || "Unknown error" }, { status: 500 });
