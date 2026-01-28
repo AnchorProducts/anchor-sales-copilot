@@ -25,7 +25,7 @@ type DocOut = {
   doc_type: DocType;
   path: string;
   url: string | null;
-  excerpt?: string; // ✅ NEW (optional)
+  excerpt?: string; // optional
 };
 
 /* ---------------------------------------------
@@ -160,7 +160,7 @@ function buildSearchTokens(q: string) {
 }
 
 /**
- * Recursively list ALL file paths in a bucket (optionally within a prefix folder).
+ * Recursively list all file paths in a bucket (optionally within a prefix folder).
  */
 async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
   const storage = supabaseAdmin.storage.from(bucket);
@@ -182,6 +182,7 @@ async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
       const name = item.name;
       const full = prefix ? `${prefix}/${name}` : name;
 
+      // Supabase list returns folders without metadata (and no extension)
       const isFolder = !item.metadata && !extOf(name);
       if (isFolder) queue.push(full);
       else files.push(full);
@@ -192,7 +193,9 @@ async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
 }
 
 /* ---------------------------------------------
-   Text extraction (NEW)
+   Text extraction (NO pdf/docx deps)
+   - We only extract txt + md
+   - pdf/docx returns empty string to avoid build-time deps
 --------------------------------------------- */
 
 function cleanExcerpt(text: string, maxLen: number) {
@@ -207,8 +210,8 @@ function cleanExcerpt(text: string, maxLen: number) {
 async function extractTextFromStoragePath(path: string, maxLen: number) {
   const e = extOf(path);
 
-  // Only extract from a few types
-  if (!["pdf", "docx", "txt", "md"].includes(e)) return "";
+  // Only extract from txt/md to keep builds dependency-free
+  if (!["txt", "md"].includes(e)) return "";
 
   const { data, error } = await supabaseAdmin.storage.from("knowledge").download(path);
   if (error || !data) return "";
@@ -217,20 +220,6 @@ async function extractTextFromStoragePath(path: string, maxLen: number) {
   const buf = Buffer.from(arrayBuf);
 
   try {
-    if (e === "pdf") {
-      // lazy import so route still runs if dep isn’t installed yet
-      const pdfParse = (await import("pdf-parse")).default as any;
-      const parsed = await pdfParse(buf);
-      return cleanExcerpt(parsed?.text || "", maxLen);
-    }
-
-    if (e === "docx") {
-      const mammoth = await import("mammoth");
-      const result = await mammoth.extractRawText({ buffer: buf });
-      return cleanExcerpt(result?.value || "", maxLen);
-    }
-
-    // txt/md
     return cleanExcerpt(buf.toString("utf8"), maxLen);
   } catch {
     return "";
@@ -238,13 +227,12 @@ async function extractTextFromStoragePath(path: string, maxLen: number) {
 }
 
 /* ---------------------------------------------
-   Signing + output (UPDATED)
+   Signing + output
 --------------------------------------------- */
 
 async function signUrlsForPaths(paths: string[], expiresIn: number, withText: boolean, excerptLen: number) {
   const out: DocOut[] = [];
 
-  // sequential is safest for rate-limits; if you want speed, we can add a concurrency pool
   for (const p of paths) {
     const doc_type = docTypeFromPath(p);
     const title = titleFromPath(p);
@@ -281,7 +269,7 @@ export async function GET(req: Request) {
     const excerptLen = Math.min(2000, Math.max(200, Number(searchParams.get("excerptLen") || 700)));
 
     const page = Math.max(0, Number(searchParams.get("page") || 0));
-    const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 20))); // keep smaller when withText
+    const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 20)));
     const offset = page * limit;
 
     const folder = folderRaw ? normalizePathInput(folderRaw) : "";
@@ -304,8 +292,16 @@ export async function GET(req: Request) {
       const allPaths = await listAllPathsRecursive("knowledge", "");
       allPaths.sort((a, b) => a.localeCompare(b));
       const slice = allPaths.slice(0, limit);
+
       const docs = await signUrlsForPaths(slice, 60 * 30, withText, excerptLen);
-      return NextResponse.json({ docs, page: 0, limit: docs.length, total: allPaths.length, hasMore: allPaths.length > limit });
+
+      return NextResponse.json({
+        docs,
+        page: 0,
+        limit: docs.length,
+        total: allPaths.length,
+        hasMore: allPaths.length > limit,
+      });
     }
 
     paths.sort((a, b) => a.localeCompare(b));
