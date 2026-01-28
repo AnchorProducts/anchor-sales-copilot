@@ -178,13 +178,14 @@ function typeFromPath(path: string) {
 
 const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   // Solutions (examples)
-  "2 Pipe Snow Fence": ["2pipe/2pipe", "solutions/snow-retention/2pipe", "solutions/2pipe/2pipe"],
-  "Snow Fence": ["2pipe/snow-fence", "solutions/snow-retention/snow-fence", "solutions/2pipe/snow-fence"],
-  "HVAC Tie Down": ["solutions/hvac"],
+  "2-Pipe Snow Fence": ["solutions/snow-retention/2-pipe-snow-fence"],
+  "Unitized Snow Fence": ["2pipe/snow-fence", "solutions/snow-retention/unitized-snow-fence"],
+  "Existing Mechanical Tie-Down": ["solutions/hvac"],
+  "Roof-Mounted Elevated Stack Securement": ["solutions/elevated-stack/roof-stack"],
+  "Wall-Mounted Elevated Stack Securement": ["solutions/elevated-stack/wall-stack"],
   "Roof Mounted Box": ["solutions/roof-box"],
   "Attached Pipe Frame": ["pipe-frame/attached", "solutions/pipe-frame/attached", "attached"],
-  // NOTE: you had a typo earlier "exisiting" — keep only correct spelling unless your bucket truly uses the typo
-  "Existing Pipe Frame": ["pipe-frame/existing", "solutions/pipe-frame/existing", "existing"],
+  "Existing Pipe Frame": ["solutions/pipe-frame/exisiting"],
   "Roof Mounted Guardrail": ["solutions/roof-guardrail"],
   "Wall Mounted Guardrail": ["solutions/wall-guardrail"],
   "Wall Mounted Box": ["solutions/wall-box"],
@@ -204,7 +205,7 @@ const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "U2600 SBS Torch": ["anchor/u-anchors/u2600/sbs-torch"],
   "U2800 Coatings": ["anchor/u-anchors/u2800/coatings"],
   "U3200 Plate": ["anchor/u-anchors/u3200/plate"],
-  "U3400 EDPM": ["anchor/u-anchors/u3400/edpm"],
+  "U3400 EDPM": ["anchor/u-anchors/u3400/epdm"],
   "U3400 KEE": ["anchor/u-anchors/u3400/kee"],
   "U3400 PVC": ["anchor/u-anchors/u3400/pvc"],
   "U3400 TPO": ["anchor/u-anchors/u3400/tpo"],
@@ -809,7 +810,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   <div className="flex w-full gap-2 sm:justify-end">
     {(() => {
       const ext = extOf(a.path);
-      const canOpenInline = ["pdf", "png", "jpg", "jpeg"].includes(ext);
+      const canOpenInline = ["pdf", "png", "jpg", "jpeg", "mp4"].includes(ext);
 
       return (
         <>

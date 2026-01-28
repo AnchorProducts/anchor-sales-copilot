@@ -1,7 +1,6 @@
 // src/app/api/docs/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +25,7 @@ type DocOut = {
   doc_type: DocType;
   path: string;
   url: string | null;
+  excerpt?: string; // ✅ NEW (optional)
 };
 
 /* ---------------------------------------------
@@ -75,7 +75,6 @@ function docTypeFromPath(path: string): DocType {
   const p = path.toLowerCase();
   const e = extOf(p);
 
-  // most specific first
   if (p.includes("sales-sheet")) return "sales_sheet";
   if (p.includes("product-data-sheet")) return "product_data_sheet";
   if (p.includes("data-sheet")) return "data_sheet";
@@ -99,7 +98,6 @@ function titleFromPath(path: string) {
   const parts = path.split("/").filter(Boolean);
   const docName = humanizeDocNameFromFile(path);
 
-  // include last folder name when possible
   const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
   const niceParent = parent ? titleCaseWords(parent.replace(/[-_]+/g, " ")) : "";
 
@@ -150,81 +148,126 @@ function buildSearchTokens(q: string) {
     .filter(Boolean)
     .filter((t) => t.length >= 2 && !STOP.has(t));
 
-  // common hyphen normalization
   const extra: string[] = [];
+  if (raw.includes("u anchor")) extra.push("u-anchor");
+  if (raw.includes("u-anchor")) extra.push("u anchor");
   if (raw.includes("camera mount")) extra.push("camera-mount");
   if (raw.includes("light mount")) extra.push("light-mount");
   if (raw.includes("hvac")) extra.push("hvac");
 
   const out = Array.from(new Set([...tokens, ...extra])).filter(Boolean);
-
-  // if user only typed stopwords like "docs", fallback to raw
   return out.length ? out : [raw];
 }
 
-async function signUrlsForPaths(req: Request, paths: string[], expiresIn = 60 * 30) {
-  const out: DocOut[] = [];
-
-  for (const p of paths) {
-    const doc_type = docTypeFromPath(p);
-    const title = titleFromPath(p);
-
-    let url: string | null = null;
-
-    // ✅ Use service role for signing (works for internal + external, desktop + mobile)
-    const { data, error } = await supabaseAdmin.storage
-      .from("knowledge")
-      .createSignedUrl(p, expiresIn);
-
-    if (!error) url = data?.signedUrl ?? null;
-
-    out.push({ title, doc_type, path: p, url });
-  }
-
-  return out;
-}
-
-
 /**
  * Recursively list ALL file paths in a bucket (optionally within a prefix folder).
- * This avoids querying storage.objects (which fails if the "storage" schema isn't exposed in Supabase API settings).
  */
 async function listAllPathsRecursive(bucket: string, startPrefix?: string) {
-  const storage = supabaseAdmin.storage.from(bucket); // ✅ no function call
+  const storage = supabaseAdmin.storage.from(bucket);
 
   const root = normalizePathInput(startPrefix || "");
-  const queue: string[] = [root]; // folder prefixes
+  const queue: string[] = [root];
   const files: string[] = [];
 
   while (queue.length) {
     const prefix = queue.shift() ?? "";
     const { data, error } = await storage.list(prefix || "", {
-      limit: 1000, // safe (271 objects total)
+      limit: 1000,
       sortBy: { column: "name", order: "asc" },
     });
 
-    if (error) {
-      // if a prefix doesn't exist, just skip
-      continue;
-    }
+    if (error) continue;
 
     for (const item of data || []) {
       const name = item.name;
       const full = prefix ? `${prefix}/${name}` : name;
 
-      // Supabase storage.list returns folders as items with null metadata/id
       const isFolder = !item.metadata && !extOf(name);
-
-      if (isFolder) {
-        queue.push(full);
-      } else {
-        files.push(full);
-      }
+      if (isFolder) queue.push(full);
+      else files.push(full);
     }
   }
 
   return files;
 }
+
+/* ---------------------------------------------
+   Text extraction (NEW)
+--------------------------------------------- */
+
+function cleanExcerpt(text: string, maxLen: number) {
+  const t = (text || "")
+    .replace(/\s+/g, " ")
+    .replace(/\u0000/g, "")
+    .trim();
+  if (!t) return "";
+  return t.length > maxLen ? t.slice(0, maxLen).trim() : t;
+}
+
+async function extractTextFromStoragePath(path: string, maxLen: number) {
+  const e = extOf(path);
+
+  // Only extract from a few types
+  if (!["pdf", "docx", "txt", "md"].includes(e)) return "";
+
+  const { data, error } = await supabaseAdmin.storage.from("knowledge").download(path);
+  if (error || !data) return "";
+
+  const arrayBuf = await data.arrayBuffer();
+  const buf = Buffer.from(arrayBuf);
+
+  try {
+    if (e === "pdf") {
+      // lazy import so route still runs if dep isn’t installed yet
+      const pdfParse = (await import("pdf-parse")).default as any;
+      const parsed = await pdfParse(buf);
+      return cleanExcerpt(parsed?.text || "", maxLen);
+    }
+
+    if (e === "docx") {
+      const mammoth = await import("mammoth");
+      const result = await mammoth.extractRawText({ buffer: buf });
+      return cleanExcerpt(result?.value || "", maxLen);
+    }
+
+    // txt/md
+    return cleanExcerpt(buf.toString("utf8"), maxLen);
+  } catch {
+    return "";
+  }
+}
+
+/* ---------------------------------------------
+   Signing + output (UPDATED)
+--------------------------------------------- */
+
+async function signUrlsForPaths(paths: string[], expiresIn: number, withText: boolean, excerptLen: number) {
+  const out: DocOut[] = [];
+
+  // sequential is safest for rate-limits; if you want speed, we can add a concurrency pool
+  for (const p of paths) {
+    const doc_type = docTypeFromPath(p);
+    const title = titleFromPath(p);
+
+    let url: string | null = null;
+    const { data, error } = await supabaseAdmin.storage.from("knowledge").createSignedUrl(p, expiresIn);
+    if (!error) url = data?.signedUrl ?? null;
+
+    const doc: DocOut = { title, doc_type, path: p, url };
+
+    if (withText) {
+      doc.excerpt = await extractTextFromStoragePath(p, excerptLen);
+    }
+
+    out.push(doc);
+  }
+
+  return out;
+}
+
+/* ---------------------------------------------
+   Handler
+--------------------------------------------- */
 
 export async function GET(req: Request) {
   try {
@@ -234,48 +277,42 @@ export async function GET(req: Request) {
     const qRaw = searchParams.get("q");
     const all = searchParams.get("all") === "1";
 
+    const withText = searchParams.get("withText") === "1";
+    const excerptLen = Math.min(2000, Math.max(200, Number(searchParams.get("excerptLen") || 700)));
+
     const page = Math.max(0, Number(searchParams.get("page") || 0));
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 50)));
+    const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 20))); // keep smaller when withText
     const offset = page * limit;
 
     const folder = folderRaw ? normalizePathInput(folderRaw) : "";
     const q = qRaw ? decodeURIComponent(qRaw).trim() : "";
 
-    // 1) Collect authoritative file paths from Storage (no storage schema query)
     let paths: string[] = [];
 
     if (folder) {
-      // ✅ recursive within folder
       paths = await listAllPathsRecursive("knowledge", folder);
     } else if (q) {
-      // ✅ recursive from root, then filter by tokens (OR semantics)
       const allPaths = await listAllPathsRecursive("knowledge", "");
-      const tokens = buildSearchTokens(q);
-
-      const lowerTokens = tokens.map((t) => t.toLowerCase());
+      const tokens = buildSearchTokens(q).map((t) => t.toLowerCase());
       paths = allPaths.filter((p) => {
         const lp = p.toLowerCase();
-        return lowerTokens.some((t) => lp.includes(t));
+        return tokens.some((t) => lp.includes(t));
       });
     } else if (all) {
-      // ✅ list all (paginated below)
       paths = await listAllPathsRecursive("knowledge", "");
     } else {
-      // ✅ default safe slice: just list everything then take first "limit" alphabetically
       const allPaths = await listAllPathsRecursive("knowledge", "");
       allPaths.sort((a, b) => a.localeCompare(b));
       const slice = allPaths.slice(0, limit);
-      const docs = await signUrlsForPaths(req, slice);
+      const docs = await signUrlsForPaths(slice, 60 * 30, withText, excerptLen);
       return NextResponse.json({ docs, page: 0, limit: docs.length, total: allPaths.length, hasMore: allPaths.length > limit });
     }
 
-    // 2) Sort + paginate
     paths.sort((a, b) => a.localeCompare(b));
     const total = paths.length;
     const slice = paths.slice(offset, offset + limit);
 
-    // 3) Signed URLs
-    const docs = await signUrlsForPaths(req, slice);
+    const docs = await signUrlsForPaths(slice, 60 * 30, withText, excerptLen);
 
     return NextResponse.json({
       docs,
