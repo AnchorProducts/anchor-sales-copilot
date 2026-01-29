@@ -652,19 +652,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   }
 
   // "Open" should be inline (good for iOS Quick Look / in-app viewer)
-  async function openInline(path: string) {
-  const href = await docOpenHrefWithToken(supabase, path, false);
-  // ✅ open a new tab/window so the library page stays put
-  window.open(href, "_blank", "noopener,noreferrer");
-}
+  function openInline(path: string) {
+    window.location.href = docOpenHref(path, false);
+  }
 
-
-  async function forceDownload(path: string) {
-  const href = await docOpenHrefWithToken(supabase, path, true);
-  // ✅ don't navigate away; just trigger download
-  triggerDownload(href, basename(path));
-}
-
+  function forceDownload(path: string) {
+    window.location.href = docOpenHref(path, true);
+  }
 
   async function shareAsset(path: string) {
     // Share a link that works on iOS. This endpoint should redirect to a signed URL.
