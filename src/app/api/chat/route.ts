@@ -583,6 +583,7 @@ export async function POST(req: Request) {
 
     let matchedFolder: string | null = null;
 
+    
     if (readyForDocs && supabase) {
       const hint = series ? SERIES_HINT_TEXT[series] : "";
       const matchText = `${ctx.securing} ${hint} ${ctx.raw} ${userText}`;
