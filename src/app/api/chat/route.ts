@@ -134,12 +134,12 @@ function extractCondition(text: string) {
   return null;
 }
 
-function buildConversationMemory(messages: ChatMsg[]) {
-  const allText = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
-  const membrane = extractMembrane(allText);
-  const anchorSeries = extractAnchorSeries(allText);
-  const mountSurface = extractMountSurface(allText);
-  const condition = extractCondition(allText);
+function buildConversationMemory(userText: string) {
+  // Only use explicit user-provided details for memory.
+  const membrane = extractMembrane(userText);
+  const anchorSeries = extractAnchorSeries(userText);
+  const mountSurface = extractMountSurface(userText);
+  const condition = extractCondition(userText);
 
   const mem: Record<string, string> = {};
   if (membrane) mem.membrane = membrane.toUpperCase();
@@ -258,6 +258,9 @@ function shouldReturnDocs(params: {
 
   // If we have preference and a solution bucket, return docs now (no extra blocking).
   if (hasSolution) return true;
+
+  // If user explicitly asked for docs, allow a broader search even if solution isn't resolved yet.
+  if (userAskedForDocs(lastUser)) return true;
 
   // If current answer contains wrap-up, we still do NOT return docs until the next user turn.
   if (detectWrapUp(answer)) return false;
@@ -394,6 +397,7 @@ Critical guardrails:
 
 System-wide rules:
 - All anchors are matched based on the roof membrane type (TPO, PVC, EPDM, etc.).
+- Never assume a membrane type. Only state a membrane if the user explicitly provided it.
 - Guy wire kits ONLY use 2000-series anchors.
 - All solutions that use guy wire kits are tie-down solutions.
 - Use conversation context: if the user provides partial info (ex: “TPO roof”), do not reset the conversation.
@@ -487,7 +491,7 @@ Antenna
 - Securing: antenna
 
 Equipment Screen
-- Also called: rooftop screen, visual screen
+- Also called: rooftop screen, visual screen, windscreen
 - 2000-series anchors with strut framing
 - Typically secured the same way as signage
 - Securing: equipment-screen
@@ -505,7 +509,7 @@ Light Mount
 - Securing: light-mount
 
 Camera Mount
-- Also called: security camera, surveillance camera
+- Also called: security camera, surveillance camera, cameras
 - 3000-series anchors
 - Typically secured the same way as light mounts
 - Securing: camera-mount
@@ -581,10 +585,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const intentText = `${incoming.map((m) => m.content).join("\n")}\n${lastUser}`;
+    const userOnlyText = incoming
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join("\n");
+    const intentText = `${userOnlyText}\n${lastUser}`;
     const folderHint = resolveCanonicalSolution(intentText) || undefined;
     const canonicalSolution = findCanonicalSolutionByFolder(folderHint);
-    const memory = buildConversationMemory(incoming);
+    const memory = buildConversationMemory(userOnlyText);
     const memoryBlock =
       Object.keys(memory).length > 0
         ? `Conversation memory (confirmed facts):\n${Object.entries(memory)
@@ -593,6 +601,17 @@ export async function POST(req: Request) {
         : "";
 
     const transcript = incoming.map((m) => `${m.role}: ${m.content}`).join("\n");
+
+    // If we can't map to a known Anchor solution, direct to Anchor Products.
+    if (!folderHint) {
+      return NextResponse.json({
+        answer: `That doesn’t map to a known Anchor rooftop attachment solution. ${anchorContact()}`,
+        foldersUsed: [U_ANCHORS_FOLDER],
+        recommendedDocs: [],
+        sessionId: body?.sessionId || undefined,
+        conversationId: body?.conversationId || undefined,
+      } satisfies ChatResponse);
+    }
 
     const docPreference = detectDocPreference(lastUser) || detectDocPreference(transcript);
     const shouldDocs = shouldReturnDocs({
@@ -622,6 +641,17 @@ export async function POST(req: Request) {
           visibility,
         });
         recommendedDocs = recommendedDocs.concat(solutionDocs);
+        if (recommendedDocs.length === 0 && folderHint) {
+          const fallbackSolutionDocs = await fetchDocs(req, {
+            folder: folderHint,
+            q: undefined,
+            limit: 8,
+            withText: true,
+            excerptLen: 900,
+            visibility,
+          });
+          recommendedDocs = recommendedDocs.concat(fallbackSolutionDocs);
+        }
       }
       if (docPreference === "anchor_membrane" || docPreference === "both") {
         const anchorQuery = [anchorSeries, membrane].filter(Boolean).join(" ");
@@ -634,6 +664,17 @@ export async function POST(req: Request) {
           visibility,
         });
         recommendedDocs = recommendedDocs.concat(anchorDocs);
+        if (recommendedDocs.length === 0) {
+          const fallbackAnchorDocs = await fetchDocs(req, {
+            folder: U_ANCHORS_FOLDER,
+            q: anchorQuery || undefined,
+            limit: 8,
+            withText: true,
+            excerptLen: 900,
+            visibility,
+          });
+          recommendedDocs = recommendedDocs.concat(fallbackAnchorDocs);
+        }
       }
       // de-dupe by path
       const seen = new Set<string>();

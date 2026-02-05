@@ -427,6 +427,62 @@ export const CANONICAL_SOLUTIONS: CanonicalSolution[] = [
       "Wall/parapet-mounted boxes are typically supported using attachment solutions that stabilize the enclosure at the roof-to-wall interface.",
   },
 
+  // ----------------------------
+  // Equipment screen / signage
+  // ----------------------------
+  {
+    key: "equipment-screen",
+    match: /\b(equipment\s*screen|rooftop\s*screen|visual\s*screen|wind\s*screen|windscreen)\b/i,
+    securing: "equipment-screen",
+    storageFolder: "solutions/equipment-screen",
+    anchorType: "2000",
+    keywords: ["equipment screen", "rooftop screen", "visual screen", "windscreen"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Equipment screens are typically secured using 2000-series anchors with strut framing, similar to rooftop signage.",
+  },
+  {
+    key: "signage",
+    match: /\b(signage|rooftop\s*sign|roof\s*sign|branded\s*sign)\b/i,
+    securing: "signage",
+    storageFolder: "solutions/signage",
+    anchorType: "2000",
+    keywords: ["signage", "rooftop sign", "roof sign"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Rooftop signage is commonly secured using 2000-series anchors with strut framing.",
+  },
+
+  // ----------------------------
+  // Light / camera mounts
+  // ----------------------------
+  {
+    key: "light-mount",
+    match: /\b(light\s*mount|lighting\s*mount|area\s*light|flood\s*light)\b/i,
+    securing: "light-mount",
+    storageFolder: "solutions/light-mount",
+    anchorType: "3000",
+    keywords: ["light mount", "area light", "flood light"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Light mounts typically use 3000-series anchors with strut framing for rooftop lighting equipment.",
+  },
+  {
+    key: "camera-mount",
+    match: /\b(camera\s*mount|camera|cctv|surveillance\s*camera|security\s*camera)\b/i,
+    securing: "camera-mount",
+    storageFolder: "solutions/camera-mount",
+    anchorType: "3000",
+    keywords: ["camera mount", "security camera", "surveillance camera", "cctv"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Camera mounts typically use 3000-series anchors with strut framing for rooftop surveillance equipment.",
+  },
+
   // Keep adding the rest of your solutions the same way:
   // - securing aligns to storage folder routes
   // - include storageFolder

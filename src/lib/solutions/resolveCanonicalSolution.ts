@@ -169,12 +169,15 @@ function normalizeIntentText(input: string) {
   // Screens vs signage (treated similarly)
   t = t.replace(/\bequipment\s*screen(s)?\b/g, "equipment screen signage");
   t = t.replace(/\brooftop\s*screen(s)?\b/g, "equipment screen signage");
+  t = t.replace(/\bwind\s*screen(s)?\b/g, "equipment screen signage");
+  t = t.replace(/\bwindscreen(s)?\b/g, "equipment screen signage");
 
   // Light/camera mounts (treated similarly)
   t = t.replace(/\bflood\s*light\b/g, "light mount");
   t = t.replace(/\barea\s*light\b/g, "light mount");
   t = t.replace(/\bsecurity\s*camera\b/g, "camera mount");
   t = t.replace(/\bsurveillance\s*camera\b/g, "camera mount");
+  t = t.replace(/\bcamera(s)?\b/g, "camera mount");
 
   // Satellite / antenna naming
   t = t.replace(/\bsatellite\s*antenna\b/g, "satellite dish");
