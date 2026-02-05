@@ -219,8 +219,7 @@ export function formatSheetRecommendations(sol: CanonicalSolution, state: Intake
         ? sol.recommendedDocKinds
         : ["data_sheet", "install_sheet", "sales_sheet"];
 
-  const membrane =
-    state.membrane && state.membrane !== "unknown" ? state.membrane.toUpperCase() : "most membranes";
+  const membrane = state.membrane ? state.membrane.toUpperCase() : "most membranes";
   const anchorType =
     state.anchorType && state.anchorType !== "unknown" ? state.anchorType : sol.anchorType;
 
