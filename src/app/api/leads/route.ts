@@ -124,6 +124,8 @@ export async function POST(req: Request) {
         wants_video_call,
         preferred_times,
         video_call_phone: wants_video_call ? video_call_phone : null,
+        hubspot_sync_status: "pending",
+        hubspot_sync_error: null,
       })
       .select("id")
       .single();

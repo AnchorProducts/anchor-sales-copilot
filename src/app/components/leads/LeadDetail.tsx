@@ -30,6 +30,8 @@ type LeadRow = {
   hubspot_company_id: string | null;
   hubspot_contact_id: string | null;
   hubspot_deal_id: string | null;
+  hubspot_sync_status?: string | null;
+  hubspot_sync_error?: string | null;
   created_at: string;
 };
 
@@ -332,8 +334,14 @@ export default function LeadDetail({ id }: { id: string }) {
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-        <div className="text-sm font-semibold text-black">HubSpot IDs</div>
-        <div className="mt-2 text-[12px] text-[#76777B]">Company: {lead.hubspot_company_id || "—"}</div>
+        <div className="text-sm font-semibold text-black">HubSpot</div>
+        <div className="mt-2 text-[12px] text-[#76777B]">
+          Sync status: {lead.hubspot_sync_status || "pending"}
+        </div>
+        {lead.hubspot_sync_status === "failed" && lead.hubspot_sync_error && (
+          <div className="mt-1 text-[12px] text-red-600">{lead.hubspot_sync_error}</div>
+        )}
+        <div className="mt-3 text-[12px] text-[#76777B]">Company: {lead.hubspot_company_id || "—"}</div>
         <div className="text-[12px] text-[#76777B]">Contact: {lead.hubspot_contact_id || "—"}</div>
         <div className="text-[12px] text-[#76777B]">Deal: {lead.hubspot_deal_id || "—"}</div>
       </section>

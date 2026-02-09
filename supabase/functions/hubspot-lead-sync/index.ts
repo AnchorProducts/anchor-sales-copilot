@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") || "";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const HUBSPOT_TOKEN = Deno.env.get("HUBSPOT_PRIVATE_APP_TOKEN") || "";
 
@@ -70,6 +70,27 @@ async function associate(from: string, fromId: string, to: string, toId: string,
   }
 }
 
+function truncate(input: string, max: number) {
+  const s = String(input || "");
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function clean(v: any) {
+  return String(v || "").trim();
+}
+
+async function markFailed(supabase: ReturnType<typeof createClient>, leadId: string, errorMsg: string) {
+  const msg = truncate(errorMsg, 500);
+  await supabase
+    .from("leads")
+    .update({
+      hubspot_sync_status: "failed",
+      hubspot_sync_error: msg,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", leadId);
+}
+
 serve(async (req) => {
   if (!SUPABASE_URL || !SERVICE_KEY) return json({ error: "Missing Supabase env." }, 500);
   if (!HUBSPOT_TOKEN) return json({ error: "Missing HUBSPOT_PRIVATE_APP_TOKEN" }, 500);
@@ -77,10 +98,13 @@ serve(async (req) => {
   const token = bearerToken(req);
   if (!token || token !== SERVICE_KEY) return json({ error: "Unauthorized" }, 401);
 
+  let leadId = "";
+
   try {
     const body = await req.json().catch(() => ({}));
     const lead_id = String(body?.lead_id || "").trim();
     if (!lead_id) return json({ error: "Missing lead_id" }, 400);
+    leadId = lead_id;
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -93,8 +117,12 @@ serve(async (req) => {
     if (leadErr) return json({ error: leadErr.message }, 500);
     if (!lead) return json({ error: "Lead not found" }, 404);
 
-    const companyName = String(lead.customer_company || "").trim();
-    const contactEmail = String(lead.created_by_email || "").trim();
+    if (lead.hubspot_deal_id) {
+      return json({ ok: true, already_synced: true });
+    }
+
+    const companyName = clean(lead.customer_company);
+    const contactEmail = clean(lead.created_by_email);
 
     // Company
     let companyId: string | null = null;
@@ -111,6 +139,14 @@ serve(async (req) => {
         });
 
         if (res.ok) companyId = cjson?.id || null;
+      } else {
+        // Update existing company name to keep fresh
+        await hubspotFetch(`/crm/v3/objects/companies/${companyId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            properties: { name: companyName },
+          }),
+        });
       }
     }
 
@@ -129,19 +165,29 @@ serve(async (req) => {
         });
 
         if (res.ok) contactId = cjson?.id || null;
+      } else {
+        await hubspotFetch(`/crm/v3/objects/contacts/${contactId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            properties: { email: contactEmail },
+          }),
+        });
       }
     }
 
     // Deal
     let dealId: string | null = null;
     const dealName = companyName ? `${companyName} - Rooftop Lead` : "Rooftop Lead";
+    const detailSummary = truncate(clean(lead.details), 500);
     const { res: dres, json: djson } = await hubspotFetch("/crm/v3/objects/deals", {
       method: "POST",
       body: JSON.stringify({
         properties: {
           dealname: dealName,
           region_code: lead.region_code || "",
-          lead_source: "Anchor Lead Form",
+          submitted_via: "External Contractor App",
+          wants_video_call: String(!!lead.wants_video_call),
+          lead_detail_summary: detailSummary,
         },
       }),
     });
@@ -159,6 +205,8 @@ serve(async (req) => {
         hubspot_company_id: companyId,
         hubspot_contact_id: contactId,
         hubspot_deal_id: dealId,
+        hubspot_sync_status: "synced",
+        hubspot_sync_error: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", lead_id);
@@ -167,6 +215,14 @@ serve(async (req) => {
 
     return json({ ok: true, hubspot_company_id: companyId, hubspot_contact_id: contactId, hubspot_deal_id: dealId });
   } catch (e: any) {
-    return json({ error: e?.message || "HubSpot sync failed" }, 500);
+    try {
+      if (leadId) {
+        const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+        await markFailed(supabase, leadId, e?.message || "HubSpot sync failed");
+      }
+    } catch {
+      // ignore secondary failures
+    }
+    return json({ ok: false, error: e?.message || "HubSpot sync failed" }, 500);
   }
 });
