@@ -50,6 +50,8 @@ export default function DashboardPage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
 
   const [booting, setBooting] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
+  const [roleReady, setRoleReady] = useState(false);
 
   const [loadingChats, setLoadingChats] = useState(true);
   const [recentChats, setRecentChats] = useState<ConversationRow[]>([]);
@@ -223,6 +225,63 @@ export default function DashboardPage() {
     };
   }, [booting, router, supabase]);
 
+  // --- Role check (external vs internal)
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (booting) return;
+
+      const { data: userData } = await supabase.auth.getUser();
+      if (!alive) return;
+
+      const user = userData.user;
+      if (!user) return;
+
+      let { data: prof } = await supabase
+        .from("profiles")
+        .select("role,user_type,email")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!alive) return;
+
+      if (!prof) {
+        const email = (user.email || "").trim().toLowerCase();
+        const isInternalEmail = email.endsWith("@anchorp.com");
+        const roleToSet = isInternalEmail ? "anchor_rep" : "external_rep";
+        const user_type = isInternalEmail ? "internal" : "external";
+
+        const { data: created } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: user.id,
+              email,
+              role: roleToSet,
+              user_type,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          )
+          .select("role")
+          .single();
+
+        prof = created ?? null;
+      }
+
+      if (!alive) return;
+      setRole(String((prof as any)?.role || ""));
+      setRoleReady(true);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [booting, supabase]);
+
+  const isInternal = role === "admin" || role === "anchor_rep";
+
   // --- Recent docs opened
   useEffect(() => {
     let alive = true;
@@ -298,7 +357,7 @@ export default function DashboardPage() {
         {/* Quick actions */}
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-full bg-[#9CE2BB] px-3 py-1 text-[12px] font-semibold text-[#11500F]">
-            Internal tools
+            {isInternal ? "Internal tools" : "External tools"}
           </span>
         </div>
 
@@ -351,121 +410,104 @@ export default function DashboardPage() {
               </div>
             </div>
           </Link>
+
+          {roleReady && (
+            <Link
+              href="/dashboard/leads/new"
+              className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">Submit a Job Lead</div>
+                  <div className="mt-1 text-sm text-[#76777B]">
+                    Send photos and details directly to inside sales.
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
+                  Leads
+                </span>
+              </div>
+
+              <div className="mt-5 flex items-center justify-between">
+                <div className="text-sm font-semibold text-[#047835]">
+                  Submit Lead{" "}
+                  <span className="transition group-hover:translate-x-1 inline-block">→</span>
+                </div>
+              </div>
+            </Link>
+          )}
         </div>
 
         {/* Secondary section */}
-<div className="mt-6 grid gap-5 md:grid-cols-[1fr_360px]">
-  {/* Left */}
-  <div className="rounded-3xl border border-black/10 bg-white p-5 min-w-0">
-    <div className="flex items-center justify-between min-w-0">
-      <div className="text-sm font-semibold">Recent activity</div>
-    </div>
+        <div className="mt-6 grid gap-5 md:grid-cols-[1fr_360px]">
+          {/* Left */}
+          <div className="rounded-3xl border border-black/10 bg-white p-5 min-w-0">
+            <div className="flex items-center justify-between min-w-0">
+              <div className="text-sm font-semibold">Recent activity</div>
+            </div>
 
-    <div className="mt-3 space-y-4 min-w-0">
-      {/* Recent chats */}
-      <div className="min-w-0">
-        <div className="text-[11px] font-semibold text-black/70">Recent chats</div>
+            <div className="mt-3 space-y-4 min-w-0">
+              {/* Recent chats */}
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-black/70">Recent chats</div>
 
-        {loadingChats ? (
-          <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-        ) : recentChats.length === 0 ? (
-          <div className="mt-2 text-sm text-[#76777B]">No chats yet.</div>
-        ) : (
-          <div className="mt-2 space-y-2 min-w-0">
-            {recentChats.slice(0, 3).map((c) => (
-              <Link
-                key={c.id}
-                href={`/chat?cid=${encodeURIComponent(c.id)}`}
-                className="block min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-                title="Open chat"
-              >
-                <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
-                  {titleOrNew(c.title)}
-                </div>
-                <div className="min-w-0 text-[11px] text-[#76777B] truncate">
-                  {formatWhen(c.updated_at || c.created_at)}
-                </div>
-              </Link>
-            ))}
+                {loadingChats ? (
+                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
+                ) : recentChats.length === 0 ? (
+                  <div className="mt-2 text-sm text-[#76777B]">No chats yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2 min-w-0">
+                    {recentChats.slice(0, 3).map((c) => (
+                      <Link
+                        key={c.id}
+                        href={`/chat?cid=${encodeURIComponent(c.id)}`}
+                        className="block min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
+                        title="Open chat"
+                      >
+                        <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
+                          {titleOrNew(c.title)}
+                        </div>
+                        <div className="min-w-0 text-[11px] text-[#76777B] truncate">
+                          {formatWhen(c.updated_at || c.created_at)}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent docs opened */}
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
+
+                {loadingRecentDocs ? (
+                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
+                ) : recentDocs.length === 0 ? (
+                  <div className="mt-2 text-sm text-[#76777B]">No docs opened yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2 min-w-0">
+                    {recentDocs.slice(0, 5).map((r) => (
+                      <a
+                        key={`${r.doc_path}-${r.created_at}`}
+                        href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
+                        title="Open document"
+                      >
+                        <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
+                          {r.doc_title || r.doc_path}
+                        </div>
+                        <div className="min-w-0 text-[11px] text-[#76777B] truncate">
+                          {(r.doc_type || "doc")} • {r.doc_path}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Recent docs opened */}
-      <div className="min-w-0">
-        <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
-
-        {loadingRecentDocs ? (
-          <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-        ) : recentDocs.length === 0 ? (
-          <div className="mt-2 text-sm text-[#76777B]">No docs opened yet.</div>
-        ) : (
-          <div className="mt-2 space-y-2 min-w-0">
-            {recentDocs.slice(0, 5).map((r) => (
-              <a
-                key={`${r.doc_path}-${r.created_at}`}
-                href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-                title="Open document"
-              >
-                <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
-                  {r.doc_title || r.doc_path}
-                </div>
-                <div className="min-w-0 text-[11px] text-[#76777B] truncate">
-                  {(r.doc_type || "doc")} • {r.doc_path}
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-
-      
-    </div>
-  </div>
-
-  {/* Right */}
-  <div className="grid gap-5 self-start">
-    <div className="rounded-3xl border border-black/10 bg-white p-5">
-      <div className="text-sm font-semibold">Quick links</div>
-      <div className="mt-3 flex flex-col gap-2 text-sm">
-        <Link className="text-[#047835] hover:underline" href="/chat">
-          Go to Copilot
-        </Link>
-        <Link className="text-[#047835] hover:underline" href="/assets">
-          Open Asset Library
-        </Link>
-      </div>
-    </div>
-
-    <div className="rounded-3xl border border-black/10 bg-white p-5">
-      <div className="text-sm font-semibold">System status</div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <span
-          className={[
-            "h-2.5 w-2.5 rounded-full",
-            status === "online"
-              ? "bg-[#047835]"
-              : status === "offline"
-              ? "bg-red-500"
-              : "bg-amber-400",
-          ].join(" ")}
-        />
-        <span className="text-sm text-[#76777B]">
-          {status === "checking" ? "Checking…" : status === "online" ? "Online" : "Offline"}
-        </span>
-      </div>
-
-      {statusWhen && (
-        <div className="mt-2 text-[11px] text-[#76777B]">Last checked: {statusWhen}</div>
-      )}
-    </div>
-  </div>
-
-
 
           {/* Right */}
           <div className="grid gap-5 self-start">
@@ -496,11 +538,7 @@ export default function DashboardPage() {
                   ].join(" ")}
                 />
                 <span className="text-sm text-[#76777B]">
-                  {status === "checking"
-                    ? "Checking…"
-                    : status === "online"
-                    ? "Online"
-                    : "Offline"}
+                  {status === "checking" ? "Checking…" : status === "online" ? "Online" : "Offline"}
                 </span>
               </div>
 
