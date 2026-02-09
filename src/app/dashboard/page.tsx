@@ -264,7 +264,7 @@ export default function DashboardPage() {
             },
             { onConflict: "id" }
           )
-          .select("role")
+          .select("role,user_type,email")
           .single();
 
         prof = created ?? null;

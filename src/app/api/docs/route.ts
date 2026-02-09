@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import mammoth from "mammoth";
-import * as pdfParse from "pdf-parse";
 import JSZip from "jszip";
+// pdf-parse is CJS; require avoids default export issues in Next build
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse = require("pdf-parse");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -171,7 +173,7 @@ async function extractTextFromStoragePath(path: string, maxLen: number) {
 
     // PDF
     if (e === "pdf") {
-      const parsed = await (pdfParse as any).default(buf);
+      const parsed = await pdfParse(buf);
       return cleanExcerpt(parsed?.text || "", maxLen);
     }
 

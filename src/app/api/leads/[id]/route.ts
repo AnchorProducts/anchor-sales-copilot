@@ -33,7 +33,7 @@ function clean(v: any) {
   return String(v || "").trim();
 }
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const supabase = await supabaseRoute();
     const { data: auth, error: authErr } = await supabase.auth.getUser();
@@ -42,13 +42,14 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
     const role = await getRole(auth.user.id);
     if (!isInternalRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const id = clean(ctx.params.id);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await ctx.params;
+    const leadId = clean(id);
+    if (!leadId) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const { data, error } = await supabaseAdmin
       .from("leads")
       .select("*")
-      .eq("id", id)
+      .eq("id", leadId)
       .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -60,7 +61,7 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const supabase = await supabaseRoute();
     const { data: auth, error: authErr } = await supabase.auth.getUser();
@@ -69,8 +70,9 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     const role = await getRole(auth.user.id);
     if (!isInternalRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const id = clean(ctx.params.id);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await ctx.params;
+    const leadId = clean(id);
+    if (!leadId) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const body = await req.json().catch(() => ({}));
     const status = clean(body?.status);
@@ -90,7 +92,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     const { data, error } = await supabaseAdmin
       .from("leads")
       .update(patch)
-      .eq("id", id)
+      .eq("id", leadId)
       .select("*")
       .maybeSingle();
 

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -24,7 +24,7 @@ function clean(v: any) {
   return String(v || "").trim();
 }
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const supabase = await supabaseRoute();
     const { data: auth, error: authErr } = await supabase.auth.getUser();
@@ -33,8 +33,9 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
     const role = await getRole(auth.user.id);
     if (!isInternalRole(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const id = clean(ctx.params.id);
-    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id } = await ctx.params;
+    const leadId = clean(id);
+    if (!leadId) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
         Authorization: `Bearer ${serviceKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ lead_id: id }),
+      body: JSON.stringify({ lead_id: leadId }),
     });
 
     const text = await res.text();
