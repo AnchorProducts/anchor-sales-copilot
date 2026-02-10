@@ -8,42 +8,6 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 
 export const dynamic = "force-dynamic";
 
-type ConversationRow = {
-  id: string;
-  title: string | null;
-  updated_at: string | null;
-  created_at: string | null;
-};
-
-type RecentDoc = {
-  doc_title: string | null;
-  doc_type: string | null;
-  doc_path: string;
-  doc_url: string | null;
-  created_at: string;
-};
-
-function formatWhen(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function titleOrNew(title?: string | null) {
-  const t = (title || "").trim();
-  return t.length ? t : "New chat";
-}
-
-/** prevents "Unexpected end of JSON input" */
-async function readJsonSafely<T = any>(res: Response): Promise<T | null> {
-  const text = await res.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -53,66 +17,11 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
 
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [recentChats, setRecentChats] = useState<ConversationRow[]>([]);
-
-  const [loadingRecentDocs, setLoadingRecentDocs] = useState(true);
-  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
-
-  const [status, setStatus] = useState<"checking" | "online" | "offline">("checking");
-  const [statusWhen, setStatusWhen] = useState<string | null>(null);
 
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/");
     router.refresh();
-  }
-
-  // ✅ ADDITION: extracted loader so we can reuse it (initial + refocus)
-  async function loadRecentDocs() {
-    setLoadingRecentDocs(true);
-    try {
-      // Always include bearer so this works even if cookies still aren’t sticking
-      const { data: sdata } = await supabase.auth.getSession();
-      const token = sdata.session?.access_token;
-
-      // Attempt 1: server endpoint (preferred)
-      let docs: RecentDoc[] = [];
-
-      if (token) {
-        const res = await fetch("/api/recent-docs", {
-          method: "GET",
-          cache: "no-store",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const data = await readJsonSafely<any>(res);
-        docs = Array.isArray(data?.docs) ? (data.docs as RecentDoc[]) : [];
-      }
-
-      // Attempt 2 (fallback): client-side query (shows something even if API breaks)
-      if (!docs.length) {
-        const { data: userData } = await supabase.auth.getUser();
-        const user = userData.user;
-
-        if (user) {
-          const { data, error } = await supabase
-            .from("doc_events")
-            .select("doc_title, doc_type, doc_path, doc_url, created_at")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(5);
-
-          if (!error && Array.isArray(data)) docs = data as RecentDoc[];
-        }
-      }
-
-      setRecentDocs(docs.slice(0, 5));
-    } catch {
-      setRecentDocs([]);
-    } finally {
-      setLoadingRecentDocs(false);
-    }
   }
 
   // --- BOOT: ensure authed + ensure server cookies exist
@@ -159,71 +68,6 @@ export default function DashboardPage() {
     };
   }, [router, supabase]);
 
-  // --- System status ping
-  useEffect(() => {
-    let alive = true;
-
-    async function check() {
-      try {
-        const res = await fetch("/api/health", { cache: "no-store" });
-        if (!alive) return;
-
-        setStatus(res.ok ? "online" : "offline");
-        setStatusWhen(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-      } catch {
-        if (!alive) return;
-        setStatus("offline");
-        setStatusWhen(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-      }
-    }
-
-    check();
-    const t = window.setInterval(check, 30000);
-
-    return () => {
-      alive = false;
-      window.clearInterval(t);
-    };
-  }, []);
-
-  // --- Recent chats (client-side)
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (booting) return;
-
-      setLoadingChats(true);
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!alive) return;
-
-        const user = userData.user;
-        if (!user) {
-          router.replace("/");
-          return;
-        }
-
-        const { data: chats, error } = await supabase
-          .from("conversations")
-          .select("id,title,updated_at,created_at")
-          .eq("user_id", user.id)
-          .is("deleted_at", null)
-          .order("updated_at", { ascending: false })
-          .limit(5);
-
-        if (!alive) return;
-        setRecentChats(error ? [] : ((chats || []) as ConversationRow[]));
-      } finally {
-        if (!alive) return;
-        setLoadingChats(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [booting, router, supabase]);
 
   // --- Role check (external vs internal)
   useEffect(() => {
@@ -282,31 +126,6 @@ export default function DashboardPage() {
 
   const isInternal = role === "admin" || role === "anchor_rep";
 
-  // --- Recent docs opened
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (booting) return;
-      await loadRecentDocs();
-    })();
-
-    // ✅ ADDITION: refresh recent docs when user returns to this tab
-    const onFocus = () => {
-      if (booting) return;
-      loadRecentDocs();
-    };
-
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      alive = false;
-      window.removeEventListener("focus", onFocus);
-    };
-    // Intentionally no deps: we only want one listener for the life of the page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booting]);
-
   return (
     <main className="min-h-[100svh] min-h-dvh bg-[#FFFFFF] text-[#000000]">
       {/* Sticky header */}
@@ -361,8 +180,8 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        {/* Main tiles */}
-        <div className="grid gap-5 md:grid-cols-2">
+        {/* Primary cards */}
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <Link
             href="/chat"
             className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -371,7 +190,7 @@ export default function DashboardPage() {
               <div>
                 <div className="text-lg font-semibold">Chat Copilot</div>
                 <div className="mt-1 text-sm text-[#76777B]">
-                  Ask questions, pull docs, and get install guidance instantly.
+                  Get solution recommendations and practical next steps.
                 </div>
               </div>
               <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
@@ -395,7 +214,7 @@ export default function DashboardPage() {
               <div>
                 <div className="text-lg font-semibold">Asset Management</div>
                 <div className="mt-1 text-sm text-[#76777B]">
-                  Product tackle boxes: manuals, CAD, images, sales sheets, and more.
+                  Manuals, CAD, images, sales sheets, and more.
                 </div>
               </div>
               <span className="inline-flex items-center rounded-full bg-[#9CE2BB] px-3 py-1 text-[12px] font-semibold text-[#11500F]">
@@ -411,7 +230,7 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          {roleReady && (
+          {roleReady && role === "external_rep" && (
             <Link
               href="/dashboard/leads/new"
               className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -438,120 +257,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Secondary section */}
-        <div className="mt-6 grid gap-5 md:grid-cols-[1fr_360px]">
-          {/* Left */}
-          <div className="rounded-3xl border border-black/10 bg-white p-5 min-w-0">
-            <div className="flex items-center justify-between min-w-0">
-              <div className="text-sm font-semibold">Recent activity</div>
-            </div>
-
-            <div className="mt-3 space-y-4 min-w-0">
-              {/* Recent chats */}
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-black/70">Recent chats</div>
-
-                {loadingChats ? (
-                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-                ) : recentChats.length === 0 ? (
-                  <div className="mt-2 text-sm text-[#76777B]">No chats yet.</div>
-                ) : (
-                  <div className="mt-2 space-y-2 min-w-0">
-                    {recentChats.slice(0, 3).map((c) => (
-                      <Link
-                        key={c.id}
-                        href={`/chat?cid=${encodeURIComponent(c.id)}`}
-                        className="block min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-                        title="Open chat"
-                      >
-                        <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
-                          {titleOrNew(c.title)}
-                        </div>
-                        <div className="min-w-0 text-[11px] text-[#76777B] truncate">
-                          {formatWhen(c.updated_at || c.created_at)}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Recent docs opened */}
-              <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-black/70">Recent docs opened</div>
-
-                {loadingRecentDocs ? (
-                  <div className="mt-2 text-sm text-[#76777B]">Loading…</div>
-                ) : recentDocs.length === 0 ? (
-                  <div className="mt-2 text-sm text-[#76777B]">No docs opened yet.</div>
-                ) : (
-                  <div className="mt-2 space-y-2 min-w-0">
-                    {recentDocs.slice(0, 5).map((r) => (
-                      <a
-                        key={`${r.doc_path}-${r.created_at}`}
-                        href={`/api/doc-open?path=${encodeURIComponent(r.doc_path)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-full min-w-0 rounded-2xl border border-black/10 bg-white px-3 py-2 hover:bg-black/[0.03] transition"
-                        title="Open document"
-                      >
-                        <div className="min-w-0 truncate text-[12px] font-semibold text-black/85">
-                          {r.doc_title || r.doc_path}
-                        </div>
-                        <div className="min-w-0 text-[11px] text-[#76777B] truncate">
-                          {(r.doc_type || "doc")} • {r.doc_path}
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right */}
-          <div className="grid gap-5 self-start">
-            <div className="rounded-3xl border border-black/10 bg-white p-5">
-              <div className="text-sm font-semibold">Quick links</div>
-              <div className="mt-3 flex flex-col gap-2 text-sm">
-                <Link className="text-[#047835] hover:underline" href="/chat">
-                  Go to Copilot
-                </Link>
-                <Link className="text-[#047835] hover:underline" href="/assets">
-                  Open Asset Library
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-black/10 bg-white p-5">
-              <div className="text-sm font-semibold">System status</div>
-
-              <div className="mt-2 flex items-center gap-2">
-                <span
-                  className={[
-                    "h-2.5 w-2.5 rounded-full",
-                    status === "online"
-                      ? "bg-[#047835]"
-                      : status === "offline"
-                      ? "bg-red-500"
-                      : "bg-amber-400",
-                  ].join(" ")}
-                />
-                <span className="text-sm text-[#76777B]">
-                  {status === "checking" ? "Checking…" : status === "online" ? "Online" : "Offline"}
-                </span>
-              </div>
-
-              {statusWhen && (
-                <div className="mt-2 text-[11px] text-[#76777B]">Last checked: {statusWhen}</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 text-[12px] text-[#76777B]">
-          Tip: Add a “Dashboard” button to the Chat top bar so reps can bounce between tools.
-        </div>
       </div>
     </main>
   );
