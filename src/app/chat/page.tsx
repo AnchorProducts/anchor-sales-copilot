@@ -653,7 +653,7 @@ async function send() {
   const MUTED = "text-[#76777B]";
 
   return (
-    <main className="h-[100svh] bg-white sm:bg-[#F6F7F8] text-black flex flex-col overflow-hidden">
+    <main className="h-[100vh] bg-white sm:bg-[#F6F7F8] text-black flex flex-col overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-30 bg-[#047835] pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
