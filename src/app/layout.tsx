@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     default: "Anchor Sales Co-Pilot",
     template: "%s • Anchor Sales Co-Pilot",
   },
-  description: "Docs • Specs • Install • Downloads",
+  description: "Sales • Assets • Leads",
 
   // ✅ This controls mobile browser + PWA status bar color
   themeColor: "#047835",

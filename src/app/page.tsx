@@ -172,19 +172,17 @@ function LoginInner() {
   return (
     <main className="ds-page flex min-h-dvh items-center justify-center px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-md">
-        {/* Brand */}
-        <div className="mb-8 flex items-center gap-3">
-          <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
-          <div>
-            <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
-              Anchor Sales Co-Pilot
-            </div>
-            <div className="ds-caption">Docs • Specs • Install • Downloads</div>
-          </div>
-        </div>
-
         {/* Card */}
         <Card className="border-t-4 border-t-[var(--anchor-green)] p-6">
+          <div className="mb-12 flex items-center gap-3">
+            <img src="/anchorplogin.svg" alt="Anchor" className="ds-logo shrink-0" />
+            <div>
+              <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
+                Anchor Sales Co-Pilot
+              </div>
+              <div className="ds-caption">Sales • Assets • Leads</div>
+            </div>
+          </div>
           <h1 className="text-3xl">Sign in</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">We’ll email you a secure login code.</p>
 

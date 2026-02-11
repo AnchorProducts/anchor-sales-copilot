@@ -572,7 +572,7 @@ async function send() {
               <div className="truncate text-sm font-semibold tracking-wide text-white">
                 Anchor Sales Co-Pilot
               </div>
-              <div className="truncate text-[12px] text-white/80">Docs • Specs • Install • Downloads</div>
+              <div className="truncate text-[12px] text-white/80">Sales • Assets • Leads</div>
             </div>
           </div>
 
