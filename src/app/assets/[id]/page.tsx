@@ -48,9 +48,7 @@ export default function ProductAssetsPage() {
       <header className="sticky top-0 z-30 bg-[#047835] pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-5 py-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-md bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-              <img src="/anchorp.svg" alt="Anchor Products" className="h-10 w-auto" />
-            </div>
+            <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo shrink-0" />
 
             <div className="leading-tight min-w-0">
               <div className="text-sm font-semibold tracking-wide truncate text-white">

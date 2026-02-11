@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import Button from "@/app/components/ui/Button";
+import { Card } from "@/app/components/ui/Card";
+import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
 
 export const dynamic = "force-dynamic";
 
@@ -127,132 +130,121 @@ export default function DashboardPage() {
   const isInternal = role === "admin" || role === "anchor_rep";
 
   return (
-    <main className="min-h-[100svh] min-h-dvh bg-[#FFFFFF] text-[#000000]">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-30 bg-[#047835] pt-[env(safe-area-inset-top)]">
-  <div className="mx-auto max-w-6xl px-5 py-4">
-    <div className="flex items-center justify-between gap-3 min-w-0">
-      {/* Left lockup */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="h-11 w-11 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0">
-          <img src="/anchorp.svg" alt="Anchor" className="h-10 w-auto" />
-        </div>
+    <main className="ds-page">
+      <Navbar>
+        <NavbarInner className="flex-col items-start gap-4 py-4">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
 
-        <div className="leading-tight min-w-0">
-          <div className="text-sm font-semibold tracking-wide text-white truncate">
-            Anchor Sales Co-Pilot
+              <div className="min-w-0 leading-tight">
+                <div className="truncate text-sm font-semibold tracking-wide text-white">
+                  Anchor Sales Co-Pilot
+                </div>
+                <div className="truncate text-[12px] text-white/80">Dashboard</div>
+              </div>
+            </div>
+
+            <Button
+              onClick={signOut}
+              className="h-9 min-w-0 max-w-[110px] overflow-hidden whitespace-nowrap text-ellipsis px-3"
+              title="Sign out"
+              variant="ghost"
+            >
+              Sign out
+            </Button>
           </div>
-          <div className="text-[12px] text-white/80 truncate">Dashboard</div>
-        </div>
-      </div>
 
-      {/* Button (truncate if needed) */}
-      <button
-        type="button"
-        onClick={signOut}
-        className="h-9 min-w-0 max-w-[110px] shrink inline-flex items-center justify-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition overflow-hidden whitespace-nowrap text-ellipsis"
-        title="Sign out"
-      >
-        Sign out
-      </button>
-    </div>
-  </div>
+          <div className="mt-8 flex w-full flex-col gap-2 text-left">
+            <h1 className="text-3xl text-white!">Welcome back</h1>
+            <p className="max-w-2xl text-sm text-white/80">
+              Jump into Copilot or manage product tackle boxes. Everything stays organized,
+              modern, and fast.
+            </p>
+          </div>
+        </NavbarInner>
+      </Navbar>
 
-  {/* Hero text */}
-  <div className="mx-auto max-w-6xl px-5 pb-6">
-    <div className="mt-2 flex flex-col gap-2">
-      <h1 className="text-3xl font-semibold tracking-tight text-white">Welcome back</h1>
-      <p className="max-w-2xl text-sm text-white/80">
-        Jump into Copilot or manage product tackle boxes. Everything stays organized, modern,
-        and fast.
-      </p>
-    </div>
-  </div>
-</header>
-
-
-      {/* Body */}
-      <div className="mx-auto max-w-6xl px-5 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+      <div className="ds-container py-10 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {/* Quick actions */}
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-[#9CE2BB] px-3 py-1 text-[12px] font-semibold text-[#11500F]">
+        <div className="mb-8 flex flex-wrap items-center gap-2">
+          <span className="ds-badge">
             {isInternal ? "Internal tools" : "External tools"}
           </span>
+          
         </div>
 
         {/* Primary cards */}
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <Link
             href="/chat"
-            className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="group transition-transform duration-200 hover:-translate-y-0.5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">Chat Copilot</div>
-                <div className="mt-1 text-sm text-[#76777B]">
-                  Get solution recommendations and practical next steps.
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">Chat Copilot</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                    Get solution recommendations and practical next steps.
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-black/10 bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
+                  AI
+                </span>
+              </div>
+              <div className="mt-5 flex items-center justify-between">
+                <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                  Open Copilot <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
-              <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-                AI
-              </span>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <div className="text-sm font-semibold text-[#047835]">
-                Open Copilot{" "}
-                <span className="transition group-hover:translate-x-1 inline-block">→</span>
-              </div>
-            </div>
+            </Card>
           </Link>
 
           <Link
             href="/assets"
-            className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="group transition-transform duration-200 hover:-translate-y-0.5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">Asset Management</div>
-                <div className="mt-1 text-sm text-[#76777B]">
-                  Manuals, CAD, images, sales sheets, and more.
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">Asset Management</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                    Manuals, CAD, images, sales sheets, and more.
+                  </div>
+                </div>
+                <span className="ds-badge">Library</span>
+              </div>
+              <div className="mt-5 flex items-center justify-between">
+                <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                  View Assets <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
-              <span className="inline-flex items-center rounded-full bg-[#9CE2BB] px-3 py-1 text-[12px] font-semibold text-[#11500F]">
-                Library
-              </span>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <div className="text-sm font-semibold text-[#047835]">
-                View Assets{" "}
-                <span className="transition group-hover:translate-x-1 inline-block">→</span>
-              </div>
-            </div>
+            </Card>
           </Link>
 
           {roleReady && role === "external_rep" && (
             <Link
               href="/dashboard/leads/new"
-              className="group rounded-3xl border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group transition-transform duration-200 hover:-translate-y-0.5"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">Submit a Job Lead</div>
-                  <div className="mt-1 text-sm text-[#76777B]">
-                    Send photos and details directly to inside sales.
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">Submit a Job Lead</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                      Send photos and details directly to inside sales.
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-black/10 bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
+                    Leads
+                  </span>
+                </div>
+                <div className="mt-5 flex items-center justify-between">
+                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                    Submit Lead <span className="inline-block transition group-hover:translate-x-1">→</span>
                   </div>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-                  Leads
-                </span>
-              </div>
-
-              <div className="mt-5 flex items-center justify-between">
-                <div className="text-sm font-semibold text-[#047835]">
-                  Submit Lead{" "}
-                  <span className="transition group-hover:translate-x-1 inline-block">→</span>
-                </div>
-              </div>
+              </Card>
             </Link>
           )}
         </div>

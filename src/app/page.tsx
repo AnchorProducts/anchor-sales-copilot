@@ -4,6 +4,10 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import Button from "@/app/components/ui/Button";
+import { Card } from "@/app/components/ui/Card";
+import { Input } from "@/app/components/ui/Field";
+import { Alert } from "@/app/components/ui/Alert";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +25,8 @@ export default function LoginHome() {
 
 function FullScreenLoading() {
   return (
-    <main className="min-h-dvh bg-[#047835] text-white flex items-center justify-center">
-      <div className="rounded-3xl bg-white/10 px-6 py-4 text-sm">Loading…</div>
+    <main className="ds-page flex min-h-dvh items-center justify-center">
+      <div className="ds-toast ds-alert-neutral max-w-sm">Loading…</div>
     </main>
   );
 }
@@ -166,28 +170,26 @@ function LoginInner() {
   }
 
   return (
-    <main className="min-h-dvh bg-[#F6F7F8] text-white flex items-center justify-center px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <main className="ds-page flex min-h-dvh items-center justify-center px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="mb-8 flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center">
-            <img src="/anchorp.svg" alt="Anchor" className="h-10 w-auto" />
-          </div>
+          <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
           <div>
-            <div className="text-sm font-semibold tracking-wide text-black/80">
+            <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
               Anchor Sales Co-Pilot
             </div>
-            <div className="text-[12px] text-black/80">Docs • Specs • Install • Downloads</div>
+            <div className="ds-caption">Docs • Specs • Install • Downloads</div>
           </div>
         </div>
 
         {/* Card */}
-        <div className="rounded-3xl bg-[#047835]/95 text-white p-6 shadow-xl">
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="mt-1 text-sm text-white">We’ll email you a secure login code.</p>
+        <Card className="border-t-4 border-t-[var(--anchor-green)] p-6">
+          <h1 className="text-3xl">Sign in</h1>
+          <p className="mt-1 text-sm text-[var(--anchor-gray)]">We’ll email you a secure login code.</p>
 
-          <label className="mt-5 block text-xs font-semibold text-white/70">Email</label>
-          <input
+          <label className="mt-5 block text-xs font-semibold text-[var(--anchor-gray)]">Email</label>
+          <Input
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -195,64 +197,67 @@ function LoginInner() {
             }}
             placeholder="name@company.com"
             autoComplete="email"
-            className="mt-2 w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 outline-none focus:border-white/40"
+            className="mt-2"
           />
 
           {otpSent && (
             <>
-              <label className="mt-4 block text-xs font-semibold text-white/70">Code</label>
-              <input
+              <label className="mt-4 block text-xs font-semibold text-[var(--anchor-gray)]">Code</label>
+              <Input
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="123456"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                className="mt-2 w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-white/60 outline-none focus:border-white/40"
+                className="mt-2"
                 onKeyDown={(e) => e.key === "Enter" && verifyCode()}
               />
             </>
           )}
 
           {msg && (
-            <div className="mt-4 rounded-xl bg-[#F6F7F8] px-4 py-3 text-sm text-black/80">
+            <Alert className="mt-4" tone="neutral">
               {msg}
-            </div>
+            </Alert>
           )}
 
           {!otpSent ? (
-            <button
+            <Button
               onClick={sendCode}
               disabled={loading}
-              className="mt-6 w-full rounded-2xl bg-[#F6F7F8] py-3 text-sm font-semibold text-[#11500F] hover:bg-[#9CE2BB] disabled:opacity-60"
+              className="mt-6 w-full"
+              variant="primary"
             >
               {loading ? "Sending…" : "Send code"}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               onClick={verifyCode}
               disabled={loading}
-              className="mt-6 w-full rounded-2xl bg-[#F6F7F8] py-3 text-sm font-semibold text-[#11500F] hover:bg-[#9CE2BB] disabled:opacity-60"
+              className="mt-6 w-full"
+              variant="primary"
             >
               {loading ? "Verifying…" : "Verify code"}
-            </button>
+            </Button>
           )}
 
           {otpSent && (
-            <button
+            <Button
               type="button"
               onClick={() => {
                 resetOtp();
                 setMsg(null);
               }}
               disabled={loading}
-              className="mt-3 w-full rounded-2xl border border-white/20 bg-white/10 py-3 text-sm font-semibold text-white hover:bg-white/15 disabled:opacity-60"
+              className="mt-3 w-full"
+              variant="secondary"
             >
               Use a different email
-            </button>
+            </Button>
           )}
-        </div>
+        </Card>
 
-        <p className="mt-6 text-center text-[11px] text-black/80">
+        <p className="ds-caption mt-6 text-center">
           If you don’t have access, ask an admin to enable your account.
         </p>
       </div>

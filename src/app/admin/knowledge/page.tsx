@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import AdminKnowledgeTabs from "@/app/components/admin/AdminKnowledgeTabs";
+import Button from "@/app/components/ui/Button";
+import { Alert } from "@/app/components/ui/Alert";
+import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
 
 type Role = "admin" | "anchor_rep" | "external_rep";
 type UserType = "internal" | "external";
@@ -73,10 +76,10 @@ export default function AdminKnowledgePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen anchor-app-bg text-white p-6">
-        <div className="mx-auto max-w-6xl rounded-xl border border-white/10 bg-white/5 p-4">
+      <main className="min-h-screen anchor-app-bg p-6 text-white">
+        <Alert className="mx-auto max-w-6xl border-white/20 bg-white/10 text-white" tone="neutral">
           Loading admin knowledge…
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -84,9 +87,9 @@ export default function AdminKnowledgePage() {
   if (error) {
     return (
       <main className="min-h-screen anchor-app-bg text-white p-6">
-        <div className="mx-auto max-w-6xl rounded-xl border border-red-400/20 bg-red-500/10 p-4">
+        <Alert className="mx-auto max-w-6xl border-white/20 bg-white/10 text-white" tone="error">
           {error}
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -95,8 +98,8 @@ export default function AdminKnowledgePage() {
 
   return (
     <main className="min-h-screen anchor-app-bg text-white">
-      <header className="sticky top-0 z-30 anchor-topbar">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <Navbar className="anchor-topbar">
+        <NavbarInner>
           <div className="leading-tight">
             <div className="text-sm font-semibold tracking-wide">Knowledge Admin</div>
             <div className="text-[12px] text-white/60">
@@ -105,20 +108,20 @@ export default function AdminKnowledgePage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-[11px] text-white/70">
+            <div className="rounded-[12px] border border-white/20 bg-white/10 px-2 py-1 text-[11px] text-white/80">
               {profile.role === "admin" ? "Admin" : "Anchor Rep"}
             </div>
 
-            <button
-              type="button"
+            <Button
               onClick={() => router.push("/chat")}
-              className="h-9 rounded-md border border-white/10 bg-black/40 px-3 text-[12px] font-semibold text-white/80 hover:bg-black/60 transition"
+              className="h-9 px-3"
+              variant="ghost"
             >
               Back to chat
-            </button>
+            </Button>
           </div>
-        </div>
-      </header>
+        </NavbarInner>
+      </Navbar>
 
       <div className="mx-auto max-w-6xl px-4 py-4">
         <AdminKnowledgeTabs role={profile.role as Role} />

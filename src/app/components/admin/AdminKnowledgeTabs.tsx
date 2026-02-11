@@ -3,6 +3,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import Button from "@/app/components/ui/Button";
+import { Alert } from "@/app/components/ui/Alert";
+import { Select } from "@/app/components/ui/Field";
+import { Tabs, TabButton } from "@/app/components/ui/Tabs";
 
 type Role = "admin" | "anchor_rep" | "external_rep";
 
@@ -307,9 +311,9 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 p-3">
-        <div className="flex gap-2">
+    <div className="ds-card border-white/15 bg-white/10 text-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/15 p-3">
+        <Tabs className="border-white/20 bg-white/10">
           <TabButton active={tab === "feedback"} onClick={() => setTab("feedback")}>
             Feedback
           </TabButton>
@@ -319,11 +323,11 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
           <TabButton active={tab === "docs"} onClick={() => setTab("docs")}>
             Knowledge docs
           </TabButton>
-        </div>
+        </Tabs>
 
-        <button
-          type="button"
-          className="rounded-md border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-white/80 hover:bg-black/55"
+        <Button
+          className="px-3 py-2"
+          variant="ghost"
           onClick={() => {
             if (tab === "feedback") loadFeedback();
             if (tab === "corrections") loadCorrections();
@@ -331,19 +335,19 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
           }}
         >
           Refresh
-        </button>
+        </Button>
       </div>
 
       {msg ? (
-        <div className="mx-3 mt-3 rounded border border-emerald-400/20 bg-emerald-500/10 p-2 text-[12px] text-emerald-100">
+        <Alert className="mx-3 mt-3 border-white/20 bg-[var(--anchor-mint)] text-[var(--anchor-deep)]" tone="success">
           {msg}
-        </div>
+        </Alert>
       ) : null}
 
       {err ? (
-        <div className="mx-3 mt-3 rounded border border-red-400/20 bg-red-500/10 p-2 text-[12px] text-red-100">
+        <Alert className="mx-3 mt-3 border-white/20 bg-white/10 text-white" tone="error">
           {err}
-        </div>
+        </Alert>
       ) : null}
 
       <div className="p-3">
@@ -351,26 +355,26 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <label className="text-[12px] text-white/70">Status</label>
-              <select
-                className="rounded-md border border-white/10 bg-black/40 px-2 py-2 text-[12px]"
+              <Select
+                className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
                 value={fbStatus}
                 onChange={(e) => setFbStatus(e.target.value)}
               >
                 <option value="new">new</option>
                 <option value="reviewed">reviewed</option>
                 <option value="">(all)</option>
-              </select>
+              </Select>
 
               <label className="ml-2 text-[12px] text-white/70">Rating</label>
-              <select
-                className="rounded-md border border-white/10 bg-black/40 px-2 py-2 text-[12px]"
+              <Select
+                className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
                 value={fbRating}
                 onChange={(e) => setFbRating(e.target.value)}
               >
                 <option value="">(all)</option>
                 <option value="1">1 (bad)</option>
                 <option value="5">5 (good)</option>
-              </select>
+              </Select>
 
               <div className="ml-auto text-[12px] text-white/60">
                 {loading ? "Loading…" : `${feedback.length} rows`}
@@ -387,13 +391,13 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                     </div>
 
                     {role === "admin" ? (
-                      <button
-                        className="rounded-md border border-white/10 bg-black/40 px-3 py-1 text-[12px] text-white/80 hover:bg-black/60"
+                      <Button
+                        className="px-3 py-1 text-[12px]"
                         onClick={() => markFeedbackReviewed(f.id)}
-                        type="button"
+                        variant="ghost"
                       >
                         Mark reviewed
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
 
@@ -418,8 +422,8 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <label className="text-[12px] text-white/70">Status</label>
-              <select
-                className="rounded-md border border-white/10 bg-black/40 px-2 py-2 text-[12px]"
+              <Select
+                className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
                 value={coStatus}
                 onChange={(e) => setCoStatus(e.target.value)}
               >
@@ -427,7 +431,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                 <option value="approved">approved</option>
                 <option value="rejected">rejected</option>
                 <option value="">(all)</option>
-              </select>
+              </Select>
 
               <div className="ml-auto text-[12px] text-white/60">
                 {loading ? "Loading…" : `${corrections.length} rows`}
@@ -450,24 +454,24 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                           Promote to doc draft
                         </label>
 
-                        <button
-                          className="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[12px] text-emerald-100 hover:bg-emerald-500/15"
+                        <Button
+                          className="px-3 py-1 text-[12px]"
                           onClick={() => {
                             const cb = document.getElementById(`promote-${c.id}`) as HTMLInputElement | null;
                             approveCorrection(c.id, !!cb?.checked);
                           }}
-                          type="button"
+                          variant="secondary"
                         >
                           Approve
-                        </button>
+                        </Button>
 
-                        <button
-                          className="rounded-md border border-red-400/20 bg-red-500/10 px-3 py-1 text-[12px] text-red-100 hover:bg-red-500/15"
+                        <Button
+                          className="px-3 py-1 text-[12px] text-white"
                           onClick={() => rejectCorrection(c.id)}
-                          type="button"
+                          variant="destructive"
                         >
                           Reject
-                        </button>
+                        </Button>
                       </div>
                     ) : null}
                   </div>
@@ -517,23 +521,23 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
 
                     {role === "admin" ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          className="rounded-md border border-white/10 bg-black/40 px-2 py-2 text-[12px]"
+                        <Select
+                          className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
                           value={d.status ?? "draft"}
                           onChange={(e) => setDocStatus(d.id, e.target.value)}
                         >
                           <option value="draft">draft</option>
                           <option value="approved">approved</option>
                           <option value="archived">archived</option>
-                        </select>
+                        </Select>
 
-                        <button
-                          className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[12px] text-white/80 hover:bg-black/60"
+                        <Button
+                          className="px-3 py-2 text-[12px]"
                           onClick={() => toggleDocAllowed(d.id, !(d.allowed ?? false))}
-                          type="button"
+                          variant="ghost"
                         >
                           {d.allowed ? "Allowed ✅" : "Blocked 🚫"}
-                        </button>
+                        </Button>
                       </div>
                     ) : null}
                   </div>
@@ -555,22 +559,5 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
         ) : null}
       </div>
     </div>
-  );
-}
-
-function TabButton(props: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className={[
-        "rounded-md px-3 py-2 text-[12px] font-semibold transition border",
-        props.active
-          ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
-          : "border-white/10 bg-black/35 text-white/75 hover:bg-black/55",
-      ].join(" ")}
-    >
-      {props.children}
-    </button>
   );
 }

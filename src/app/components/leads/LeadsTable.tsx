@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Card } from "@/app/components/ui/Card";
+import { Input, Select } from "@/app/components/ui/Field";
+import { Alert } from "@/app/components/ui/Alert";
+import { Table, TableWrapper } from "@/app/components/ui/Table";
 
 const STATUSES = ["new", "assigned", "contacted", "qualified", "closed_won", "closed_lost"];
 
@@ -62,18 +66,18 @@ export default function LeadsTable() {
   }, [status, region]);
 
   return (
-    <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
+    <Card className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-black">Leads</div>
-          <div className="mt-1 text-sm text-[#76777B]">Internal lead management</div>
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">Internal lead management</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <Select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="h-9 rounded-xl border border-black/10 bg-white px-3 text-[12px] font-semibold"
+            className="h-9 px-3 text-[12px] font-semibold"
           >
             <option value="">All statuses</option>
             {STATUSES.map((s) => (
@@ -81,49 +85,61 @@ export default function LeadsTable() {
                 {s}
               </option>
             ))}
-          </select>
-          <input
+          </Select>
+          <Input
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="Region (e.g. TX)"
-            className="h-9 rounded-xl border border-black/10 bg-white px-3 text-[12px]"
+            className="h-9 px-3 text-[12px]"
           />
         </div>
       </div>
 
       <div className="mt-4">
         {error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+          <Alert tone="error">{error}</Alert>
         ) : loading ? (
-          <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">Loading…</div>
+          <Alert tone="neutral">Loading…</Alert>
         ) : leads.length === 0 ? (
-          <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
+          <Alert tone="neutral">
             No leads found.
-          </div>
+          </Alert>
         ) : (
-          <div className="grid gap-2">
-            {leads.map((lead) => (
-              <Link
-                key={lead.id}
-                href={`/dashboard/leads/${encodeURIComponent(lead.id)}`}
-                className="block rounded-2xl border border-black/10 bg-white p-4 hover:bg-black/[0.03]"
-              >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-black truncate">{lead.customer_company}</div>
-                    <div className="mt-1 text-[12px] text-[#76777B] truncate">
-                      {lead.region_code} • {lead.status} • {formatWhen(lead.created_at)}
-                    </div>
-                  </div>
-                  <div className="text-[12px] text-black/50">
-                    {lead.assigned_rep_user_id ? "Assigned" : "Unassigned"}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          <TableWrapper>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Region</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Assignment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead) => (
+                  <tr key={lead.id}>
+                    <td>
+                      <Link
+                        href={`/dashboard/leads/${encodeURIComponent(lead.id)}`}
+                        className="font-semibold text-[var(--anchor-deep)] hover:text-[var(--anchor-green)]"
+                      >
+                        {lead.customer_company}
+                      </Link>
+                    </td>
+                    <td className="text-[var(--anchor-gray)]">{lead.region_code}</td>
+                    <td className="text-[var(--anchor-gray)]">{lead.status}</td>
+                    <td className="text-[var(--anchor-gray)]">{formatWhen(lead.created_at)}</td>
+                    <td className="text-[var(--anchor-gray)]">
+                      {lead.assigned_rep_user_id ? "Assigned" : "Unassigned"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrapper>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
