@@ -61,6 +61,7 @@ export default function SignupPage() {
     <main className="min-h-dvh bg-neutral-950 text-white">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pb-10 pt-10">
         <div className="mb-8">
+          <img src="/anchorplogin.svg" alt="Anchor" className="mb-4 h-10 w-auto" />
           <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
           <p className="mt-2 text-sm text-white/60">First time here? Set up your login.</p>
         </div>
