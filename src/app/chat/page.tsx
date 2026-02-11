@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import SourcesFeedback from "../components/chat/SourcesFeedback";
+import Button from "@/app/components/ui/Button";
+import { Input } from "@/app/components/ui/Field";
+import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
 
 type UserType = "internal" | "external";
 
@@ -545,24 +548,24 @@ async function send() {
   const PANEL_BODY = "flex-1 min-h-0";
   const SOFT_SCROLL = "overflow-y-auto [scrollbar-width:thin]";
 
-  const MUTED = "text-[#76777B]";
+  const MUTED = "text-[var(--anchor-gray)]";
 
   return (
-    <main className="h-[100vh] bg-white sm:bg-[#F6F7F8] text-black flex flex-col overflow-hidden">
+    <main className="ds-page flex h-[100vh] flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-[#047835] pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+      <Navbar>
+        <NavbarInner>
           {/* Left: brand + menu */}
           <div className="flex min-w-0 items-center gap-3">
             {/* Brand */}
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="h-9 w-9 shrink-0 rounded-md border border-white/20 bg-white/10 flex items-center justify-center hover:bg-white/15 transition"
+              className="shrink-0"
               title="Refresh"
               aria-label="Refresh"
             >
-              <img src="/anchorp.svg" alt="Anchor Products" className="h-10 w-auto" />
+              <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo" />
             </button>
 
             <div className="min-w-0 leading-tight">
@@ -575,34 +578,28 @@ async function send() {
 
           {/* Right: actions */}
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => window.location.reload()}
-              className="h-9 rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+              className="h-9 px-3"
               title="Refresh chat"
               aria-label="Refresh chat"
+              variant="ghost"
             >
               Refresh
-            </button>
+            </Button>
             <Link
               href="/dashboard"
-              className="hidden md:inline-flex h-9 items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
+              className="ds-btn ds-btn-ghost hidden h-9 items-center px-3 md:inline-flex"
               title="Return to Dashboard"
             >
               Dashboard
             </Link>
 
-            <Link
-              href="/dashboard"
-              className="sm:hidden h-9 min-w-[96px] inline-flex items-center justify-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
-              title="Return to Dashboard"
-            >
-              Dashboard
-            </Link>
+            
 
           </div>
-        </div>
-      </header>
+        </NavbarInner>
+      </Navbar>
 
       {/* Body */}
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -615,7 +612,7 @@ async function send() {
                 "flex flex-1 flex-col min-h-0",
                 "overflow-hidden",
                 "rounded-none border-0 shadow-none",
-                "sm:rounded-3xl sm:border sm:border-black/10 sm:shadow-sm",
+                "sm:rounded-3xl sm:border sm:border-black/10 sm:bg-white sm:shadow-md",
               ].join(" ")}
             >
 
@@ -628,8 +625,8 @@ async function send() {
                       className={[
                         "max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
                         m.role === "user"
-                          ? "ml-auto bg-[#9CE2BB] border border-black/10"
-                          : "bg-white border border-black/10",
+                          ? "ml-auto border border-[var(--anchor-deep)]/20 bg-[var(--anchor-mint)] shadow-sm"
+                          : "border border-black/10 bg-[var(--surface-soft)] shadow-sm",
                       ].join(" ")}
                     >
                       {renderMessageContent(m.content)}
@@ -648,7 +645,7 @@ async function send() {
                           className={[
                             "rounded-md border px-2 py-1 transition",
                             !showFeedback
-                              ? "border-[#047835]/35 bg-[#9CE2BB] text-[#11500F]"
+                              ? "border-[var(--anchor-deep)]/30 bg-[var(--anchor-mint)] text-[var(--anchor-deep)]"
                               : "border-black/10 bg-white hover:bg-black/[0.03] text-black/70",
                           ].join(" ")}
                         >
@@ -704,11 +701,11 @@ async function send() {
               </div>
 
               {/* Composer */}
-              <div className="mt-auto border-t border-black/10 shrink-0 bg-white pb-[env(safe-area-inset-bottom)]">
+              <div className="mt-auto shrink-0 border-t border-black/10 bg-[var(--surface-strong)] pb-[env(safe-area-inset-bottom)]">
                 <div className="p-3">
                   <div className="flex w-full gap-2">
-                    <input
-                      className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white px-3 py-3 text-sm outline-none placeholder:text-[#76777B] focus:border-[#047835] disabled:opacity-60"
+                    <Input
+                      className="min-w-0 flex-1 px-3 py-3 text-sm disabled:opacity-60"
                       placeholder={inputDisabled ? "Loading your chat…" : "Type your question…"}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
@@ -720,14 +717,15 @@ async function send() {
                         }
                       }}
                     />
-                    <button
+                    <Button
                       onClick={send}
                       disabled={loading || inputDisabled}
-                      className="shrink-0 rounded-xl bg-[#047835] px-5 py-3 text-sm font-semibold text-white shadow hover:bg-[#11500F] disabled:opacity-50"
+                      className="shrink-0 px-5 py-3 text-sm disabled:opacity-50"
                       type="button"
+                      variant="primary"
                     >
                       Send
-                    </button>
+                    </Button>
                   </div>
 
                   {!profileLoading && (

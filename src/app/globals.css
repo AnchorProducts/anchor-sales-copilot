@@ -1,134 +1,396 @@
 @import "tailwindcss";
 
-/* =========================
-   AnchorP LMS Theme Tokens
-========================= */
 :root {
-  /* Core */
-  --bg: #047835;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel-2: rgba(0, 0, 0, 0.35);
-  --border: rgba(255, 255, 255, 0.10);
-  --border-2: rgba(255, 255, 255, 0.14);
+  --anchor-black: #000000;
+  --anchor-deep: #11500F;
+  --anchor-green: #047835;
+  --anchor-mint: #9CE2BB;
+  --anchor-gray: #76777B;
+  --anchor-white: #FFFFFF;
 
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.62);
-  --muted-2: rgba(255, 255, 255, 0.45);
+  --surface-page: #f3f5f4;
+  --surface-card: var(--anchor-white);
+  --surface-soft: #edf2ef;
+  --surface-strong: #e6ece8;
 
-  /* Anchor green accent */
-  --accent: #22c55e;     /* green */
-  --accent-2: #34d399;   /* emerald */
-  --accent-3: #a3e635;   /* lime */
+  --text-primary: var(--anchor-black);
+  --text-secondary: var(--anchor-gray);
+  --text-inverse: var(--anchor-white);
 
-  /* App feel */
-  --radius: 14px;
-  --radius-sm: 10px;
+  --border-default: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(17, 80, 15, 0.32);
 
-  /* Shadows */
-  --shadow: 0 12px 50px rgba(0,0,0,0.55);
-  --ring: 0 0 0 1px rgba(255,255,255,0.06);
+  --radius-sm: 12px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.11);
+
+  --ring-focus: 0 0 0 3px rgba(156, 226, 187, 0.8);
+
+  --font-h1: 700 2rem/1.15 "Arial", "Helvetica", sans-serif;
+  --font-h2: 600 1.5rem/1.25 "Arial", "Helvetica", sans-serif;
+  --font-body: 400 0.9375rem/1.55 "Arial", "Helvetica", sans-serif;
+  --font-caption: 600 0.75rem/1.35 "Arial", "Helvetica", sans-serif;
 }
 
-/* Full-bleed, iOS-safe */
 html,
 body {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0;
-
-  /* Avoid iOS rubber-band white gutters */
-  background: linear-gradient(to right, #11500F 0%, #047835 45%, #047835 100%);
+  background:
+    linear-gradient(rgba(17, 80, 15, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 80, 15, 0.03) 1px, transparent 1px),
+    linear-gradient(160deg, rgba(156, 226, 187, 0.2), transparent 40%),
+    var(--surface-page);
+  background-size: 28px 28px, 28px 28px, auto, auto;
 }
 
-/* IMPORTANT:
-   Don't pad the entire body with safe-area — it shrinks the app.
-   Let individual headers handle safe-area instead. */
 body {
-  min-height: 100svh; /* stable viewport on iOS */
-  min-height: 100dvh; /* modern browsers */
-  color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100svh;
+  min-height: 100dvh;
+  color: var(--text-primary);
+  font: var(--font-body);
   overflow-x: hidden;
 }
 
-/* remove iOS tap flash */
+h1 {
+  font: var(--font-h1);
+  letter-spacing: -0.03em;
+  color: var(--anchor-black);
+}
+
+h2,
+.ds-h2 {
+  font: var(--font-h2);
+  letter-spacing: -0.02em;
+  color: var(--anchor-black);
+}
+
+.ds-caption {
+  font: var(--font-caption);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* =========================
-   AnchorP UI Building Blocks
-========================= */
-
-/* Use the same side-to-side gradient everywhere (matches header) */
-.anchor-app-bg {
-  background: linear-gradient(to right, #11500F 0%, #047835 45%, #047835 100%);
-}
-
-/* If you want the topbar green, make it solid green */
-.anchor-topbar {
-  background: #047835;
-  border-bottom: 1px solid rgba(0,0,0,0.10);
-}
-
-/* Cards / panels */
-.anchor-card {
-  border: 1px solid var(--border);
-  background: var(--panel);
-  border-radius: var(--radius);
-  box-shadow: var(--ring);
-  backdrop-filter: blur(10px);
-}
-
-.anchor-card-header {
-  border-bottom: 1px solid var(--border);
-}
-
-.anchor-chip {
-  border: 1px solid rgba(34,197,94,0.25);
-  background: rgba(34,197,94,0.12);
-  color: rgba(167,243,208,0.95);
-  border-radius: 999px;
-}
-
-.anchor-btn {
-  border-radius: 10px;
-  font-weight: 700;
-  background: linear-gradient(90deg, var(--accent-2), var(--accent-3));
-  color: #08110b;
-  box-shadow: 0 10px 30px rgba(34,197,94,0.18);
-}
-
-.anchor-btn:disabled {
-  opacity: 0.55;
-}
-
-.anchor-input {
-  border: 1px solid var(--border);
-  background: rgba(0,0,0,0.45);
-  border-radius: 12px;
-  color: var(--text);
+:where(button, a, input, select, textarea):focus-visible {
   outline: none;
+  box-shadow: var(--ring-focus);
 }
 
-.anchor-input::placeholder {
-  color: rgba(255,255,255,0.35);
+.ds-page {
+  min-height: 100dvh;
+  background: transparent;
+  color: var(--text-primary);
 }
 
-.anchor-input:focus {
-  border-color: rgba(52,211,153,0.35);
-  box-shadow: 0 0 0 3px rgba(34,197,94,0.12);
+.ds-container {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 72rem;
+  padding-inline: 24px;
 }
 
-.anchor-msg-user {
-  border: 1px solid rgba(34,197,94,0.22);
-  background: rgba(34,197,94,0.12);
-  border-radius: 14px;
+.ds-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding-top: env(safe-area-inset-top);
+  background:
+    linear-gradient(90deg, rgba(156, 226, 187, 0.22), transparent 36%),
+    linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 38%, var(--anchor-green) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
-.anchor-msg-ai {
-  border: 1px solid var(--border);
-  background: rgba(0,0,0,0.35);
-  border-radius: 14px;
+.ds-navbar-inner {
+  margin-inline: auto;
+  display: flex;
+  max-width: 72rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 14px 24px;
+}
+
+.ds-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(156, 226, 187, 0.12), transparent 30%),
+    var(--surface-card);
+  box-shadow: var(--shadow-md);
+}
+
+.ds-card-header {
+  border-bottom: 1px solid var(--border-default);
+  padding: var(--space-2);
+}
+
+.ds-card-body {
+  padding: var(--space-2);
+}
+
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  padding: 11px 16px;
+  font: 600 0.8125rem/1 "Arial", "Helvetica", sans-serif;
+  letter-spacing: 0.01em;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.ds-btn:active {
+  transform: translateY(1px);
+}
+
+.ds-btn:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.ds-btn-primary {
+  background: linear-gradient(180deg, var(--anchor-green), var(--anchor-deep));
+  color: var(--anchor-white);
+  box-shadow: 0 8px 18px rgba(17, 80, 15, 0.25);
+}
+
+.ds-btn-primary:hover {
+  background: var(--anchor-deep);
+}
+
+.ds-btn-secondary {
+  background: var(--anchor-white);
+  border-color: var(--border-default);
+  color: var(--anchor-deep);
+}
+
+.ds-btn-secondary:hover {
+  background: var(--anchor-mint);
+  border-color: var(--border-strong);
+}
+
+.ds-btn-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--anchor-white);
+}
+
+.ds-btn-ghost:hover {
+  background: rgba(156, 226, 187, 0.22);
+  border-color: rgba(156, 226, 187, 0.56);
+}
+
+.ds-btn-destructive {
+  background: var(--anchor-black);
+  color: var(--anchor-white);
+}
+
+.ds-btn-destructive:hover {
+  background: var(--anchor-deep);
+}
+
+.ds-input,
+.ds-select,
+.ds-textarea {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font: var(--font-body);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.ds-input,
+.ds-select {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.ds-textarea {
+  min-height: 96px;
+  padding: 10px 12px;
+}
+
+.ds-input::placeholder,
+.ds-textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.ds-input:hover,
+.ds-select:hover,
+.ds-textarea:hover {
+  border-color: var(--border-strong);
+  background: var(--anchor-white);
+}
+
+.ds-input:focus,
+.ds-select:focus,
+.ds-textarea:focus {
+  border-color: var(--anchor-green);
+  background: var(--anchor-white);
+}
+
+.ds-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-soft);
+}
+
+.ds-tab {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  padding: 9px 12px;
+  font: var(--font-caption);
+  color: var(--anchor-gray);
+  background: transparent;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.ds-tab:hover {
+  color: var(--anchor-deep);
+  background: rgba(156, 226, 187, 0.4);
+}
+
+.ds-tab.is-active {
+  border-color: rgba(4, 120, 53, 0.3);
+  background: var(--anchor-mint);
+  color: var(--anchor-deep);
+}
+
+.ds-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--anchor-white);
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-body);
+}
+
+.ds-table th,
+.ds-table td {
+  border-bottom: 1px solid var(--border-default);
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ds-table th {
+  font: var(--font-caption);
+  color: var(--anchor-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ds-table tbody tr {
+  transition: background-color 180ms ease;
+}
+
+.ds-table tbody tr:hover {
+  background: rgba(156, 226, 187, 0.28);
+}
+
+.ds-alert,
+.ds-toast {
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font: 600 0.8125rem/1.45 "Arial", "Helvetica", sans-serif;
+}
+
+.ds-toast {
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-alert-neutral {
+  border-color: var(--border-default);
+  background: var(--surface-soft);
+  color: var(--anchor-deep);
+}
+
+.ds-alert-success {
+  border-color: rgba(4, 120, 53, 0.28);
+  background: rgba(156, 226, 187, 0.5);
+  color: var(--anchor-deep);
+}
+
+.ds-alert-error {
+  border-color: rgba(17, 80, 15, 0.4);
+  background: rgba(17, 80, 15, 0.12);
+  color: var(--anchor-deep);
+}
+
+.ds-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-3);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.ds-modal {
+  width: min(100%, 640px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--anchor-white);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-3);
+}
+
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: var(--font-caption);
+  color: var(--anchor-deep);
+  background: var(--anchor-mint);
+  border: 1px solid rgba(17, 80, 15, 0.2);
+}
+
+.ds-logo {
+  display: block;
+  width: auto;
+  height: 40px;
+}
+
+.anchor-app-bg {
+  background: linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
+}
+
+.anchor-topbar {
+  background: linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
 }

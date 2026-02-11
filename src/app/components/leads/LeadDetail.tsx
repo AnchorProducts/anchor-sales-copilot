@@ -11,16 +11,38 @@ type Attachment = {
   contentType: string;
   size: number;
   uploadedAt: string;
+  solution_key?: string;
+  solution_label?: string;
+};
+
+type SolutionRequest = {
+  solution_key: string;
+  solution_label: string;
+  comment: string | null;
+  attachments: Attachment[];
 };
 
 type LeadRow = {
   id: string;
   customer_company: string;
   details: string;
+  project_address: string | null;
   location_text: string;
   region_code: string;
+  state: string | null;
+  country: string | null;
+  inside_sales_name: string | null;
+  inside_sales_email: string | null;
+  outside_sales_name: string | null;
+  assignment_note: string | null;
+  roof_type: string | null;
+  roof_brand: string | null;
+  needed_month: number | null;
+  needed_year: number | null;
+  meeting_request_type: "none" | "video_call" | "site_visit" | null;
   created_by_email: string | null;
   attachments: Attachment[] | null;
+  solution_requests: SolutionRequest[] | null;
   status: string;
   assigned_rep_user_id: string | null;
   wants_video_call: boolean;
@@ -41,6 +63,19 @@ type SignedAttachment = Attachment & { url: string | null };
 
 function clean(v: any) {
   return String(v || "").trim();
+}
+
+function formatMeetingType(t: LeadRow["meeting_request_type"], wantsVideo: boolean) {
+  if (t === "video_call") return "Video call";
+  if (t === "site_visit") return "Site visit";
+  if (wantsVideo) return "Video call";
+  return "None";
+}
+
+function formatNeeded(month: number | null, year: number | null) {
+  if (!month || !year || month < 1 || month > 12) return "—";
+  const monthName = new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" });
+  return `${monthName} ${year}`;
 }
 
 export default function LeadDetail({ id }: { id: string }) {
@@ -80,7 +115,6 @@ export default function LeadDetail({ id }: { id: string }) {
       setAssignedRep(row.assigned_rep_user_id || "");
       setMeetingLink(row.meeting_link || "");
 
-      // load reps
       const { data: repRows } = await supabase
         .from("profiles")
         .select("id,email,role")
@@ -88,7 +122,6 @@ export default function LeadDetail({ id }: { id: string }) {
 
       setReps((repRows || []) as RepRow[]);
 
-      // sign attachment urls
       const atts = Array.isArray(row.attachments) ? row.attachments : [];
       const signed: SignedAttachment[] = [];
 
@@ -194,6 +227,9 @@ export default function LeadDetail({ id }: { id: string }) {
     );
   }
 
+  const attachmentByPath = new Map(attachments.map((a) => [a.path, a]));
+  const solutionRequests = Array.isArray(lead.solution_requests) ? lead.solution_requests : [];
+
   return (
     <div className="grid gap-5">
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
@@ -202,28 +238,83 @@ export default function LeadDetail({ id }: { id: string }) {
 
         <div className="mt-4 grid gap-3 text-sm">
           <div>
+            <div className="text-[12px] font-semibold text-black/70">Project address</div>
+            <div>{lead.project_address || "—"}</div>
+          </div>
+          <div>
             <div className="text-[12px] font-semibold text-black/70">Location</div>
             <div>{lead.location_text}</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Country</div>
+              <div>{lead.country || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">State</div>
+              <div>{lead.state || "—"}</div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Inside sales</div>
+              <div>
+                {lead.inside_sales_name || lead.inside_sales_email
+                  ? `${lead.inside_sales_name || "—"}${lead.inside_sales_email ? ` (${lead.inside_sales_email})` : ""}`
+                  : "Unassigned"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Outside sales assignment</div>
+              <div>{lead.outside_sales_name || "Not set"}</div>
+            </div>
+          </div>
+          {lead.assignment_note && (
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Assignment note</div>
+              <div className="whitespace-pre-wrap">{lead.assignment_note}</div>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Roof type</div>
+              <div>{lead.roof_type || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Brand</div>
+              <div>{lead.roof_brand || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">Needed around</div>
+              <div>{formatNeeded(lead.needed_month, lead.needed_year)}</div>
+            </div>
           </div>
           <div>
             <div className="text-[12px] font-semibold text-black/70">Details</div>
             <div className="whitespace-pre-wrap">{lead.details}</div>
           </div>
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Requested video call</div>
-            <div>{lead.wants_video_call ? "Yes" : "No"}</div>
+            <div className="text-[12px] font-semibold text-black/70">Scheduling request</div>
+            <div>{formatMeetingType(lead.meeting_request_type, lead.wants_video_call)}</div>
           </div>
-          {lead.wants_video_call && lead.preferred_times && (
-            <div>
-              <div className="text-[12px] font-semibold text-black/70">Preferred times</div>
-              <div className="whitespace-pre-wrap">
-                {Array.isArray(lead.preferred_times) ? lead.preferred_times.join("\n") : String(lead.preferred_times)}
+          {(lead.meeting_request_type === "video_call" ||
+            lead.meeting_request_type === "site_visit" ||
+            lead.wants_video_call) &&
+            lead.preferred_times && (
+              <div>
+                <div className="text-[12px] font-semibold text-black/70">Preferred availability</div>
+                <div className="whitespace-pre-wrap">
+                  {Array.isArray(lead.preferred_times)
+                    ? lead.preferred_times.join("\n")
+                    : String(lead.preferred_times)}
+                </div>
               </div>
-            </div>
-          )}
-          {lead.wants_video_call && (
+            )}
+          {(lead.meeting_request_type === "video_call" ||
+            lead.meeting_request_type === "site_visit" ||
+            lead.wants_video_call) && (
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Phone number</div>
+              <div className="text-[12px] font-semibold text-black/70">Contact phone</div>
               <div>{lead.video_call_phone || "—"}</div>
             </div>
           )}
@@ -235,27 +326,65 @@ export default function LeadDetail({ id }: { id: string }) {
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-        <div className="text-sm font-semibold text-black">Attachments</div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {attachments.length === 0 ? (
-            <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-              No attachments.
+        <div className="text-sm font-semibold text-black">Solution uploads</div>
+
+        {solutionRequests.length === 0 ? (
+          attachments.length === 0 ? (
+            <div className="mt-3 rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
+              No solution-specific uploads.
             </div>
           ) : (
-            attachments.map((att) => (
-              <a
-                key={att.path}
-                href={att.url || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-2xl border border-black/10 bg-white p-3 hover:bg-black/[0.03]"
-              >
-                <div className="text-sm font-semibold text-black truncate">{att.filename}</div>
-                <div className="mt-1 text-[12px] text-[#76777B] truncate">{att.path}</div>
-              </a>
-            ))
-          )}
-        </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {attachments.map((att) => (
+                <a
+                  key={att.path}
+                  href={att.url || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-xl border border-black/10 bg-white p-3 hover:bg-black/[0.03]"
+                >
+                  <div className="truncate text-sm font-semibold text-black">{att.filename}</div>
+                  <div className="mt-1 truncate text-[12px] text-[#76777B]">{att.path}</div>
+                </a>
+              ))}
+            </div>
+          )
+        ) : (
+          <div className="mt-3 grid gap-3">
+            {solutionRequests.map((solution, idx) => (
+              <div key={`${solution.solution_key}-${idx}`} className="rounded-2xl border border-black/10 bg-white p-3">
+                <div className="text-sm font-semibold text-black">{solution.solution_label}</div>
+                {solution.comment && (
+                  <div className="mt-1 whitespace-pre-wrap text-[12px] text-[#4f5054]">{solution.comment}</div>
+                )}
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {(solution.attachments || []).length === 0 ? (
+                    <div className="rounded-xl border border-black/10 bg-[#F6F7F8] p-3 text-[12px] text-black/60">
+                      No files.
+                    </div>
+                  ) : (
+                    solution.attachments.map((att) => {
+                      const signed = attachmentByPath.get(att.path);
+                      return (
+                        <a
+                          key={att.path}
+                          href={signed?.url || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-xl border border-black/10 bg-white p-3 hover:bg-black/[0.03]"
+                        >
+                          <div className="truncate text-sm font-semibold text-black">{att.filename}</div>
+                          <div className="mt-1 truncate text-[12px] text-[#76777B]">{att.path}</div>
+                        </a>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
@@ -299,7 +428,7 @@ export default function LeadDetail({ id }: { id: string }) {
               value={meetingLink}
               onChange={(e) => setMeetingLink(e.target.value)}
               className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm"
-              placeholder="https://…"
+              placeholder="https://..."
             />
           </label>
         </div>
@@ -329,7 +458,7 @@ export default function LeadDetail({ id }: { id: string }) {
             {syncing ? "Syncing…" : "Sync to HubSpot"}
           </button>
 
-          {syncMsg && <span className="text-[12px] text-black/60 self-center">{syncMsg}</span>}
+          {syncMsg && <span className="self-center text-[12px] text-black/60">{syncMsg}</span>}
         </div>
       </section>
 

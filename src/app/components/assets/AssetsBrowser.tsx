@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { Card } from "@/app/components/ui/Card";
+import { Alert } from "@/app/components/ui/Alert";
+import { Input } from "@/app/components/ui/Field";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -50,10 +53,10 @@ function productHref(p: ProductRow) {
  */
 function btnClass(on: boolean) {
   return [
-    "rounded-full border px-4 py-2 text-[12px] font-semibold transition whitespace-nowrap",
+    "rounded-full border px-4 py-2 text-[12px] font-semibold transition whitespace-nowrap duration-200",
     on
-      ? "border-[#047835] bg-[#047835] text-white"
-      : "border-black/10 bg-white text-black hover:bg-black/[0.03]",
+      ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
+      : "border-black/10 bg-white text-black hover:bg-[var(--surface-soft)]",
   ].join(" ");
 }
 
@@ -316,21 +319,21 @@ export default function AssetsBrowser() {
   }
 
   return (
-    <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
+    <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-black">Browse tackle boxes</div>
-          <div className="mt-1 text-sm text-[#76777B]">
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">
             Specs live inside each product tackle box (not a separate category).
           </div>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          <input
+          <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search…"
-            className="h-10 w-full sm:w-[280px] rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+            className="h-10 w-full bg-[var(--surface-soft)] px-4 text-sm sm:w-[280px]"
           />
         </div>
       </div>
@@ -356,8 +359,8 @@ export default function AssetsBrowser() {
               !isInternalUser
                 ? "border-black/10 bg-white text-black/30 cursor-not-allowed"
                 : filter === "internal_assets"
-                ? "border-[#047835] bg-[#047835] text-white"
-                : "border-black/10 bg-white text-black hover:bg-black/[0.03]",
+                ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
+                : "border-black/10 bg-white text-black hover:bg-[var(--surface-soft)]",
             ].join(" ")}
           >
             Internal assets
@@ -365,7 +368,7 @@ export default function AssetsBrowser() {
         </div>
 
         <div className="flex justify-end">
-          <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
+          <span className="inline-flex items-center rounded-full bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
             <span className="sm:hidden">Showing: Pub{isInternalUser ? " + Int" : ""}</span>
             <span className="hidden sm:inline">Showing: Public{isInternalUser ? " + Internal" : ""}</span>
           </span>
@@ -374,15 +377,11 @@ export default function AssetsBrowser() {
 
       <div className="mt-4">
         {error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+          <Alert tone="error">{error}</Alert>
         ) : loading ? (
-          <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-            Loading…
-          </div>
+          <Alert tone="neutral">Loading…</Alert>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-            No products found.
-          </div>
+          <Alert tone="neutral">No products found.</Alert>
         ) : (
           <div className="grid gap-3">
             {filtered.map((p) => {
@@ -393,13 +392,13 @@ export default function AssetsBrowser() {
                   key={p.id}
                   href={productHref(p)}
                   title="Open tackle box"
-                  className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 transition hover:bg-black/[0.03]"
+                  className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-white p-4 transition duration-200 hover:bg-[var(--surface-soft)]"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-black truncate">{p.name}</div>
 
-                      <div className="mt-1 text-[12px] text-[#76777B] truncate">
+                      <div className="mt-1 truncate text-[12px] text-[var(--anchor-gray)]">
                         
                         {p.series ? ` Series: ${p.series}` : ""}
                         {p.section ? ` • ${p.section}` : ""}
@@ -409,7 +408,7 @@ export default function AssetsBrowser() {
                     </div>
 
                     <div className="w-full sm:w-auto sm:shrink-0">
-                      <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+                      <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
                         Open →
                       </div>
                     </div>
@@ -420,6 +419,6 @@ export default function AssetsBrowser() {
           </div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

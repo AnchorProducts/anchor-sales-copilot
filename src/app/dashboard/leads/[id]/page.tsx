@@ -60,9 +60,9 @@ export default function LeadDetailPage() {
           <div className="flex items-center gap-3 min-w-0">
             <Link
               href="/dashboard/leads"
-              className="h-9 w-9 rounded-md bg-white/10 border border-white/20 flex items-center justify-center shrink-0"
+              className="inline-flex shrink-0 items-center"
             >
-              <img src="/anchorp.svg" alt="Anchor" className="h-6 w-auto" />
+              <img src="/anchorp.svg" alt="Anchor" className="ds-logo" />
             </Link>
 
             <div className="leading-tight min-w-0">

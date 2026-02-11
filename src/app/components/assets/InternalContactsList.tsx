@@ -197,10 +197,10 @@ export default function InternalContactsList({ productId }: { productId: string 
           <div className="flex items-center gap-3 min-w-0">
             <Link
               href="/assets"
-              className="h-9 w-9 rounded-md bg-white/10 border border-white/20 flex items-center justify-center shrink-0"
+              className="inline-flex shrink-0 items-center"
               title="Back to Asset Library"
             >
-              <img src="/anchorp.svg" alt="Anchor Products" className="h-10 w-auto" />
+              <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo" />
             </Link>
 
             <div className="leading-tight min-w-0">
