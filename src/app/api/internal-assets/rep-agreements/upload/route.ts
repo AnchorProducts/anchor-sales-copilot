@@ -67,8 +67,14 @@ export async function POST(req: Request) {
     const ts = Date.now();
     const base = safeFilename(title) || "rep-agreement";
 
-    const pdfPath = `internal/rep-agreements/${productId}/${ts}-${base}.pdf`;
-    const docxPath = `internal/rep-agreements/${productId}/${ts}-${base}.docx`;
+    const productFolder = safeFilename(productId) || "rep-agreements";
+    const baseFolder =
+      productFolder.toLowerCase() === "rep-agreements"
+        ? "internal/rep-agreements"
+        : `internal/rep-agreements/${productFolder}`;
+
+    const pdfPath = `${baseFolder}/${ts}-${base}.pdf`;
+    const docxPath = `${baseFolder}/${ts}-${base}.docx`;
 
     // upload to storage (knowledge bucket)
     const pdfBuf = Buffer.from(await pdf.arrayBuffer());

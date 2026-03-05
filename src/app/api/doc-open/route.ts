@@ -10,6 +10,38 @@ function normalizePathInput(s: string) {
   return decodeURIComponent((s || "").trim()).replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
+function storagePathCandidates(input: string) {
+  const raw = normalizePathInput(input);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (p: string) => {
+    const v = normalizePathInput(p);
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  };
+
+  add(raw);
+
+  if (raw.toLowerCase().startsWith("knowledge/")) {
+    add(raw.slice("knowledge/".length));
+  }
+
+  const fromBucketUrl = raw.match(/(?:^|\/)knowledge\/(.+)$/i);
+  if (fromBucketUrl?.[1]) add(fromBucketUrl[1]);
+
+  if (raw.toLowerCase().startsWith("rep-agreements/")) {
+    add(`internal/${raw}`);
+  }
+
+  if (!raw.includes("/")) {
+    add(`internal/rep-agreements/${raw}`);
+  }
+
+  return out;
+}
+
 function filenameFromPath(path: string) {
   const clean = String(path || "").split("?")[0];
   return clean.split("/").pop() || "download";
@@ -50,6 +82,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const path = normalizePathInput(searchParams.get("path") || "");
+  const pathOptions = storagePathCandidates(path);
   const download = searchParams.get("download") === "1";
 
   // ✅ NEW: allow token via query param for mobile (because window.location can't send headers)
@@ -94,7 +127,7 @@ export async function GET(req: Request) {
   }
 
   // 4) If still not authed, only allow PUBLIC paths
-  if (!user && isInternalPath(path)) {
+  if (!user && pathOptions.some((p) => isInternalPath(p))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -103,28 +136,44 @@ export async function GET(req: Request) {
   ------------------------------------------------- */
 
   if (!download) {
-    const { data, error } = await supabaseAdmin.storage.from("knowledge").createSignedUrl(path, 60 * 30);
+    let signedUrl: string | null = null;
+    for (const p of pathOptions) {
+      const { data, error } = await supabaseAdmin.storage.from("knowledge").createSignedUrl(p, 60 * 30);
+      if (!error && data?.signedUrl) {
+        signedUrl = data.signedUrl;
+        break;
+      }
+    }
 
-    if (error || !data?.signedUrl) {
+    if (!signedUrl) {
       return NextResponse.json({ error: "Could not create signed url" }, { status: 500 });
     }
 
-    return NextResponse.redirect(data.signedUrl, 302);
+    return NextResponse.redirect(signedUrl, 302);
   }
 
   /* ------------------------------------------------
      ✅ DOWNLOAD: proxy so attachment is forced
   ------------------------------------------------- */
 
-  const { data: file, error: dlErr } = await supabaseAdmin.storage.from("knowledge").download(path);
+  let file: Blob | null = null;
+  let resolvedPath = pathOptions[0] || path;
+  for (const p of pathOptions) {
+    const { data, error } = await supabaseAdmin.storage.from("knowledge").download(p);
+    if (!error && data) {
+      file = data;
+      resolvedPath = p;
+      break;
+    }
+  }
 
-  if (dlErr || !file) {
+  if (!file) {
     return NextResponse.json({ error: "Could not download file" }, { status: 500 });
   }
 
   const arrayBuf = await file.arrayBuffer();
-  const filename = filenameFromPath(path);
-  const contentType = contentTypeFor(path);
+  const filename = filenameFromPath(resolvedPath);
+  const contentType = contentTypeFor(resolvedPath);
 
   return new NextResponse(arrayBuf, {
     status: 200,
