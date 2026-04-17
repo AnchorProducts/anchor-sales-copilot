@@ -48,7 +48,7 @@ export default function NewLeadPage() {
             </Link>
 
             <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate text-white">Submit a Job Lead</div>
+              <div className="text-sm font-semibold tracking-wide truncate text-white">Project Identifier</div>
               <div className="text-[12px] text-white/80 truncate">External contractors</div>
             </div>
           </div>
@@ -65,7 +65,7 @@ export default function NewLeadPage() {
       <div className="mx-auto max-w-5xl px-5 py-6">
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="ds-caption">Lead Intake</div>
-          <h1 className="mt-2 text-2xl">Submit a Job Lead</h1>
+          <h1 className="mt-2 text-2xl">Project Identifier</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
             Share project requirements, media, and scheduling details for inside sales review.
           </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
@@ -31,6 +31,14 @@ type SolutionInput = {
   selected: boolean;
   comment: string;
   files: File[];
+};
+
+type Contractor = {
+  name: string;
+  company: string;
+  role: string;
+  phone: string;
+  email: string;
 };
 
 const ROOF_TYPES = ["KEE", "PVC", "TPO", "EDPM", "APP", "SBS", "SBS TORCH", "Coatings"];
@@ -78,9 +86,41 @@ function buildInitialSolutions() {
   ) as Record<string, SolutionInput>;
 }
 
+type UserProfile = {
+  full_name: string | null;
+  company: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
 export default function LeadForm() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name,company,phone,email")
+        .eq("id", user.id)
+        .maybeSingle();
+      setProfile(
+        data
+          ? {
+              full_name: (data as any).full_name || null,
+              company: (data as any).company || null,
+              phone: (data as any).phone || null,
+              email: (data as any).email || user.email || null,
+            }
+          : { full_name: null, company: null, phone: null, email: user.email || null }
+      );
+    })();
+  }, [supabase]);
 
   const [form, setForm] = useState<FormState>({
     customer_company: "",
@@ -100,6 +140,7 @@ export default function LeadForm() {
   });
 
   const [solutions, setSolutions] = useState<Record<string, SolutionInput>>(buildInitialSolutions());
+  const [contractors, setContractors] = useState<Contractor[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -171,6 +212,23 @@ export default function LeadForm() {
     });
   }
 
+  function addContractor() {
+    setContractors((prev) => [
+      ...prev,
+      { name: "", company: "", role: "", phone: "", email: "" },
+    ]);
+  }
+
+  function removeContractor(index: number) {
+    setContractors((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateContractor<K extends keyof Contractor>(index: number, key: K, value: Contractor[K]) {
+    setContractors((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, [key]: value } : c))
+    );
+  }
+
   function validate() {
     if (!clean(form.customer_company)) return "Customer company is required.";
     if (!clean(form.details)) return "Lead details are required.";
@@ -240,6 +298,11 @@ export default function LeadForm() {
       fd.append("preferred_times", form.preferred_times);
       fd.append("video_call_phone", form.video_call_phone);
 
+      fd.append("submitter_name", profile?.full_name || "");
+      fd.append("submitter_company", profile?.company || "");
+      fd.append("submitter_phone", profile?.phone || "");
+      fd.append("contractors", JSON.stringify(contractors));
+
       let solutionIndex = 0;
       for (const option of selectedSolutions) {
         const entry = solutions[option.key];
@@ -284,6 +347,7 @@ export default function LeadForm() {
         video_call_phone: "",
       });
       setSolutions(buildInitialSolutions());
+      setContractors([]);
       setSubmitting(false);
     } catch (e: any) {
       setError(e?.message || "Failed to submit lead.");
@@ -294,10 +358,25 @@ export default function LeadForm() {
   return (
     <form onSubmit={submit}>
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
-      <div className="text-sm font-semibold text-black">Submit a Job Lead</div>
+      <div className="text-sm font-semibold text-black">Project Identifier</div>
       <div className="mt-1 text-sm text-[var(--anchor-gray)]">
         Select solution type(s), add photos/videos for each, and include scheduling availability.
       </div>
+
+      {profile && (
+        <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div className="text-sm font-semibold text-black">Submitted by</div>
+          <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
+            {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
+            {profile.company && <div>{profile.company}</div>}
+            {profile.phone && <div>{profile.phone}</div>}
+            {profile.email && <div>{profile.email}</div>}
+          </div>
+          <div className="mt-2 text-[11px] text-black/40">
+            Your contact information is pulled from your account. Update it in your profile settings.
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid gap-3">
         <label className="grid gap-1 text-sm">
@@ -567,6 +646,90 @@ export default function LeadForm() {
               placeholder="List date/time options with timezone, one per line"
             />
           </label>
+        </div>
+        <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div className="text-sm font-semibold text-black">Contractors on this Project</div>
+          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            Add contact information for any contractors involved in this project.
+          </div>
+
+          {contractors.length > 0 && (
+            <div className="mt-3 grid gap-3">
+              {contractors.map((contractor, index) => (
+                <div key={index} className="rounded-xl border border-black/10 bg-white p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-black">Contractor {index + 1}</div>
+                    <Button
+                      onClick={() => removeContractor(index)}
+                      className="px-2 py-0.5 text-[11px]"
+                      variant="secondary"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  <div className="grid gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="grid gap-1 text-sm">
+                        <span className="font-semibold">Name</span>
+                        <Input
+                          value={contractor.name}
+                          onChange={(e) => updateContractor(index, "name", e.target.value)}
+                          className="h-10 px-3 text-sm"
+                          placeholder="Full name"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        <span className="font-semibold">Company</span>
+                        <Input
+                          value={contractor.company}
+                          onChange={(e) => updateContractor(index, "company", e.target.value)}
+                          className="h-10 px-3 text-sm"
+                          placeholder="Company name"
+                        />
+                      </label>
+                    </div>
+                    <label className="grid gap-1 text-sm">
+                      <span className="font-semibold">Role / Trade</span>
+                      <Input
+                        value={contractor.role}
+                        onChange={(e) => updateContractor(index, "role", e.target.value)}
+                        className="h-10 px-3 text-sm"
+                        placeholder="e.g. Roofing contractor, Electrician"
+                      />
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="grid gap-1 text-sm">
+                        <span className="font-semibold">Phone</span>
+                        <Input
+                          value={contractor.phone}
+                          onChange={(e) => updateContractor(index, "phone", e.target.value)}
+                          className="h-10 px-3 text-sm"
+                          placeholder="(555) 555-5555"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        <span className="font-semibold">Email</span>
+                        <Input
+                          value={contractor.email}
+                          onChange={(e) => updateContractor(index, "email", e.target.value)}
+                          className="h-10 px-3 text-sm"
+                          placeholder="email@example.com"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Button
+            onClick={addContractor}
+            className="mt-3 px-3 py-1.5 text-[12px]"
+            variant="secondary"
+          >
+            + Add contractor
+          </Button>
         </div>
       </div>
 

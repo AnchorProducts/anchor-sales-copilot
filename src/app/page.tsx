@@ -1,6 +1,7 @@
 // src/app/page.tsx
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -256,7 +257,10 @@ function LoginInner() {
         </Card>
 
         <p className="ds-caption mt-6 text-center">
-          If you don’t have access, ask an admin to enable your account.
+          New external user?{" "}
+          <Link href="/signup" className="underline underline-offset-2 hover:opacity-80">
+            Create an account
+          </Link>
         </p>
       </div>
     </main>

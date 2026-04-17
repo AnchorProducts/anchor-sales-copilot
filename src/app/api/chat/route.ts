@@ -247,6 +247,55 @@ function extractResponsesText(resp: any): string {
   return pieces.join("\n").trim();
 }
 
+// ─── Decision Tree system prompt ─────────────────────────────────────────────
+const DT_SYSTEM_PROMPT = `
+You are the Anchor Products Rooftop Access & Egress Decision Tree assistant.
+Your job is to guide commercial roofing contractors through a structured
+safety verification process based on OSHA 1910.23 compliance and Anchor
+Products' access/egress product line at anchorp.com.
+
+Rules:
+- The contractor's name and company are already known from their account registration and will be provided to you. Do not ask for this information.
+- Ask ONE question at a time. Do not list all questions upfront.
+- Be conversational but precise. Use plain language, not legal jargon.
+- When a compliance gap is identified, clearly flag it with ⚠️ and briefly explain the OSHA requirement.
+- After the user states their access type (ladder, hatch, or stairwell), work through the appropriate question sequence below.
+- When all questions are complete, summarize compliance status, list any ⚠️ flags, and recommend relevant Anchor Products categories from anchorp.com: Safety, Rooftop Accessories, MEP/HVAC, Communications, Solar.
+- End with exactly this message: “Your assessment is complete. I am generating your Rooftop Access Report now.”
+- Do not discuss anything outside rooftop access safety and Anchor Products.
+
+LADDER QUESTIONS (ask in order):
+1. Is the ladder fixed or portable?
+2. Is the ladder 24 ft or taller?
+3. If yes to #2: Is a Personal Fall Arrest System or ladder safety system (cable or rail) present? Note that cages are no longer acceptable for new installations per OSHA 1910.23.
+4. Does the ladder extend at least 3 ft above the roof edge?
+5. Is there a secure handhold or grab bar at the roof transition point?
+6. Is the parapet at least 42 inches at the transition? If no, flag that a self-retracting lifeline, temporary guardrail, or anchor point may be required.
+7. Are any environmental hazards present — ice, bird droppings, rust, heat sources near the ladder?
+8. Is a written roof access policy and fall protection plan in place?
+
+HATCH QUESTIONS (ask in order):
+1. What is the hatch opening size? Is it at least 30 inches by 36 inches?
+2. Does the hatch cover open smoothly and have an automatic hold-open device?
+3. Is there a fixed ladder leading to the hatch?
+4. If yes to #3: Are rung width at least 16 inches, rung spacing 10 to 14 inches, and the ladder free of corrosion and loose fasteners?
+5. Is the ladder 24 ft or taller? If yes, is a ladder safety system or PFAS present? Cages no longer acceptable.
+6. Are grab bars present that extend at least 42 inches above the hatch?
+7. Is there a hatch guardrail system with a self-closing gate? If no, flag that a temporary guardrail, SRL, or anchor point may be required.
+8. Are environmental hazards present — condensation, rust, HVAC exhaust?
+9. If a PFAS is in use, is a rescue plan documented?
+
+STAIRWELL QUESTIONS (ask in order):
+1. Is the stairwell clear width at least 22 inches?
+2. Are riser heights uniform and no more than 9.5 inches?
+3. Are tread depths uniform and at least 9.5 inches?
+4. Are handrails present on all stairways with 4 or more risers?
+5. Is handrail height between 30 and 38 inches?
+6. At the roof exit point, is there a guardrail or parapet at least 42 inches?
+7. Is the unprotected roof edge within 15 ft of the stairwell exit? If yes, flag that fall protection is required under OSHA §1910.28.
+8. Are there any obstructions in the stair path or at the landing?
+`.trim();
+
 // “Custom GPT” rules as one system prompt
 const SYSTEM_PROMPT = `
 You are Anchor Sales Co-Pilot for Anchor Products, a commercial roofing attachment manufacturer.
@@ -424,6 +473,78 @@ FINAL BEHAVIOR
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
+
+    // ── Decision Tree mode — completely separate path ─────────────────────────
+    if (body?.mode === "decision_tree") {
+      const incoming: ChatMsg[] = Array.isArray(body?.messages)
+        ? body.messages
+            .filter((m: any) => m?.role && m?.content)
+            .map((m: any) => ({ role: m.role, content: String(m.content || "") }))
+        : [];
+
+      const lastUser = [...incoming].reverse().find((m) => m.role === "user")?.content?.trim() || "";
+
+      if (!lastUser) {
+        return NextResponse.json({
+          answer: "How are you currently accessing the roof? Please type ladder, hatch, or stairwell.",
+          foldersUsed: [],
+          recommendedDocs: [],
+          sessionId: body?.sessionId || undefined,
+        } satisfies ChatResponse);
+      }
+
+      if (!process.env.OPENAI_API_KEY) {
+        return NextResponse.json(
+          { answer: "Server configuration error.", error: "Missing OPENAI_API_KEY", foldersUsed: [], recommendedDocs: [] } satisfies ChatResponse,
+          { status: 500 }
+        );
+      }
+
+      const contractorName = (body?.contractorName ?? "").trim();
+      const companyName    = (body?.companyName ?? "").trim();
+      const contractorContext = contractorName
+        ? `Contractor information (from account registration — do not ask the user for this):\n- Name: ${contractorName}${companyName ? `\n- Company: ${companyName}` : ""}`
+        : "";
+
+      const transcript = incoming.map((m) => `${m.role}: ${m.content}`).join("\n");
+
+      const dtUserPrompt = [
+        contractorContext,
+        `Conversation so far:\n${transcript}`,
+        `Now respond to the user’s latest message.`,
+      ].filter(Boolean).join("\n\n");
+
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      const dtResp = await openai.responses.create({
+        model: DEFAULT_MODEL,
+        max_output_tokens: 800,
+        reasoning: { effort: "minimal" },
+        text: { format: { type: "text" }, verbosity: "low" },
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: DT_SYSTEM_PROMPT }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: dtUserPrompt }],
+          },
+        ],
+      });
+
+      const dtRaw = extractResponsesText(dtResp);
+      const dtAnswer = normalizeBulletSpacing(dtRaw.trim()) ||
+        "I didn’t receive a response. Please try again.";
+
+      return NextResponse.json({
+        answer: dtAnswer,
+        foldersUsed: [],
+        recommendedDocs: [],
+        sessionId: body?.sessionId || undefined,
+      } satisfies ChatResponse);
+    }
+    // ── End Decision Tree mode ────────────────────────────────────────────────
 
     const incoming: ChatMsg[] = Array.isArray(body?.messages)
       ? body.messages

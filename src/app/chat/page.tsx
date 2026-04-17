@@ -10,6 +10,7 @@ import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
 import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
 
 type RecommendedDoc = {
@@ -53,6 +54,14 @@ type ConversationRow = {
   deleted_at?: string | null;
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+const DEFAULT_GREETING: Msg = {
+  role: "assistant",
+  content:
+    "Anchor Sales Co-Pilot ready.\nTell me what you're mounting and your roof/membrane type (ex: U2400 EPDM), and I'll recommend the right Anchor solution.",
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function renderMessageContent(content: string) {
   const parts = String(content || "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 1) {
@@ -61,26 +70,17 @@ function renderMessageContent(content: string) {
   return (
     <div className="space-y-2">
       {parts.map((p, i) => (
-        <div key={i} className="text-black whitespace-pre-line">
-          {p}
-        </div>
+        <div key={i} className="text-black whitespace-pre-line">{p}</div>
       ))}
     </div>
   );
 }
-
-const DEFAULT_GREETING: Msg = {
-  role: "assistant",
-  content:
-    "Anchor Sales Co-Pilot ready.\nTell me what you’re mounting and your roof/membrane type (ex: U2400 EPDM), and I’ll recommend the right Anchor solution.",
-};
 
 function titleOrNew(title?: string | null) {
   const t = (title || "").trim();
   return t.length ? t : "New chat";
 }
 
-/** prevents "Unexpected end of JSON input" */
 async function readJsonSafely<T = any>(res: Response): Promise<T | null> {
   const text = await res.text();
   if (!text) return null;
@@ -91,42 +91,37 @@ async function readJsonSafely<T = any>(res: Response): Promise<T | null> {
   }
 }
 
+// ─── ChatPage ─────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const router = useRouter();
-  const goAdmin = useCallback(() => {
-    router.push("/admin/knowledge");
-  }, [router]);
+  const goAdmin = useCallback(() => { router.push("/admin/knowledge"); }, [router]);
 
   const supabase = useMemo(() => supabaseBrowser(), []);
 
-  // profile-driven access
-  const [role, setRole] = useState<ProfileRow["role"] | null>(null);
-  const [userType, setUserType] = useState<UserType>("external");
+  // ── Profile-driven access ─────────────────────────────────────────────────
+  const [role, setRole]           = useState<ProfileRow["role"] | null>(null);
+  const [userType, setUserType]   = useState<UserType>("external");
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // auth + conversation id
-  const [userId, setUserId] = useState<string | null>(null);
+  // ── Auth + conversation ───────────────────────────────────────────────────
+  const [userId, setUserId]               = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [sessionId, setSessionId]         = useState<string | null>(null);
 
-  // learning continuity
-  const [sessionId, setSessionId] = useState<string | null>(null);
-
-  // sidebar list
+  // ── Sidebar ───────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
 
-  // UI
+  // ── UI ────────────────────────────────────────────────────────────────────
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  // chat
-  const [input, setInput] = useState("");
+  // ── Sales Copilot chat ────────────────────────────────────────────────────
+  const [input, setInput]       = useState("");
   const [messages, setMessages] = useState<Msg[]>([DEFAULT_GREETING]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
 
-  // feedback (opt-in)
+  // ── Feedback ──────────────────────────────────────────────────────────────
   const [showFeedback, setShowFeedback] = useState(false);
-
-  // sources for feedback component
-  const [lastSources, setLastSources] = useState<SourceUsed[]>([]);
+  const [lastSources, setLastSources]   = useState<SourceUsed[]>([]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -159,6 +154,7 @@ export default function ChatPage() {
     return true;
   }, [isDefaultGreeting, lastAssistantMessage]);
 
+  // ── Conversation helpers ──────────────────────────────────────────────────
   const loadConversationMessages = useCallback(
     async (uid: string, cid: string) => {
       setHistoryLoading(true);
@@ -175,17 +171,12 @@ export default function ChatPage() {
 
         if (rows && rows.length > 0) {
           const display: Msg[] = [];
-
           for (const r of rows as any[]) {
             const role = r.role as "user" | "assistant";
             const content = (r.content ?? "").toString();
-
-            // skip docs-only blank assistant rows (we don't have docs panel anymore)
             if (role === "assistant" && !content.trim()) continue;
-
             display.push({ role, content });
           }
-
           setMessages(display as any);
         } else {
           setMessages([DEFAULT_GREETING] as any);
@@ -202,7 +193,6 @@ export default function ChatPage() {
 
   const loadConversations = useCallback(
     async (uid: string) => {
-      // no sidebar; keep list for auto-title only
       try {
         const { data, error } = await supabase
           .from("conversations")
@@ -213,13 +203,10 @@ export default function ChatPage() {
           .limit(50);
 
         if (error) console.error("CONVERSATIONS_LIST_ERROR:", error);
-
         const list = (data || []) as ConversationRow[];
         setConversations(list);
         return list;
-      } finally {
-        // no sidebar; keep list for auto-title only
-      }
+      } finally {}
     },
     [supabase]
   );
@@ -241,21 +228,14 @@ export default function ChatPage() {
   const renameConversation = useCallback(
     async (cid: string, title: string) => {
       if (!userId) return;
-
       const trimmed = title.trim();
       if (!trimmed) return;
-
       const { error } = await supabase
         .from("conversations")
         .update({ title: trimmed, updated_at: new Date().toISOString() })
         .eq("id", cid)
         .eq("user_id", userId);
-
-      if (error) {
-        console.error("CONVERSATION_RENAME_ERROR:", error);
-        return;
-      }
-
+      if (error) { console.error("CONVERSATION_RENAME_ERROR:", error); return; }
       await loadConversations(userId);
     },
     [supabase, userId, loadConversations]
@@ -263,20 +243,12 @@ export default function ChatPage() {
 
   const switchConversation = useCallback(
     async (cid: string) => {
-      if (!userId) return;
-
-      if (cid === conversationId) {
-        return;
-      }
-
+      if (!userId || cid === conversationId) return;
       setConversationId(cid);
-
-      // reset per-conversation UI
       setLastSources([]);
       setSessionId(null);
       setInput("");
       setShowFeedback(false);
-
       await loadConversationMessages(userId, cid);
     },
     [conversationId, loadConversationMessages, userId]
@@ -285,56 +257,37 @@ export default function ChatPage() {
   const deleteConversation = useCallback(
     async (cid: string) => {
       if (!userId) return;
-
-      const ok = window.confirm("Delete this chat? You can’t undo this.");
+      const ok = window.confirm("Delete this chat? You can't undo this.");
       if (!ok) return;
-
       const now = new Date().toISOString();
-
       const { error } = await supabase
         .from("conversations")
         .update({ deleted_at: now, updated_at: now })
         .eq("id", cid)
         .eq("user_id", userId);
-
-      if (error) {
-        console.error("CONVERSATION_DELETE_ERROR:", error);
-        return;
-      }
-
+      if (error) { console.error("CONVERSATION_DELETE_ERROR:", error); return; }
       const list = await loadConversations(userId);
-
       if (cid === conversationId) {
         const nextId = list?.[0]?.id ?? null;
-
         setLastSources([]);
         setSessionId(null);
         setInput("");
         setShowFeedback(false);
-
         if (nextId) {
           setConversationId(nextId);
           await loadConversationMessages(userId, nextId);
         } else {
           const created = await createConversation(userId);
-          const newId = created?.id ?? null;
-          setConversationId(newId);
+          setConversationId(created?.id ?? null);
           setMessages([DEFAULT_GREETING]);
           await loadConversations(userId);
         }
       }
     },
-    [
-      userId,
-      supabase,
-      loadConversations,
-      conversationId,
-      loadConversationMessages,
-      createConversation,
-    ]
+    [userId, supabase, loadConversations, conversationId, loadConversationMessages, createConversation]
   );
 
-  // boot
+  // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
 
@@ -346,22 +299,28 @@ export default function ChatPage() {
         if (userErr) console.error("AUTH_GET_USER_ERROR:", userErr);
 
         const user = userData.user;
-        if (!user) {
-          router.replace("/");
-          return;
-        }
+        if (!user) { router.replace("/"); return; }
 
         setUserId(user.id);
 
-        // profile
+        // Profile
         let { data: profile, error: profileErr } = await supabase
           .from("profiles")
-          .select("role,user_type,email")
+          .select("role,user_type,email,full_name,company")
           .eq("id", user.id)
           .maybeSingle<ProfileRow>();
 
         if (!alive) return;
-        if (profileErr) console.error("PROFILE_READ_ERROR:", profileErr);
+        if (profileErr) {
+          console.warn("PROFILE_READ_ERROR (non-fatal):", profileErr);
+          const { data: minProfile } = await supabase
+            .from("profiles")
+            .select("role,user_type,email")
+            .eq("id", user.id)
+            .maybeSingle<Pick<ProfileRow, "role" | "user_type" | "email">>();
+          if (!alive) return;
+          profile = minProfile ? { ...minProfile } : null;
+        }
 
         if (!profile) {
           const email = (user.email || "").trim().toLowerCase();
@@ -372,13 +331,7 @@ export default function ChatPage() {
           const { data: created, error: upsertErr } = await supabase
             .from("profiles")
             .upsert(
-              {
-                id: user.id,
-                email,
-                user_type,
-                role: roleToSet,
-                updated_at: new Date().toISOString(),
-              },
+              { id: user.id, email, user_type, role: roleToSet, updated_at: new Date().toISOString() },
               { onConflict: "id" }
             )
             .select("role,user_type,email")
@@ -393,7 +346,7 @@ export default function ChatPage() {
         setRole(profile?.role ?? null);
         setUserType((profile?.user_type as UserType) ?? "external");
 
-        // conversations
+        // Conversations
         const list = await loadConversations(user.id);
         if (!alive) return;
 
@@ -405,7 +358,6 @@ export default function ChatPage() {
         }
 
         if (!alive) return;
-
         setConversationId(cid);
 
         if (cid) await loadConversationMessages(user.id, cid);
@@ -417,25 +369,19 @@ export default function ChatPage() {
       }
     })();
 
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [createConversation, loadConversationMessages, loadConversations, router, supabase]);
 
   async function newChat() {
     if (!userId) return;
-
     setMessages([DEFAULT_GREETING]);
     setLastSources([]);
     setSessionId(null);
     setInput("");
     setShowFeedback(false);
-
     const created = await createConversation(userId);
     if (!created?.id) return;
-
     setConversationId(created.id);
-
     await loadConversations(userId);
     setMessages([DEFAULT_GREETING]);
   }
@@ -444,120 +390,92 @@ export default function ChatPage() {
   const inputDisabled = !ready;
 
   const roleLabel = useMemo(() => {
-    if (role === "anchor_rep") return "Anchor Rep";
+    if (role === "anchor_rep")   return "Anchor Rep";
     if (role === "external_rep") return "External Rep";
-    if (role === "admin") return "Admin";
+    if (role === "admin")        return "Admin";
     return "no role";
   }, [role]);
 
-async function send() {
-  const text = input.trim();
-  if (!text || loading) return;
-  if (!userId || !conversationId) return;
-  if (profileLoading || historyLoading) return;
+  // ── Send ──────────────────────────────────────────────────────────────────
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+    if (!userId || !conversationId) return;
+    if (profileLoading || historyLoading) return;
 
-  setShowFeedback(false);
+    setShowFeedback(false);
 
-  // optimistic UI append
-  const nextMessages: Msg[] = [...messages, { role: "user", content: text }];
-  setMessages(nextMessages);
-  setInput("");
-  setLoading(true);
-  setLastSources([]);
+    const nextMessages: Msg[] = [...messages, { role: "user", content: text }];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+    setLastSources([]);
 
-  try {
-    // ✅ Send ChatGPT-style thread (strip meta)
-    const thread = nextMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    try {
+      const thread = nextMessages.map((m) => ({ role: m.role, content: m.content }));
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: thread,          // ✅ key change
-        userType,
-        conversationId,
-        sessionId,
-      }),
-    });
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: thread, userType, conversationId, sessionId }),
+      });
 
-    if (res.status === 401) {
-      router.replace("/");
-      router.refresh();
-      return;
+      if (res.status === 401) { router.replace("/"); router.refresh(); return; }
+
+      const data = await readJsonSafely<ChatResponse>(res);
+
+      if (!res.ok) {
+        const msg = (data?.error ?? `HTTP ${res.status}`).toString();
+        setMessages((m) => [...m, { role: "assistant", content: `I hit an error.\n\n${msg}` }]);
+        return;
+      }
+
+      const sources = Array.isArray(data?.sourcesUsed) ? data!.sourcesUsed! : [];
+      setLastSources(sources);
+      if (data?.sessionId) setSessionId(data.sessionId);
+
+      const answerText = (data?.answer ?? "").toString().trim();
+      if (answerText) {
+        setMessages((m) => [...m, { role: "assistant", content: answerText }]);
+      } else {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: "I didn't get a response back. Try again — and if it keeps happening, tell me what you're securing + membrane type so I can recommend the right solution." },
+        ]);
+      }
+
+      // Auto-title
+      const current = conversations.find((c) => c.id === conversationId);
+      const currentTitle = (current?.title || "").trim();
+      if (!currentTitle || currentTitle.toLowerCase() === "new chat") {
+        renameConversation(conversationId, text.slice(0, 48).trim() || "New chat");
+      }
+
+      if (data?.conversationId && data.conversationId !== conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      await loadConversations(userId);
+    } catch (e: any) {
+      setMessages((m) => [...m, { role: "assistant", content: `Network error: ${e?.message || String(e)}` }]);
+    } finally {
+      setLoading(false);
     }
-
-    const data = await readJsonSafely<ChatResponse>(res);
-
-    if (!res.ok) {
-      const msg = (data?.error ?? `HTTP ${res.status}`).toString();
-      setMessages((m) => [...m, { role: "assistant", content: `I hit an error.\n\n${msg}` }]);
-      return;
-    }
-
-    const sources = Array.isArray(data?.sourcesUsed) ? data!.sourcesUsed! : [];
-
-    setLastSources(sources);
-    if (data?.sessionId) setSessionId(data.sessionId);
-
-    const answerText = (data?.answer ?? "").toString().trim();
-
-    if (answerText) {
-      setMessages((m) => [...m, { role: "assistant", content: answerText }]);
-    } else {
-      // ✅ NEW: never allow “no assistant bubble”
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          content:
-            "I didn’t get a response back from the assistant. Try again — and if it keeps happening, tell me what you’re securing + membrane type so I can recommend the right solution.",
-        },
-      ]);
-    }
-
-
-    // auto-title
-    const current = conversations.find((c) => c.id === conversationId);
-    const currentTitle = (current?.title || "").trim();
-    if (!currentTitle || currentTitle.toLowerCase() === "new chat") {
-      const nextTitle = text.slice(0, 48).trim() || "New chat";
-      renameConversation(conversationId, nextTitle);
-    }
-
-    if (data?.conversationId && data.conversationId !== conversationId) {
-      setConversationId(data.conversationId);
-    }
-
-    await loadConversations(userId);
-  } catch (e: any) {
-    setMessages((m) => [
-      ...m,
-      { role: "assistant", content: `Network error: ${e?.message || String(e)}` },
-    ]);
-  } finally {
-    setLoading(false);
   }
-}
 
-  // Shared UI tokens (Anchor dashboard scheme)
-  const PANEL = "bg-white";
-  const PANEL_HEADER = "border-b border-black/10 px-4 py-3 shrink-0";
+  // ── Shared UI tokens ──────────────────────────────────────────────────────
+  const PANEL      = "bg-white";
   const PANEL_BODY = "flex-1 min-h-0";
   const SOFT_SCROLL = "overflow-y-auto [scrollbar-width:thin]";
-
-  const MUTED = "text-[var(--anchor-gray)]";
+  const MUTED      = "text-[var(--anchor-gray)]";
 
   return (
     <main className="ds-page flex h-[100vh] flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
-      {/* Top bar */}
+
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <Navbar>
         <NavbarInner>
-          {/* Left: brand + menu */}
           <div className="flex min-w-0 items-center gap-3">
-            {/* Brand */}
             <button
               type="button"
               onClick={() => window.location.reload()}
@@ -569,18 +487,17 @@ async function send() {
             </button>
 
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-semibold tracking-wide text-white">
+              <span className="truncate text-sm font-semibold tracking-wide text-white">
                 Anchor Sales Co-Pilot
-              </div>
+              </span>
               <div className="truncate text-[12px] text-white/80">Sales • Assets • Leads</div>
             </div>
           </div>
 
-          {/* Right: actions */}
           <div className="flex shrink-0 items-center gap-2">
             <Button
               onClick={() => window.location.reload()}
-              className="h-9 px-3"
+              className="hidden h-9 px-3 sm:inline-flex"
               title="Refresh chat"
               aria-label="Refresh chat"
               variant="ghost"
@@ -589,34 +506,30 @@ async function send() {
             </Button>
             <Link
               href="/dashboard"
-              className="ds-btn ds-btn-ghost hidden h-9 items-center px-3 md:inline-flex"
+              className="ds-btn ds-btn-ghost inline-flex h-9 items-center px-3"
               title="Return to Dashboard"
             >
               Dashboard
             </Link>
-
-            
-
           </div>
         </NavbarInner>
       </Navbar>
 
-      {/* Body */}
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="mx-auto flex h-full max-w-6xl flex-col px-0 py-0 sm:px-4 sm:py-4">
           <div className="flex flex-1 flex-col gap-0 sm:gap-4 min-h-0">
+
             {/* Chat panel */}
             <section
               className={[
                 PANEL,
-                "flex flex-1 flex-col min-h-0",
-                "overflow-hidden",
+                "flex flex-1 flex-col min-h-0 overflow-hidden",
                 "rounded-none border-0 shadow-none",
                 "sm:rounded-3xl sm:border sm:border-black/10 sm:bg-white sm:shadow-md",
               ].join(" ")}
             >
-
-              {/* Messages */}
+              {/* ── Messages ─────────────────────────────────────────────── */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} px-4 py-4 bg-transparent`}>
                 <div className="space-y-3">
                   {messages.map((m, idx) => (
@@ -633,7 +546,7 @@ async function send() {
                     </div>
                   ))}
 
-                  {/* Feedback (opt-in) */}
+                  {/* Feedback */}
                   {canShowFeedback && (
                     <div className="max-w-[92%]">
                       <div className={`mt-2 flex items-center gap-2 text-[12px] ${MUTED}`}>
@@ -700,7 +613,7 @@ async function send() {
                 </div>
               </div>
 
-              {/* Composer */}
+              {/* ── Composer ─────────────────────────────────────────────── */}
               <div className="mt-auto shrink-0 border-t border-black/10 bg-[var(--surface-strong)] pb-[env(safe-area-inset-bottom)]">
                 <div className="p-3">
                   <div className="flex w-full gap-2">
