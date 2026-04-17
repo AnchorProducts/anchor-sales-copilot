@@ -99,6 +99,7 @@ export default function DashboardPage() {
         const roleToSet = isInternalEmail ? "anchor_rep" : "external_rep";
         const user_type = isInternalEmail ? "internal" : "external";
 
+        const meta = user.user_metadata || {};
         const { data: created } = await supabase
           .from("profiles")
           .upsert(
@@ -107,6 +108,9 @@ export default function DashboardPage() {
               email,
               role: roleToSet,
               user_type,
+              full_name: meta.full_name || null,
+              company: meta.company || null,
+              phone: meta.phone || null,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "id" }
@@ -155,19 +159,18 @@ export default function DashboardPage() {
             </Button>
           </div>
 
-          <div className="mt-8 flex w-full flex-col gap-2 text-left">
-            <h1 className="text-3xl text-white!">Welcome back</h1>
+          <div className="mt-4 flex w-full flex-col gap-1 text-left sm:mt-8 sm:gap-2">
+            <h1 className="text-2xl text-white! sm:text-3xl">Welcome back</h1>
             <p className="max-w-2xl text-sm text-white/80">
-              Jump into Copilot or manage product tackle boxes. Everything stays organized,
-              modern, and fast.
+              Jump into Copilot, manage assets, or run a rooftop safety check.
             </p>
           </div>
         </NavbarInner>
       </Navbar>
 
-      <div className="ds-container py-10 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+      <div className="ds-container py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-10">
         {/* Quick actions */}
-        <div className="mb-8 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2 sm:mb-8">
           <span className="ds-badge">
             {isInternal ? "Internal tools" : "External tools"}
           </span>
@@ -176,10 +179,7 @@ export default function DashboardPage() {
 
         {/* Primary cards */}
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          <Link
-            href="/chat"
-            className="group transition-transform duration-200 hover:-translate-y-0.5"
-          >
+          <Link href="/chat" className="group transition-transform duration-200 hover:-translate-y-0.5">
             <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -188,11 +188,9 @@ export default function DashboardPage() {
                     Get solution recommendations and practical next steps.
                   </div>
                 </div>
-                <span className="inline-flex items-center rounded-full border border-black/10 bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
-                  AI
-                </span>
+                <span className="ds-badge">AI</span>
               </div>
-              <div className="mt-5 flex items-center justify-between">
+              <div className="mt-5">
                 <div className="text-sm font-semibold text-[var(--anchor-green)]">
                   Open Copilot <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
@@ -200,10 +198,7 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
-          <Link
-            href="/assets"
-            className="group transition-transform duration-200 hover:-translate-y-0.5"
-          >
+          <Link href="/assets" className="group transition-transform duration-200 hover:-translate-y-0.5">
             <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -214,7 +209,7 @@ export default function DashboardPage() {
                 </div>
                 <span className="ds-badge">Library</span>
               </div>
-              <div className="mt-5 flex items-center justify-between">
+              <div className="mt-5">
                 <div className="text-sm font-semibold text-[var(--anchor-green)]">
                   View Assets <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
@@ -222,26 +217,61 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
+          <Link href="/rooftop" className="group transition-transform duration-200 hover:-translate-y-0.5">
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">Rooftop Decision Tree</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                    OSHA-guided rooftop access & egress safety verification.
+                  </div>
+                </div>
+                <span className="ds-badge">Safety</span>
+              </div>
+              <div className="mt-5">
+                <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                  Start Assessment <span className="inline-block transition group-hover:translate-x-1">→</span>
+                </div>
+              </div>
+            </Card>
+          </Link>
+
           {roleReady && role === "external_rep" && (
-            <Link
-              href="/dashboard/leads/new"
-              className="group transition-transform duration-200 hover:-translate-y-0.5"
-            >
+            <Link href="/dashboard/leads/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
               <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-semibold">Submit a Job Lead</div>
+                    <div className="text-lg font-semibold">Project Identifier</div>
                     <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                      Send photos and details directly to inside sales.
+                      Send photos and project details directly to inside sales.
                     </div>
                   </div>
-                  <span className="inline-flex items-center rounded-full border border-black/10 bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
-                    Leads
-                  </span>
+                  <span className="ds-badge">Projects</span>
                 </div>
-                <div className="mt-5 flex items-center justify-between">
+                <div className="mt-5">
                   <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    Submit Lead <span className="inline-block transition group-hover:translate-x-1">→</span>
+                    Submit Project <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          )}
+
+          {roleReady && role === "admin" && (
+            <Link href="/dashboard/reports" className="group transition-transform duration-200 hover:-translate-y-0.5">
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">User Reports</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                      External user activity, projects, and rooftop assessments.
+                    </div>
+                  </div>
+                  <span className="ds-badge">Admin</span>
+                </div>
+                <div className="mt-5">
+                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                    View Reports <span className="inline-block transition group-hover:translate-x-1">→</span>
                   </div>
                 </div>
               </Card>

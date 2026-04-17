@@ -230,6 +230,9 @@ async function sendInsideSalesLeadEmail(params: {
   preferredTimes: string[] | null;
   contactPhone: string | null;
   createdByEmail: string | null;
+  submitterName: string | null;
+  submitterCompany: string | null;
+  submitterPhone: string | null;
   assignmentNote: string | null;
   selectedSolutions: Array<{ label: string; filesCount: number; comment: string | null }>;
 }) {
@@ -264,7 +267,8 @@ async function sendInsideSalesLeadEmail(params: {
   if (params.assignmentNote) lines.push(`Assignment Note: ${params.assignmentNote}`);
   lines.push("");
   lines.push(`Customer Company: ${params.customerCompany}`);
-  lines.push(`Submitted By: ${params.createdByEmail || "Unknown"}`);
+  const submitterParts = [params.submitterName, params.submitterCompany, params.submitterPhone, params.createdByEmail].filter(Boolean);
+  lines.push(`Submitted By: ${submitterParts.join(" | ") || "Unknown"}`);
   lines.push(`Location: ${params.locationText}`);
   lines.push(`Roof: ${params.roofType} / ${params.roofBrand}`);
   lines.push(`Needed Around: ${monthName} ${params.neededYear}`);
@@ -335,6 +339,10 @@ export async function POST(req: Request) {
     const preferred_times_raw = clean(form.get("preferred_times"));
     const preferred_times = meeting_request_type === "none" ? null : parsePreferredTimes(preferred_times_raw);
     const video_call_phone = clean(form.get("video_call_phone"));
+
+    const submitter_name = clean(form.get("submitter_name")) || null;
+    const submitter_company = clean(form.get("submitter_company")) || null;
+    const submitter_phone = clean(form.get("submitter_phone")) || null;
 
     const parsedSolutions = parseSolutionSubmissions(form);
 
@@ -427,6 +435,9 @@ export async function POST(req: Request) {
         meeting_request_type,
         created_by: user.id,
         created_by_email: user.email || null,
+        submitter_name,
+        submitter_company,
+        submitter_phone,
         attachments: [],
         solution_requests: [],
         status: "new",
@@ -595,6 +606,9 @@ export async function POST(req: Request) {
           preferredTimes: preferred_times,
           contactPhone: video_call_phone || null,
           createdByEmail: user.email || null,
+          submitterName: submitter_name,
+          submitterCompany: submitter_company,
+          submitterPhone: submitter_phone,
           assignmentNote: assignment_note,
           selectedSolutions: solutionRequests.map((s) => ({
             label: s.solution_label,

@@ -14,6 +14,8 @@ export default function SignupPage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
 
   const [fullName, setFullName] = useState("");
+  const [company, setCompany] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -24,9 +26,12 @@ export default function SignupPage() {
     setMsg(null);
 
     const name = fullName.trim();
+    const co = company.trim();
+    const ph = phone.trim();
     const e = email.trim().toLowerCase();
 
     if (!name) return setMsg("Enter your name.");
+    if (!co) return setMsg("Enter your company name.");
     if (!isEmail(e)) return setMsg("Enter a valid email.");
     if (password.length < 6) return setMsg("Password must be at least 6 characters.");
 
@@ -36,7 +41,7 @@ export default function SignupPage() {
         email: e,
         password,
         options: {
-          data: { full_name: name }, // stored on auth.user metadata
+          data: { full_name: name, company: co, phone: ph },
         },
       });
 
@@ -49,7 +54,7 @@ export default function SignupPage() {
         return;
       }
 
-      router.replace("/chat");
+      router.replace("/dashboard");
     } catch (err: any) {
       setMsg(err?.message || "Couldn’t create account.");
     } finally {
@@ -72,6 +77,24 @@ export default function SignupPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="First Last"
+            className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base outline-none placeholder:text-white/35 focus:border-emerald-300/30"
+          />
+
+          <label className="mt-4 block text-xs font-semibold text-white/70">Company name *</label>
+          <input
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            placeholder="Your company"
+            className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base outline-none placeholder:text-white/35 focus:border-emerald-300/30"
+          />
+
+          <label className="mt-4 block text-xs font-semibold text-white/70">Phone</label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="(555) 555-5555"
             className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base outline-none placeholder:text-white/35 focus:border-emerald-300/30"
           />
 
@@ -115,7 +138,7 @@ export default function SignupPage() {
 
           <div className="mt-4 text-center text-sm text-white/60">
             Already have an account?{" "}
-            <Link href="/login" className="text-emerald-200 hover:text-emerald-100 underline-offset-4 hover:underline">
+            <Link href="/" className="text-emerald-200 hover:text-emerald-100 underline-offset-4 hover:underline">
               Sign in
             </Link>
           </div>
