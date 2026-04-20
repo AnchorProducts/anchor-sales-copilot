@@ -221,7 +221,7 @@ export default function DashboardPage() {
             <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold">Rooftop Decision Tree</div>
+                  <div className="text-lg font-semibold">Rooftop Equipment Audit</div>
                   <div className="mt-1 text-sm text-[var(--anchor-gray)]">
                     OSHA-guided rooftop access & egress safety verification.
                   </div>
