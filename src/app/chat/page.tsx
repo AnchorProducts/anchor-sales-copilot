@@ -495,12 +495,12 @@ export default function ChatPage() {
   const MUTED      = "text-[var(--anchor-gray)]";
 
   return (
-    <main className="ds-page flex h-[100vh] flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
+    <main className="ds-page flex h-dvh flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <Navbar>
-        <NavbarInner>
-          <div className="flex min-w-0 items-center gap-3">
+        <NavbarInner className="px-3 py-2 sm:px-6 sm:py-3.5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <button
               type="button"
               onClick={() => window.location.reload()}
@@ -508,23 +508,23 @@ export default function ChatPage() {
               title="Refresh"
               aria-label="Refresh"
             >
-              <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo" />
+              <img src="/anchorp.svg" alt="Anchor Products" className="h-8 w-auto sm:h-10 block" />
             </button>
 
             <div className="min-w-0 leading-tight">
-              <span className="truncate text-sm font-semibold tracking-wide text-white">
+              <span className="block truncate text-[13px] font-semibold tracking-wide text-white sm:text-sm">
                 Anchor Sales Co-Pilot
               </span>
-              <div className="truncate text-[12px] text-white/80">Sales • Assets • Leads</div>
+              <span className="hidden truncate text-[11px] text-white/70 sm:block">Sales • Assets • Leads</span>
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* Mobile: toggle sidebar drawer */}
             <button
               type="button"
               onClick={() => setSidebarOpen((v) => !v)}
-              className="inline-flex h-9 items-center rounded-xl border border-white/20 px-3 text-[12px] font-semibold text-white hover:bg-white/10 transition sm:hidden"
+              className="inline-flex h-8 items-center rounded-lg border border-white/20 px-2.5 text-[12px] font-semibold text-white hover:bg-white/10 transition sm:hidden"
               title="Chat history"
             >
               Chats
@@ -540,7 +540,7 @@ export default function ChatPage() {
             </Button>
             <Link
               href="/dashboard"
-              className="ds-btn ds-btn-ghost inline-flex h-9 items-center px-3"
+              className="ds-btn ds-btn-ghost inline-flex h-8 items-center px-2.5 text-[12px] sm:h-9 sm:px-3 sm:text-sm"
               title="Return to Dashboard"
             >
               Dashboard
@@ -570,13 +570,11 @@ export default function ChatPage() {
             {/* ── Mobile drawer ─────────────────────────────────────────── */}
             {sidebarOpen && (
               <div className="fixed inset-0 z-40 sm:hidden">
-                {/* Backdrop */}
                 <div
-                  className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+                  className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
                   onClick={() => setSidebarOpen(false)}
                 />
-                {/* Panel */}
-                <div className="absolute left-0 top-0 bottom-0 w-[280px] flex flex-col overflow-hidden bg-white shadow-xl">
+                <div className="absolute left-0 top-0 bottom-0 w-[76vw] max-w-[300px] flex flex-col overflow-hidden bg-white shadow-xl">
                   <ChatSidebar
                     conversations={conversations}
                     activeId={conversationId}
@@ -591,7 +589,7 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Chat panel */}
+            {/* ── Chat panel ───────────────────────────────────────────── */}
             <section
               className={[
                 PANEL,
@@ -601,19 +599,20 @@ export default function ChatPage() {
               ].join(" ")}
             >
               {/* ── Messages ─────────────────────────────────────────────── */}
-              <div className={`${PANEL_BODY} ${SOFT_SCROLL} px-4 py-4 bg-transparent`}>
-                <div className="space-y-3">
+              <div className={`${PANEL_BODY} ${SOFT_SCROLL} overscroll-contain px-3 py-3 sm:px-5 sm:py-4 bg-transparent`}>
+                <div className="space-y-2.5 sm:space-y-3">
                   {messages.map((m, idx) => {
                     const isInternal = role === "admin" || role === "anchor_rep";
                     const showFeedbackWidget = isInternal && m.role === "assistant" && m.content !== DEFAULT_GREETING.content;
                     const fb = fbFor(idx);
 
                     return (
-                      <div key={idx} className={m.role === "user" ? "flex justify-end" : ""}>
-                        <div className="max-w-[92%]">
+                      <div key={idx} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                        {/* User bubbles: narrow + right-aligned. Assistant: wider, left-aligned. */}
+                        <div className={m.role === "user" ? "max-w-[78%] sm:max-w-[72%]" : "max-w-[92%] sm:max-w-[88%] w-full"}>
                           <div
                             className={[
-                              "whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                              "whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed sm:px-4 sm:py-3 sm:text-sm",
                               m.role === "user"
                                 ? "border border-[var(--anchor-deep)]/20 bg-[var(--anchor-mint)] shadow-sm"
                                 : "border border-black/10 bg-[var(--surface-soft)] shadow-sm",
@@ -623,7 +622,7 @@ export default function ChatPage() {
 
                             {m.role === "assistant" && m.docs && m.docs.length > 0 && (
                               <div className="mt-3 border-t border-black/8 pt-3">
-                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)] sm:text-[11px]">
                                   Related Documents
                                 </div>
                                 <div className="flex flex-col gap-1.5">
@@ -633,13 +632,13 @@ export default function ChatPage() {
                                       href={`/api/doc-open?path=${encodeURIComponent(doc.path)}&download=0`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs transition hover:bg-[var(--surface-soft)]"
+                                      className="flex items-center justify-between gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-xs transition active:bg-[var(--surface-soft)] hover:bg-[var(--surface-soft)]"
                                     >
                                       <div className="min-w-0">
                                         <div className="truncate font-semibold text-black">{doc.title}</div>
                                         <div className="text-[11px] text-[var(--anchor-gray)]">{doc.doc_type}</div>
                                       </div>
-                                      <span className="shrink-0 text-[var(--anchor-green)]">Open →</span>
+                                      <span className="shrink-0 text-[var(--anchor-green)] font-medium">Open →</span>
                                     </a>
                                   ))}
                                 </div>
@@ -708,7 +707,7 @@ export default function ChatPage() {
                   })}
 
                   {(historyLoading || loading) && (
-                    <div className="max-w-[92%] rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/80">
+                    <div className="max-w-[88%] rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-[13.5px] text-black/70 sm:px-4 sm:py-3 sm:text-sm">
                       {historyLoading ? "Loading chat…" : "Thinking…"}
                     </div>
                   )}
@@ -718,38 +717,33 @@ export default function ChatPage() {
               </div>
 
               {/* ── Composer ─────────────────────────────────────────────── */}
-              <div className="mt-auto shrink-0 border-t border-black/10 bg-[var(--surface-strong)] pb-[env(safe-area-inset-bottom)]">
-                <div className="p-3">
-                  <div className="flex w-full gap-2">
-                    <Input
-                      className="min-w-0 flex-1 px-3 py-3 text-sm disabled:opacity-60"
-                      placeholder={inputDisabled ? "Loading your chat…" : "Type your question…"}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      disabled={inputDisabled}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          send();
-                        }
-                      }}
-                    />
-                    <Button
-                      onClick={send}
-                      disabled={loading || inputDisabled}
-                      className="shrink-0 px-5 py-3 text-sm disabled:opacity-50"
-                      type="button"
-                      variant="primary"
-                    >
-                      Send
-                    </Button>
-                  </div>
-
-                  {!profileLoading && (
-                    <div className="mt-2 text-[11px] text-black/50">
-                      Access mode: <span className="text-black/70">{userType}</span>
-                    </div>
-                  )}
+              <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)]"
+                style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}>
+                <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <Input
+                    className="min-w-0 flex-1 px-3 py-2.5 text-[15px] sm:py-3 sm:text-sm disabled:opacity-60"
+                    placeholder={inputDisabled ? "Loading your chat…" : "Message Anchor Co-Pilot…"}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    disabled={inputDisabled}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={send}
+                    disabled={loading || inputDisabled}
+                    className="shrink-0 h-10 w-10 p-0 text-lg disabled:opacity-50 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm"
+                    type="button"
+                    variant="primary"
+                    aria-label="Send"
+                  >
+                    <span className="sm:hidden">↑</span>
+                    <span className="hidden sm:inline">Send</span>
+                  </Button>
                 </div>
               </div>
             </section>
