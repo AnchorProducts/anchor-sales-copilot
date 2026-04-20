@@ -93,22 +93,20 @@ function LoginInner() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: {
-          shouldCreateUser: true,
-          // Keep redirect for email link flows, but OTP verify still happens on this page.
-          emailRedirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextUrl)}`
-              : undefined,
-        },
+        options: { shouldCreateUser: true, emailRedirectTo: undefined },
       });
 
       if (error) throw error;
 
       setOtpSent(true);
-      setMsg("Enter the 6-digit code from your email.");
+      setMsg("Enter the 8-digit code from your email.");
     } catch (err: any) {
-      setMsg(err?.message || "Couldn’t send code.");
+      const raw = err?.message || "";
+      if (raw.toLowerCase().includes("rate limit") || raw.toLowerCase().includes("email rate")) {
+        setMsg("Too many code requests. Please wait a few minutes and try again.");
+      } else {
+        setMsg(raw || "Couldn’t send code.");
+      }
     } finally {
       setLoading(false);
     }
@@ -120,7 +118,7 @@ function LoginInner() {
     const code = otp.trim();
 
     if (!isEmail(e)) return setMsg("Enter a valid email.");
-    if (code.length < 6) return setMsg("Enter the 6-digit code from your email.");
+    if (code.length < 8) return setMsg("Enter the 8-digit code from your email.");
 
     setLoading(true);
     try {
@@ -185,7 +183,7 @@ function LoginInner() {
             </div>
           </div>
           <h1 className="text-3xl">Sign in</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">We’ll email you a secure login code.</p>
+          <p className="mt-1 text-sm text-[var(--anchor-gray)]">We’ll email you a secure 8-digit code.</p>
 
           <label className="mt-5 block text-xs font-semibold text-[var(--anchor-gray)]">Email</label>
           <Input
@@ -205,7 +203,7 @@ function LoginInner() {
               <Input
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
+                placeholder="12345678"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 className="mt-2"

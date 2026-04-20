@@ -42,15 +42,22 @@ export default function SignupPage() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: e,
-        options: { shouldCreateUser: true },
+        options: { shouldCreateUser: true, emailRedirectTo: undefined },
       });
 
       if (error) throw error;
 
       setOtpSent(true);
-      setMsg("Enter the 6-digit code from your email.");
+      setMsg("Enter the 8-digit code from your email.");
     } catch (err: any) {
-      setMsg(err?.message || "Couldn't send code.");
+      const raw = (err?.message || "").toLowerCase();
+      if (raw.includes("rate limit") || raw.includes("email rate")) {
+        setMsg("Too many code requests. Please wait a few minutes and try again.");
+      } else if (raw.includes("confirmation") || raw.includes("sending")) {
+        setMsg("Couldn't send the code email. Please try again shortly.");
+      } else {
+        setMsg(err?.message || "Couldn't send code.");
+      }
     } finally {
       setLoading(false);
     }
@@ -61,7 +68,7 @@ export default function SignupPage() {
     const e = email.trim().toLowerCase();
     const code = otp.trim();
 
-    if (code.length < 6) return setMsg("Enter the 6-digit code from your email.");
+    if (code.length < 8) return setMsg("Enter the 8-digit code from your email.");
 
     setLoading(true);
     try {
@@ -111,7 +118,7 @@ export default function SignupPage() {
             </div>
           </div>
           <h1 className="text-3xl">Create your account</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">We'll email you a secure login code.</p>
+          <p className="mt-1 text-sm text-[var(--anchor-gray)]">We'll email you a secure 8-digit code.</p>
 
           <label className="mt-5 block text-xs font-semibold text-[var(--anchor-gray)]">Full name</label>
           <Input
@@ -164,7 +171,7 @@ export default function SignupPage() {
               <Input
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
+                placeholder="12345678"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 className="mt-2"
