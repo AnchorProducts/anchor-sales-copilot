@@ -372,7 +372,7 @@ export default function RooftopPage() {
             <div className="min-w-0 leading-tight">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold tracking-wide text-white">
-                  Rooftop Decision Tree
+                  Rooftop Equipment Audit
                 </span>
                 <span
                   className="hidden sm:inline-flex"
