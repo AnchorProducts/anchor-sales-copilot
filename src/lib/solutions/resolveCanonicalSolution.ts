@@ -192,5 +192,29 @@ function normalizeIntentText(input: string) {
   // Parapet hint (wall)
   t = t.replace(/\bparapet\b/g, "wall parapet");
 
+  // Pipe support / horizontal pipe naming
+  t = t.replace(/\bconduit\s*support(s)?\b/g, "roof pipe support");
+  t = t.replace(/\brefrigerant\s*line(s)?\b/g, "roof pipe support");
+  t = t.replace(/\bpipe\s*run(s)?\b/g, "roof pipe support");
+
+  // Guardrails
+  t = t.replace(/\bfall\s*protection\b/g, "guardrail fall protection");
+  t = t.replace(/\bhandrail(s)?\b/g, "guardrail");
+
+  // Lightning
+  t = t.replace(/\blightning\s*rod\b/g, "lightning protection");
+  t = t.replace(/\blightning\s*arrestor\b/g, "lightning protection");
+
+  // Satellite
+  t = t.replace(/\bsatellite\s*antenna\b/g, "satellite dish");
+
+  // Antenna
+  t = t.replace(/\brf\s*antenna\b/g, "antenna");
+  t = t.replace(/\bcommunication\s*antenna\b/g, "antenna");
+
+  // Electrical disconnect
+  t = t.replace(/\belectrical\s*box\b/g, "electrical disconnect");
+  t = t.replace(/\bservice\s*disconnect\b/g, "electrical disconnect");
+
   return t;
 }

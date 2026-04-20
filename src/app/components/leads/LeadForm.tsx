@@ -390,7 +390,7 @@ export default function LeadForm() {
         </label>
 
         <label className="grid gap-1 text-sm">
-          <span className="font-semibold">Lead Details / Job Description *</span>
+          <span className="font-semibold">Project Details / Job Description *</span>
           <Textarea
             value={form.details}
             onChange={(e) => update("details", e.target.value)}
