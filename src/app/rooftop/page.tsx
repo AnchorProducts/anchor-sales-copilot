@@ -499,8 +499,8 @@ export default function RooftopPage() {
 
           {/* ── Option buttons ─────────────────────────────────────────────── */}
           {!assessment.isComplete && options.length > 0 && !loading && (
-            <div className="shrink-0 border-t border-black/10 bg-white px-0 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <div className="shrink-0 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
                 {options.map((opt) => (
                   <button
                     key={opt}
@@ -530,7 +530,7 @@ export default function RooftopPage() {
           )}
 
           {assessment.isComplete && !loading && (
-            <div className="shrink-0 border-t border-black/10 bg-white pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div className="shrink-0 border-t border-black/10 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
               <Link href="/dashboard">
                 <Button variant="primary" className="w-full sm:w-auto">Back to Dashboard</Button>
               </Link>

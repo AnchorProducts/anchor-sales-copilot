@@ -499,6 +499,206 @@ export const CANONICAL_SOLUTIONS: CanonicalSolution[] = [
       "Camera mounts typically use 3000-series anchors with strut framing for rooftop surveillance equipment.",
   },
 
+  // ----------------------------
+  // Antenna
+  // ----------------------------
+  {
+    key: "antenna",
+    match: /\b(antenna|rf\s*antenna|communication\s*antenna|radio\s*antenna|telecom\s*antenna)\b/i,
+    securing: "antenna",
+    storageFolder: "solutions/antenna",
+    anchorType: "guy-wire",
+    keywords: ["antenna", "rf", "communication", "telecom", "guy wire"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Antennas are typically stabilized using a guy wire tie-down kit with 2000-series anchors.",
+  },
+
+  // ----------------------------
+  // Satellite dish
+  // ----------------------------
+  {
+    key: "satellite-dish",
+    match: /\b(satellite\s*dish|satellite\s*antenna|dish\s*antenna|satellite)\b/i,
+    securing: "satellite-dish",
+    storageFolder: "solutions/satellite-dish",
+    anchorType: "2000",
+    keywords: ["satellite", "dish", "satellite dish"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Satellite dishes are typically secured using 2000-series anchors.",
+  },
+
+  // ----------------------------
+  // Weather station
+  // ----------------------------
+  {
+    key: "weather-station",
+    match: /\b(weather\s*station|weather\s*monitor|rooftop\s*sensor|monitoring\s*station|environmental\s*sensor)\b/i,
+    securing: "weather-station",
+    storageFolder: "solutions/weather-station",
+    anchorType: "guy-wire",
+    keywords: ["weather station", "sensor", "monitor", "guy wire"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Weather stations are typically stabilized using a guy wire tie-down kit with 2000-series anchors.",
+  },
+
+  // ----------------------------
+  // Lightning protection
+  // ----------------------------
+  {
+    key: "lightning",
+    match: /\b(lightning|lightning\s*protection|lightning\s*arrestor|lightning\s*rod|surge\s*protection\s*mast)\b/i,
+    securing: "lightning",
+    storageFolder: "solutions/lightning",
+    anchorType: "2000",
+    keywords: ["lightning", "lightning protection", "lightning rod"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Lightning protection systems are typically anchored using 2000-series membrane anchors.",
+  },
+
+  // ----------------------------
+  // Guardrails
+  // ----------------------------
+  {
+    key: "roof-guardrail",
+    match: /\b(roof\s*guardrail|rooftop\s*guardrail|roof\s*railing|roof\s*fall\s*protection|roof[-\s]*mounted\s*guardrail)\b/i,
+    securing: "roof-guardrail",
+    storageFolder: "solutions/roof-guardrail",
+    anchorType: "3000",
+    keywords: ["guardrail", "railing", "fall protection", "roof-mounted"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Roof-mounted guardrails typically use 3000-series anchors for non-penetrating edge protection.",
+  },
+  {
+    key: "wall-guardrail",
+    match: /\b(wall\s*guardrail|parapet\s*guardrail|wall\s*railing|parapet\s*railing|wall[-\s]*mounted\s*guardrail)\b/i,
+    securing: "wall-guardrail",
+    storageFolder: "solutions/wall-guardrail",
+    anchorType: "3000",
+    keywords: ["wall guardrail", "parapet guardrail", "wall railing"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Wall/parapet-mounted guardrails typically use 3000-series anchors at the roof-to-wall interface.",
+  },
+  {
+    key: "guardrail-general",
+    match: /\b(guardrail|guard\s*rail|handrail|railing)\b/i,
+    securing: "roof-guardrail",
+    storageFolder: "solutions/roof-guardrail",
+    anchorType: "3000",
+    keywords: ["guardrail", "handrail", "railing"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MOUNT_SURFACE, ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Guardrail systems use 3000-series anchors for non-penetrating rooftop edge protection.",
+  },
+
+  // ----------------------------
+  // Roof ladder
+  // ----------------------------
+  {
+    key: "roof-ladder",
+    match: /\b(roof\s*ladder|rooftop\s*ladder|access\s*ladder|ladder\s*mount)\b/i,
+    securing: "roof-ladder",
+    storageFolder: "solutions/roof-ladder",
+    anchorType: "3000",
+    keywords: ["roof ladder", "access ladder", "rooftop ladder"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Roof ladders are typically secured using 3000-series anchors with an adjustable strut bracket.",
+  },
+
+  // ----------------------------
+  // Roof pipe support (horizontal pipe runs)
+  // ----------------------------
+  {
+    key: "roof-pipe-adjustable",
+    match: /\b(adjustable\s*pipe\s*support|adjustable\s*roof\s*pipe|adjustable\s*pipe\s*cradle)\b/i,
+    securing: "roof-pipe/adjustable",
+    storageFolder: "solutions/roof-pipe/adjustable",
+    anchorType: "3000",
+    keywords: ["adjustable", "pipe support", "cradle"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Adjustable pipe supports use 3000-series anchors with a height-adjustable cradle for horizontal rooftop pipe runs.",
+  },
+  {
+    key: "roof-pipe-double",
+    match: /\b(double\s*pipe\s*support|dual\s*pipe\s*support|double\s*cradle)\b/i,
+    securing: "roof-pipe/double",
+    storageFolder: "solutions/roof-pipe/double",
+    anchorType: "3000",
+    keywords: ["double pipe", "dual pipe", "double cradle"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Double pipe supports use 3000-series anchors to carry two parallel horizontal pipe runs.",
+  },
+  {
+    key: "roof-pipe-roller",
+    match: /\b(roller\s*pipe\s*support|roller\s*cradle|pipe\s*roller)\b/i,
+    securing: "roof-pipe/roller",
+    storageFolder: "solutions/roof-pipe/roller",
+    anchorType: "3000",
+    keywords: ["roller", "pipe roller", "roller cradle"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Roller pipe supports use 3000-series anchors with a roller cradle for thermal expansion in horizontal pipe runs.",
+  },
+  {
+    key: "roof-pipe-single",
+    match: /\b(single\s*pipe\s*support|single\s*cradle|single\s*pipe\s*cradle)\b/i,
+    securing: "roof-pipe/single",
+    storageFolder: "solutions/roof-pipe/single",
+    anchorType: "3000",
+    keywords: ["single pipe", "single cradle"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Single pipe supports use 3000-series anchors to carry one horizontal pipe run across the roof.",
+  },
+  {
+    key: "roof-pipe-general",
+    match: /\b(roof\s*pipe|rooftop\s*pipe|pipe\s*support|conduit\s*support|refrigerant\s*line|pipe\s*run|piping\s*support)\b/i,
+    securing: "roof-pipe",
+    storageFolder: "solutions/roof-pipe",
+    anchorType: "3000",
+    keywords: ["pipe support", "conduit", "refrigerant", "pipe run"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Horizontal roof pipe runs are supported using 3000-series pipe support anchors (adjustable, single, double, or roller cradle variants).",
+  },
+
+  // ----------------------------
+  // Electrical disconnect
+  // ----------------------------
+  {
+    key: "electrical-disconnect",
+    match: /\b(electrical\s*disconnect|service\s*disconnect|disconnect\s*switch|electrical\s*panel\s*mount|meter\s*mount)\b/i,
+    securing: "electrical-disconnect",
+    storageFolder: "solutions/electrical-disconnect",
+    anchorType: "2000",
+    keywords: ["electrical", "disconnect", "service disconnect"],
+    recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
+    ask: [ASK_MEMBRANE, ASK_WANTS],
+    summary:
+      "Electrical disconnects are typically supported using 2000-series anchors with strut framing.",
+  },
+
   // Keep adding the rest of your solutions the same way:
   // - securing aligns to storage folder routes
   // - include storageFolder

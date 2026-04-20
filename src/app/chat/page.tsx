@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import SourcesFeedback from "../components/chat/SourcesFeedback";
 import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
 import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import ChatSidebar from "@/app/components/ChatSidebar";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -38,7 +38,7 @@ type ChatResponse = {
   error?: string;
 };
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; docs?: RecommendedDoc[] };
 
 type ProfileRow = {
   role: "admin" | "anchor_rep" | "external_rep";
@@ -58,7 +58,7 @@ type ConversationRow = {
 const DEFAULT_GREETING: Msg = {
   role: "assistant",
   content:
-    "Anchor Sales Co-Pilot ready.\nTell me what you're mounting and your roof/membrane type (ex: U2400 EPDM), and I'll recommend the right Anchor solution.",
+    "Hey, I'm your Anchor Products sales expert. Tell me what you're securing and I'll point you to the right solution.\n\nFor engineering questions — spacing, loads, or code compliance — I'll connect you with the Anchor Products team directly.",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +110,7 @@ export default function ChatPage() {
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -119,40 +120,65 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Msg[]>([DEFAULT_GREETING]);
   const [loading, setLoading]   = useState(false);
 
-  // ── Feedback ──────────────────────────────────────────────────────────────
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [lastSources, setLastSources]   = useState<SourceUsed[]>([]);
+  // ── Internal feedback (per-message, internal users only) ─────────────────
+  type FbEntry = { open: boolean; note: string; sent: boolean; rating: "good" | "bad" | null; busy: boolean };
+  const [feedback, setFeedback] = useState<Record<number, FbEntry>>({});
+
+  function fbFor(idx: number): FbEntry {
+    return feedback[idx] ?? { open: false, note: "", sent: false, rating: null, busy: false };
+  }
+  function setFb(idx: number, patch: Partial<FbEntry>) {
+    setFeedback((prev) => ({ ...prev, [idx]: { ...fbFor(idx), ...patch } }));
+  }
+
+  async function submitFeedback(idx: number, messages: Msg[]) {
+    const fb = fbFor(idx);
+    const msg = messages[idx];
+    const userMsg = [...messages].slice(0, idx).reverse().find((m) => m.role === "user");
+
+    setFb(idx, { busy: true });
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          conversationId,
+          userMessage: userMsg?.content ?? null,
+          assistantMessage: msg.content,
+          documentId: null,
+          chunkId: null,
+          rating: fb.rating === "good" ? 5 : 1,
+          note: fb.note.trim() || null,
+        }),
+      });
+      if (fb.rating === "bad" && fb.note.trim()) {
+        await fetch("/api/corrections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            conversationId,
+            userMessage: userMsg?.content ?? null,
+            assistantMessage: msg.content,
+            documentId: null,
+            chunkId: null,
+            note: fb.note.trim(),
+            correction: fb.note.trim(),
+          }),
+        });
+      }
+      setFb(idx, { sent: true, open: false, busy: false });
+    } catch {
+      setFb(idx, { busy: false });
+    }
+  }
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, historyLoading]);
-
-  const lastUserMessage = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") return messages[i].content;
-    }
-    return null;
-  }, [messages]);
-
-  const lastAssistantMessage = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") return messages[i].content;
-    }
-    return null;
-  }, [messages]);
-
-  const isDefaultGreeting = useMemo(() => {
-    const t = (lastAssistantMessage || "").trim();
-    return t === DEFAULT_GREETING.content.trim();
-  }, [lastAssistantMessage]);
-
-  const canShowFeedback = useMemo(() => {
-    if (!lastAssistantMessage) return false;
-    if (isDefaultGreeting) return false;
-    return true;
-  }, [isDefaultGreeting, lastAssistantMessage]);
 
   // ── Conversation helpers ──────────────────────────────────────────────────
   const loadConversationMessages = useCallback(
@@ -182,8 +208,8 @@ export default function ChatPage() {
           setMessages([DEFAULT_GREETING] as any);
         }
 
-        setLastSources([]);
-        setShowFeedback(false);
+        
+        
       } finally {
         setHistoryLoading(false);
       }
@@ -245,10 +271,10 @@ export default function ChatPage() {
     async (cid: string) => {
       if (!userId || cid === conversationId) return;
       setConversationId(cid);
-      setLastSources([]);
+      
       setSessionId(null);
       setInput("");
-      setShowFeedback(false);
+      
       await loadConversationMessages(userId, cid);
     },
     [conversationId, loadConversationMessages, userId]
@@ -269,10 +295,10 @@ export default function ChatPage() {
       const list = await loadConversations(userId);
       if (cid === conversationId) {
         const nextId = list?.[0]?.id ?? null;
-        setLastSources([]);
+        
         setSessionId(null);
         setInput("");
-        setShowFeedback(false);
+        
         if (nextId) {
           setConversationId(nextId);
           await loadConversationMessages(userId, nextId);
@@ -375,10 +401,10 @@ export default function ChatPage() {
   async function newChat() {
     if (!userId) return;
     setMessages([DEFAULT_GREETING]);
-    setLastSources([]);
+    
     setSessionId(null);
     setInput("");
-    setShowFeedback(false);
+    
     const created = await createConversation(userId);
     if (!created?.id) return;
     setConversationId(created.id);
@@ -403,13 +429,13 @@ export default function ChatPage() {
     if (!userId || !conversationId) return;
     if (profileLoading || historyLoading) return;
 
-    setShowFeedback(false);
+    
 
     const nextMessages: Msg[] = [...messages, { role: "user", content: text }];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
-    setLastSources([]);
+    
 
     try {
       const thread = nextMessages.map((m) => ({ role: m.role, content: m.content }));
@@ -430,13 +456,12 @@ export default function ChatPage() {
         return;
       }
 
-      const sources = Array.isArray(data?.sourcesUsed) ? data!.sourcesUsed! : [];
-      setLastSources(sources);
       if (data?.sessionId) setSessionId(data.sessionId);
 
+      const docs: RecommendedDoc[] = Array.isArray(data?.recommendedDocs) ? data!.recommendedDocs! : [];
       const answerText = (data?.answer ?? "").toString().trim();
       if (answerText) {
-        setMessages((m) => [...m, { role: "assistant", content: answerText }]);
+        setMessages((m) => [...m, { role: "assistant", content: answerText, docs: docs.length ? docs : undefined }]);
       } else {
         setMessages((m) => [
           ...m,
@@ -495,6 +520,15 @@ export default function ChatPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {/* Mobile: toggle sidebar drawer */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="inline-flex h-9 items-center rounded-xl border border-white/20 px-3 text-[12px] font-semibold text-white hover:bg-white/10 transition sm:hidden"
+              title="Chat history"
+            >
+              Chats
+            </button>
             <Button
               onClick={() => window.location.reload()}
               className="hidden h-9 px-3 sm:inline-flex"
@@ -517,14 +551,51 @@ export default function ChatPage() {
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="mx-auto flex h-full max-w-6xl flex-col px-0 py-0 sm:px-4 sm:py-4">
-          <div className="flex flex-1 flex-col gap-0 sm:gap-4 min-h-0">
+        <div className="mx-auto flex h-full max-w-6xl px-0 py-0 sm:px-4 sm:py-4">
+          <div className="flex flex-1 gap-4 min-h-0 w-full">
+
+            {/* ── Sidebar — desktop (always visible) ───────────────────── */}
+            <aside className="hidden sm:flex w-[260px] shrink-0 flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-md">
+              <ChatSidebar
+                conversations={conversations}
+                activeId={conversationId}
+                loading={historyLoading}
+                onNewChat={newChat}
+                onSelect={switchConversation}
+                onRename={renameConversation}
+                onDelete={deleteConversation}
+              />
+            </aside>
+
+            {/* ── Mobile drawer ─────────────────────────────────────────── */}
+            {sidebarOpen && (
+              <div className="fixed inset-0 z-40 sm:hidden">
+                {/* Backdrop */}
+                <div
+                  className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+                  onClick={() => setSidebarOpen(false)}
+                />
+                {/* Panel */}
+                <div className="absolute left-0 top-0 bottom-0 w-[280px] flex flex-col overflow-hidden bg-white shadow-xl">
+                  <ChatSidebar
+                    conversations={conversations}
+                    activeId={conversationId}
+                    loading={historyLoading}
+                    onNewChat={() => { newChat(); setSidebarOpen(false); }}
+                    onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
+                    onRename={renameConversation}
+                    onDelete={deleteConversation}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Chat panel */}
             <section
               className={[
                 PANEL,
-                "flex flex-1 flex-col min-h-0 overflow-hidden",
+                "flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden",
                 "rounded-none border-0 shadow-none",
                 "sm:rounded-3xl sm:border sm:border-black/10 sm:bg-white sm:shadow-md",
               ].join(" ")}
@@ -532,76 +603,109 @@ export default function ChatPage() {
               {/* ── Messages ─────────────────────────────────────────────── */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} px-4 py-4 bg-transparent`}>
                 <div className="space-y-3">
-                  {messages.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className={[
-                        "max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                        m.role === "user"
-                          ? "ml-auto border border-[var(--anchor-deep)]/20 bg-[var(--anchor-mint)] shadow-sm"
-                          : "border border-black/10 bg-[var(--surface-soft)] shadow-sm",
-                      ].join(" ")}
-                    >
-                      {renderMessageContent(m.content)}
-                    </div>
-                  ))}
+                  {messages.map((m, idx) => {
+                    const isInternal = role === "admin" || role === "anchor_rep";
+                    const showFeedbackWidget = isInternal && m.role === "assistant" && m.content !== DEFAULT_GREETING.content;
+                    const fb = fbFor(idx);
 
-                  {/* Feedback */}
-                  {canShowFeedback && (
-                    <div className="max-w-[92%]">
-                      <div className={`mt-2 flex items-center gap-2 text-[12px] ${MUTED}`}>
-                        <span>Was that correct?</span>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowFeedback(false)}
-                          className={[
-                            "rounded-md border px-2 py-1 transition",
-                            !showFeedback
-                              ? "border-[var(--anchor-deep)]/30 bg-[var(--anchor-mint)] text-[var(--anchor-deep)]"
-                              : "border-black/10 bg-white hover:bg-black/[0.03] text-black/70",
-                          ].join(" ")}
-                        >
-                          Yes
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowFeedback(true)}
-                          className={[
-                            "rounded-md border px-2 py-1 transition",
-                            showFeedback
-                              ? "border-red-300/40 bg-red-50 text-red-700"
-                              : "border-black/10 bg-white hover:bg-black/[0.03] text-black/70",
-                          ].join(" ")}
-                        >
-                          Wrong / Needs correction
-                        </button>
-
-                        {showFeedback && (
-                          <button
-                            type="button"
-                            onClick={() => setShowFeedback(false)}
-                            className="ml-auto rounded-md border border-black/10 bg-white px-2 py-1 text-black/70 hover:bg-black/[0.03] transition"
+                    return (
+                      <div key={idx} className={m.role === "user" ? "flex justify-end" : ""}>
+                        <div className="max-w-[92%]">
+                          <div
+                            className={[
+                              "whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                              m.role === "user"
+                                ? "border border-[var(--anchor-deep)]/20 bg-[var(--anchor-mint)] shadow-sm"
+                                : "border border-black/10 bg-[var(--surface-soft)] shadow-sm",
+                            ].join(" ")}
                           >
-                            Hide
-                          </button>
-                        )}
-                      </div>
+                            {renderMessageContent(m.content)}
 
-                      {showFeedback && (
-                        <div className="mt-2">
-                          <SourcesFeedback
-                            sources={lastSources}
-                            sessionId={sessionId}
-                            conversationId={conversationId}
-                            userMessage={lastUserMessage}
-                            assistantMessage={lastAssistantMessage}
-                          />
+                            {m.role === "assistant" && m.docs && m.docs.length > 0 && (
+                              <div className="mt-3 border-t border-black/8 pt-3">
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                  Related Documents
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                  {m.docs.map((doc) => (
+                                    <a
+                                      key={doc.path}
+                                      href={`/api/doc-open?path=${encodeURIComponent(doc.path)}&download=0`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs transition hover:bg-[var(--surface-soft)]"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate font-semibold text-black">{doc.title}</div>
+                                        <div className="text-[11px] text-[var(--anchor-gray)]">{doc.doc_type}</div>
+                                      </div>
+                                      <span className="shrink-0 text-[var(--anchor-green)]">Open →</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Internal-only feedback widget */}
+                          {showFeedbackWidget && (
+                            <div className="mt-1.5 px-1">
+                              {fb.sent ? (
+                                <span className="text-[11px] text-[var(--anchor-gray)]">Feedback saved — thanks.</span>
+                              ) : fb.open ? (
+                                <div className="mt-1 flex flex-col gap-2">
+                                  <textarea
+                                    rows={2}
+                                    placeholder="What was wrong or missing? (optional)"
+                                    value={fb.note}
+                                    onChange={(e) => setFb(idx, { note: e.target.value })}
+                                    className="ds-textarea text-xs"
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={fb.busy}
+                                      onClick={() => submitFeedback(idx, messages)}
+                                      className="ds-btn ds-btn-destructive px-3 py-1.5 text-xs disabled:opacity-50"
+                                    >
+                                      {fb.busy ? "Saving…" : "Submit"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setFb(idx, { open: false, note: "" })}
+                                      className="ds-btn ds-btn-secondary px-3 py-1.5 text-xs"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setFb(idx, { rating: "good" }); submitFeedback(idx, messages); }}
+                                    className="text-[11px] text-[var(--anchor-gray)] hover:text-[var(--anchor-green)] transition"
+                                    title="Accurate"
+                                  >
+                                    ✓ Accurate
+                                  </button>
+                                  <span className="text-[11px] text-black/20">·</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFb(idx, { rating: "bad", open: true })}
+                                    className="text-[11px] text-[var(--anchor-gray)] hover:text-red-600 transition"
+                                    title="Needs correction"
+                                  >
+                                    Needs correction
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })}
 
                   {(historyLoading || loading) && (
                     <div className="max-w-[92%] rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/80">

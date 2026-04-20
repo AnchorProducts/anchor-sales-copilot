@@ -350,21 +350,15 @@ export default function AssetsBrowser() {
             Anchors
           </button>
 
-          <button
-            type="button"
-            onClick={() => isInternalUser && setFilter("internal_assets")}
-            disabled={!isInternalUser}
-            className={[
-              "rounded-full border px-4 py-2 text-[12px] font-semibold transition whitespace-nowrap",
-              !isInternalUser
-                ? "border-black/10 bg-white text-black/30 cursor-not-allowed"
-                : filter === "internal_assets"
-                ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
-                : "border-black/10 bg-white text-black hover:bg-[var(--surface-soft)]",
-            ].join(" ")}
-          >
-            Internal assets
-          </button>
+          {isInternalUser && (
+            <button
+              type="button"
+              onClick={() => setFilter("internal_assets")}
+              className={btnClass(filter === "internal_assets")}
+            >
+              Internal assets
+            </button>
+          )}
         </div>
 
         <div className="flex justify-end">

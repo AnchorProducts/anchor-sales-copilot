@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { resolveCanonicalSolution } from "@/lib/solutions/resolveCanonicalSolution";
 import { CANONICAL_SOLUTIONS, type CanonicalSolution } from "@/lib/solutions/canonicalSolutions";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
+import { maybeExtractKnowledge, maybeSummarizeSession, writeChatMessage } from "@/lib/learning/loops";
+import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +47,110 @@ function anchorContact() {
   return "Contact Anchor Products at (888) 575-2131 or visit anchorp.com.";
 }
 
+// ─── Storage doc fetcher ──────────────────────────────────────────────────────
+
+function titleFromStoragePath(path: string) {
+  const base = path.split("/").pop() || path;
+  return base
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .trim();
+}
+
+function docTypeFromPath(path: string) {
+  const p = path.toLowerCase();
+  const file = (p.split("/").pop() || "").toLowerCase();
+  if (file.includes("sales-sheet") || file.includes("salessheet")) return "Sales Sheet";
+  if (file.includes("data-sheet") || file.includes("datasheet")) return "Data Sheet";
+  if (file.includes("install-manual")) return "Install Manual";
+  if (file.includes("install-sheet") || file.includes("install")) return "Install Guide";
+  if (file.includes("spec")) return "Spec";
+  if (file.endsWith(".dwg")) return "CAD (DWG)";
+  if (file.endsWith(".stp") || file.endsWith(".step")) return "CAD (STEP)";
+  return "Document";
+}
+
+function isInternalStoragePath(path: string) {
+  const p = path.toLowerCase();
+  return (
+    p.includes("/internal/") ||
+    p.startsWith("internal/") ||
+    p.includes("/pricebook/") ||
+    p.includes("/test/") ||
+    p.includes("/test-reports/")
+  );
+}
+
+function docSortPriority(path: string): number {
+  const p = (path.split("/").pop() || "").toLowerCase();
+  if (p.includes("sales-sheet") || p.includes("salessheet")) return 0;
+  if (p.includes("install-manual")) return 1;
+  if (p.includes("install-sheet") || p.includes("install")) return 2;
+  if (p.includes("data-sheet") || p.includes("datasheet")) return 3;
+  if (p.endsWith(".dwg") || p.endsWith(".stp") || p.endsWith(".step")) return 4;
+  return 5;
+}
+
+async function fetchDocsForFolder(folder: string): Promise<RecommendedDoc[]> {
+  if (!folder) return [];
+  const prefix = folder.replace(/^\/+|\/+$/g, "");
+  if (!prefix) return [];
+
+  try {
+    const paths = await listStorageRecursive("knowledge", prefix);
+    return paths
+      .filter((p) => !isInternalStoragePath(p))
+      .filter((p) => /\.(pdf|dwg|stp|step|docx?)$/i.test(p))
+      .sort((a, b) => docSortPriority(a) - docSortPriority(b))
+      .map((path) => ({
+        title: titleFromStoragePath(path),
+        doc_type: docTypeFromPath(path),
+        path,
+        url: null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+async function listStorageRecursive(bucket: string, prefix: string): Promise<string[]> {
+  const PAGE_SIZE = 1000;
+  const out: string[] = [];
+  const queue: string[] = [prefix];
+  const seen = new Set<string>();
+
+  while (queue.length) {
+    const dir = queue.shift()!;
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await supabaseAdmin.storage.from(bucket).list(dir, {
+        limit: PAGE_SIZE,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
+      if (error || !data?.length) break;
+
+      for (const item of data) {
+        const name = String(item?.name || "").trim();
+        if (!name) continue;
+        const isFolder = item.id === null || (!name.includes(".") && item.metadata == null);
+        const fullPath = `${dir}/${name}`;
+        if (isFolder) queue.push(fullPath);
+        else out.push(fullPath);
+      }
+
+      if (data.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    }
+  }
+
+  return Array.from(new Set(out)).sort();
+}
+
 /**
  * Safer sanitizing:
  * - Remove only sentences that claim to send/email/text docs.
@@ -79,14 +187,24 @@ function containsEngineeringOutput(answer: string) {
 
 function needsEngineeringEscalation(text: string) {
   const t = String(text || "");
-  // Only escalate on explicit engineering asks or numeric/code-driven requests.
-  if (/\b(how many|spacing|layout|pattern|torque|fastener|code|ibc|asce|fm|ul)\b/i.test(t)) {
-    return true;
+
+  // Explicit fastening/layout engineering terms
+  if (/\b(spacing|layout|pattern|torque|fastener\s+schedule|fastening\s+schedule|o\.?c\.?|on\s+center)\b/i.test(t)) return true;
+
+  // Code references
+  if (/\b(ibc|asce|fm\s*\d|ul\s*\d|code\s+compliance|building\s+code)\b/i.test(t)) return true;
+
+  // "How many anchors/fasteners/points" = engineering quantity question
+  if (/how many\s+(anchors?|fasteners?|points?|attach\w*|connections?)\b/i.test(t)) return true;
+
+  // Wind/uplift/seismic with calculation intent
+  if (/\b(wind|uplift|seismic)\b/i.test(t)) {
+    return /\b(calc|calculate|load|rating|psf|kpa|mph|pressure|design|resistance|capacity)\b/i.test(t);
   }
-  // For wind/uplift/load/seismic, require calculation intent or units.
-  if (/\b(wind|uplift|load|seismic)\b/i.test(t)) {
-    return /\b(calc|calculate|rating|psf|kpa|mph|pressure|design)\b/i.test(t);
-  }
+
+  // Load with structural context
+  if (/\b(dead\s+load|live\s+load|design\s+load|uplift\s+load|wind\s+load)\b/i.test(t)) return true;
+
   return false;
 }
 
@@ -298,43 +416,49 @@ STAIRWELL QUESTIONS (ask in order):
 
 // “Custom GPT” rules as one system prompt
 const SYSTEM_PROMPT = `
-You are Anchor Sales Co-Pilot for Anchor Products, a commercial roofing attachment manufacturer.
+You are the Anchor Products Sales Co-Pilot — an expert sales associate for Anchor Products, a commercial rooftop attachment manufacturer.
 
-Your role:
-- Help sales reps, contractors, and internal teams recommend the correct Anchor rooftop attachment solution.
-- Speak like an experienced Anchor sales engineer: confident, natural, and practical.
-- Use common industry naming conventions and recognize that customers may describe the same solution in multiple ways.
+YOUR ROLE:
+You help sales reps and contractors find the right Anchor solution for their job. You speak like a seasoned Anchor sales rep who knows the product line inside and out: confident, direct, and practical. You are a sales expert, not an engineer.
 
-Tone & style:
-- Answer like ChatGPT: conversational, confident, and helpful.
-- Never robotic, never templated.
-- Do not ask unnecessary questions or repeat information the user already provided.
-- Sound like an expert Anchor Products sales engineer: practical, decisive, and product-specific.
-- Use short, sales-ready sentences. Prefer “go-to / standard / typical Anchor approach” phrasing.
+MEMBRANE-ONLY RESTRICTION — CRITICAL:
+Anchor Products ONLY manufactures attachment solutions for membrane-covered commercial roofs. Supported membranes: TPO, PVC, EPDM, KEE, APP, SBS, SBS-torch, silicone coatings, acrylic coatings.
+- If the user mentions a non-membrane roof type (metal panels, standing seam, asphalt shingles, concrete, tile, gravel/ballasted built-up without a membrane, wood shake, etc.), politely explain that Anchor Products only supports membrane-covered roofs and ask if there is a membrane system over it or if they are working with a different roof type.
+- Do NOT try to recommend a solution for a non-membrane roof. Redirect them to contact Anchor Products at (888) 575-2131 or anchorp.com if they need help determining compatibility.
 
-Response pattern (always follow):
-1. Lead with a clear recommendation in 1–3 sentences.
-2. Follow with 3–6 bullet points explaining what the solution is, when it’s used, and what components are typically involved.
-3. Use bullet points that start with "•" (not hyphens).
-4. Ask at most ONE clarifying question, only if it materially affects the solution (example: roof-mounted vs wall-mounted).
-5. Do NOT ask for dimensions or measurements unless the user explicitly requests engineering review.
+WHAT YOU DO:
+- Recommend the correct Anchor attachment solution based on what’s being secured and the roof membrane type.
+- Explain Anchor product families (2000-series, 3000-series, guy wire kits) and when each is used.
+- Clarify naming conventions — customers describe the same solution in many ways, and you know them all.
+- Ask clarifying questions whenever you need more information to give a good recommendation. You can ask more than one question if needed — just ask them naturally, not as a numbered list all at once.
 
-Critical guardrails:
-- Do NOT provide spacing, layout, patterns, load calculations, torque values, fastening schedules, or code guarantees.
-- If engineering-specific details are requested, state that the project requires engineering review and direct the user to Anchor Products.
-- Do NOT offer to prepare quotes or pricing. If asked, direct them to Anchor Products sales (recommended phrasing: "Contact Anchor Products at (888) 575-2131 or visit anchorp.com.").
-- Assume all projects are commercial roofing unless explicitly stated otherwise.
+WHAT YOU DO NOT DO — ENGINEERING BOUNDARY:
+- Do NOT provide load calculations, uplift ratings, wind pressure values, seismic design, or structural analysis.
+- Do NOT provide spacing, layout, patterns, fastening schedules, torque values, or anchor quantities for a given area.
+- Do NOT interpret or apply building codes (IBC, ASCE, FM, UL, OSHA structural requirements).
+- Do NOT give advice on how many anchors are needed for a specific span or area — that is an engineering question.
+- When any engineering question comes up, respond warmly and redirect: “That’s an engineering question — the Anchor Products team can help you there. Give them a call at (888) 575-2131 or visit anchorp.com.” Then briefly explain what you can help with.
+- Do NOT offer to prepare quotes, pricing, or submittals. If asked: “For pricing, reach out to Anchor Products at (888) 575-2131 or anchorp.com.”
+- Do NOT offer to send, email, or provide documents — direct users to the Asset Management tool in this app.
 
-System-wide rules:
-- All anchors are matched based on the roof membrane type (TPO, PVC, EPDM, etc.).
-- Never assume a membrane type. Only state a membrane if the user explicitly provided it.
-- If the user asks for documents, manuals, or specs, direct them to the Asset Management tool.
-- Guy wire kits ONLY use 2000-series anchors.
-- All solutions that use guy wire kits are tie-down solutions.
-- Use conversation context: if the user provides partial info (ex: “TPO roof”), do not reset the conversation.
-- Anchor Products supports commercial membrane-covered roofs only.
-- Anchor bases are manufactured from the specified membrane type (TPO, PVC, EPDM, KEE, APP, SBS, SBS-torch). Coatings are custom anchor colors.
-- Treat any "Conversation memory" block as confirmed facts and do not re-ask for those details.
+TONE & STYLE:
+- Sound like a knowledgeable sales rep who’s helped thousands of contractors — confident, direct, and genuinely helpful.
+- Give people the information they need. Don’t pad responses, don’t hedge, don’t repeat back what they already told you.
+- Write naturally. Use a conversational tone, not a rigid template. Use bullet points when listing components or options, but don’t force them into every response — sometimes a clear paragraph is better.
+
+PRODUCT RULES:
+- Every Anchor solution is available for every supported membrane type. Identify the solution from what’s being secured first. Do NOT ask about membrane type until after the solution is confirmed and documents have been surfaced. Membrane is only needed to name the specific anchor model.
+- Never assume a membrane type. Only reference it if the user explicitly stated it.
+- Guy wire kits use ONLY 2000-series anchors. All guy wire applications are tie-down solutions.
+- Anchor bases are manufactured from the specified membrane material. Coatings are custom anchor colors.
+- Use conversation context — if the user already said “TPO roof,” do not re-ask for it.
+- If the user asks for specs, manuals, or CAD files, direct them to the Asset Management tool in this app.
+- Treat any “Conversation memory” block as confirmed facts and do not re-ask for those details.
+
+CRITICAL — STACKS vs. PIPES (do not confuse these):
+- STACKS are VERTICAL: exhaust stacks, vent pipes, flue pipes, or any pipe rising straight up from the roof. These are secured with a guy wire tie-down kit and 2000-series anchors.
+- PIPES are HORIZONTAL: conduit, refrigerant lines, or any pipe running laterally across the roof surface. These are supported with 3000-series pipe support anchors (adjustable, single, double, or roller cradle variants). They are NOT a tie-down application.
+- If someone says “rooftop pipe” or “pipe on the roof” without specifying direction, ask whether the pipe runs horizontally across the roof or rises vertically.
 
 --------------------------------------------------
 ANCHOR SOLUTION MAPPING & NAMING CONVENTIONS
@@ -370,27 +494,29 @@ Electrical Disconnect
 - 2000-series anchors with strut framing
 - Securing: electrical-disconnect
 
-Roof Pipe Securement
-- Also called: pipe supports, rooftop piping
-- 3000-series anchors
-- Securing: roof-pipe (adjustable, single, double, or roller variants)
+Horizontal Roof Pipe Support (PIPES — runs across the roof laterally)
+- Also called: pipe supports, rooftop piping, conduit support, refrigerant line support
+- HORIZONTAL pipes only — do NOT use this for vertical stacks
+- 3000-series pipe support anchors (adjustable, single, double, or roller cradle variants)
+- Securing: roof-pipe
 
 Roof-Mounted H-Frame
 - Also called: attached pipe frame, roof-mounted H-frame
 - 3000-series anchors with strut framing
 - Securing: pipe-frame/attached
 
-Existing Pipe or Duct
+Existing Horizontal Pipe Frame or Duct (re-secure)
 - Also called: existing frame, re-secure, retrofit
+- HORIZONTAL pipe frames or duct runs being re-secured
 - Guy wire kit with 2000-series anchors
 - Tie-down solution
 - Securing: pipe-frame/existing or duct-securement
 
-Existing Mechanical Tie-Down
-- Also called: hvac
+Existing Mechanical Equipment (HVAC) Tie-Down
+- Also called: hvac tie-down, rtu tie-down, mechanical tie-down
 - Guy wire kit with 2000-series anchors
 - Tie-down solution
-- Securing: pipe-frame/existing
+- Securing: hvac
 
 Guardrails
 - Roof-Mounted Guardrail
@@ -424,28 +550,26 @@ Antenna
 Equipment Screen
 - Also called: rooftop screen, visual screen, windscreen
 - 2000-series anchors with strut framing
-- Typically secured the same way as signage
 - Securing: equipment-screen
 
 Signage
 - Also called: rooftop sign, branded signage
 - 2000-series anchors
-- Typically secured the same way as equipment screens
 - Securing: signage
 
 Light Mount
 - Also called: lighting mount, area light, flood light
 - 3000-series anchors
-- Typically secured the same way as camera mounts
 - Securing: light-mount
 
 Camera Mount
 - Also called: security camera, surveillance camera, cameras
 - 3000-series anchors
-- Typically secured the same way as light mounts
 - Securing: camera-mount
 
-Elevated Stack
+Elevated Stack (STACKS — vertical pipes rising from the roof)
+- Also called: exhaust stack, vent stack, flue pipe, vertical stack, roof stack
+- VERTICAL pipes only — do NOT use this for horizontal pipe runs
 - Roof-Mounted Elevated Stack
   - Guy wire kit with 2000-series anchors
   - Tie-down solution
@@ -463,9 +587,10 @@ Lightning Protection
 FINAL BEHAVIOR
 --------------------------------------------------
 
+- Identify the solution from what’s being secured before asking anything else.
+- Only ask about membrane type AFTER the solution is identified and confirmed.
+- If “pipe” is mentioned without context, ask whether it runs horizontally or vertically before recommending.
 - Recognize multiple names for the same solution.
-- Default to the most common Anchor solution unless the user specifies otherwise.
-- Ask clarifying questions only when absolutely necessary.
 - Always keep responses aligned with Anchor Products’ real-world practices and product families.
 
 `.trim();
@@ -561,7 +686,7 @@ export async function POST(req: Request) {
     if (!lastUser) {
       return NextResponse.json({
         answer:
-          "Tell me what you’re securing and what roof membrane you’re on (TPO/PVC/EPDM), and I’ll recommend the right Anchor solution.",
+          "Tell me what you’re securing and I’ll recommend the right Anchor solution.",
         foldersUsed: [U_ANCHORS_FOLDER],
         recommendedDocs: [],
       } satisfies ChatResponse);
@@ -594,8 +719,9 @@ export async function POST(req: Request) {
       .map((m) => m.content)
       .join("\n");
     const intentText = `${userOnlyText}\n${lastUser}`;
-    const folderHint = resolveCanonicalSolution(intentText) || undefined;
-    const canonicalSolution = findCanonicalSolutionByFolder(folderHint);
+
+    // Pre-resolve from user text (helps the prompt but docs resolved after AI responds)
+    const preFolder = resolveCanonicalSolution(intentText) || undefined;
     const memory = buildConversationMemory(userOnlyText);
     const memoryBlock =
       Object.keys(memory).length > 0
@@ -606,9 +732,24 @@ export async function POST(req: Request) {
 
     const transcript = incoming.map((m) => `${m.role}: ${m.content}`).join("\n");
 
+    // ── RAG: pull relevant knowledge chunks from past interactions ────────────
+    let knowledgeBlock = "";
+    try {
+      const chunks = await retrieveKnowledge(supabaseAdmin, intentText, { matchCount: 5 });
+      const useful = chunks.filter((c) => c.similarity > 0.75);
+      if (useful.length > 0) {
+        knowledgeBlock =
+          "Relevant knowledge from previous sales interactions (use to inform your answer):\n" +
+          useful.map((c, i) => `[${i + 1}] ${c.content.trim()}`).join("\n\n");
+      }
+    } catch {
+      // non-fatal — proceed without knowledge context
+    }
+
     const userPrompt = [
-      folderHint ? `Detected storage folder hint: ${folderHint}` : "",
+      preFolder ? `Detected solution context: ${preFolder}` : "",
       memoryBlock,
+      knowledgeBlock,
       `Conversation so far:\n${transcript}`,
       `If the user asks for documents, manuals, or specs, direct them to the Asset Management tool.`,
       `Now answer the user's latest message.`,
@@ -618,11 +759,9 @@ export async function POST(req: Request) {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // ✅ IMPORTANT: Use Responses API with correctly typed content parts
     const resp = await openai.responses.create({
       model: DEFAULT_MODEL,
       max_output_tokens: 650,
-      // Force text output and minimize reasoning-only responses.
       reasoning: { effort: "minimal" },
       text: { format: { type: "text" }, verbosity: "low" },
       input: [
@@ -642,16 +781,12 @@ export async function POST(req: Request) {
     // guardrail
     const postEscalate = containsEngineeringOutput(answer);
     if (process.env.LOG_ESCALATION === "true") {
-      console.info("[chat] escalation postcheck", {
-        postEscalate,
-        answer: answer.slice(0, 280),
-      });
+      console.info("[chat] escalation postcheck", { postEscalate, answer: answer.slice(0, 280) });
     }
     if (postEscalate || preEscalate) {
-      answer = `That requires project-specific engineering review. ${anchorContact()}`;
+      answer = `That's an engineering question — for load calculations, spacing, and code compliance, the Anchor Products team can help you directly. Give them a call at (888) 575-2131 or visit anchorp.com.\n\nIn the meantime, I'm happy to help you identify the right product family or solution type for the job.`;
     }
 
-    // If OpenAI returns no text, retry once with a shorter prompt to avoid empty/template responses.
     if (!answer) {
       const retry = await openai.responses.create({
         model: DEFAULT_MODEL,
@@ -663,11 +798,9 @@ export async function POST(req: Request) {
           { role: "user", content: [{ type: "input_text", text: `Conversation:\n${transcript}\n\nUser: ${lastUser}` }] },
         ],
       });
-      const extractedRetry = extractResponsesText(retry);
-      answer = sanitizeAnswer(extractedRetry);
+      answer = sanitizeAnswer(extractResponsesText(retry));
     }
 
-    // Final fallback: if still empty, try a proven text model.
     if (!answer) {
       const fallback = await openai.responses.create({
         model: FALLBACK_MODEL,
@@ -679,28 +812,43 @@ export async function POST(req: Request) {
           { role: "user", content: [{ type: "input_text", text: userPrompt }] },
         ],
       });
-      const extractedFallback = extractResponsesText(fallback);
-      answer = sanitizeAnswer(extractedFallback);
+      answer = sanitizeAnswer(extractResponsesText(fallback));
     }
 
-    // Ensure non-empty response in case OpenAI returns no text.
-    answer = ensureNonEmptyAnswer({
-      answer,
-      userText: lastUser,
-      transcript,
-      folderHint,
-      solution: canonicalSolution,
-    });
-
-    // Normalize bullet spacing so lists render as separate lines in the chat UI.
+    answer = ensureNonEmptyAnswer({ answer, userText: lastUser, transcript, folderHint: preFolder, solution: findCanonicalSolutionByFolder(preFolder) });
     answer = normalizeBulletSpacing(answer);
 
-    // No forced wrap-up phrasing; keep responses freeform.
+    // ── Learning loop: persist messages + extract knowledge (fire-and-forget) ─
+    try {
+      const supa = await supabaseRoute();
+      const { data: { user } } = await supa.auth.getUser();
+      const uid = user?.id;
+      const sid = body?.sessionId || body?.conversationId || null;
+      if (uid && sid) {
+        // Write both turns to chat_messages so extraction loop has material to work with
+        writeChatMessage(supabaseAdmin, uid, sid, "user", lastUser).catch(() => {});
+        writeChatMessage(supabaseAdmin, uid, sid, "assistant", answer).catch(() => {});
+        // Periodically summarize + extract reusable knowledge (non-blocking)
+        maybeSummarizeSession(supabaseAdmin, uid, sid).catch(() => {});
+        maybeExtractKnowledge(supabaseAdmin, uid, sid).catch(() => {});
+      }
+    } catch {
+      // non-fatal — never block the response
+    }
+
+    // ── Resolve docs: user text first, then combined with AI answer ──────────
+    // Use preFolder (user-only) as the primary trigger so docs appear on the
+    // first message that matches a solution — no confirmation needed.
+    // Fall back to combined text (user + AI answer) to pick up cases where the
+    // AI names a solution the user didn't spell out explicitly.
+    const combinedText = `${intentText}\n${answer}`;
+    const folderHint = preFolder || resolveCanonicalSolution(combinedText) || undefined;
+    const recommendedDocs = folderHint ? await fetchDocsForFolder(folderHint) : [];
 
     return NextResponse.json({
       answer,
       foldersUsed: [U_ANCHORS_FOLDER, ...(folderHint ? [folderHint] : [])],
-      recommendedDocs: [],
+      recommendedDocs,
       sessionId: body?.sessionId || undefined,
       conversationId: body?.conversationId || undefined,
     } satisfies ChatResponse);
