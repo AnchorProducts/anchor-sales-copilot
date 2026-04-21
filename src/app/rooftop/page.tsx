@@ -16,7 +16,7 @@ type QAEntry = { question: string; answer: string };
 type AssessmentData = {
   contractorName: string;
   companyName: string;
-  accessType: "ladder" | "hatch" | "stairwell" | "";
+  accessType: "ladder-audit" | "ladder-recommendation" | "hatch-audit" | "stairs-audit" | "";
   completedAt: Date | null;
   qaLog: QAEntry[];
   flags: string[];
@@ -121,9 +121,13 @@ async function generatePdf(data: AssessmentData): Promise<Blob> {
   bodyText(`Report Date: ${dateStr}`, { color: C_GRAY }); y += 2;
   const contractorLine = [data.contractorName, data.companyName].filter(Boolean).join(" — ") || "N/A";
   bodyText(`Contractor: ${contractorLine}`); y += 2;
-  const accessLabel = data.accessType
-    ? data.accessType.charAt(0).toUpperCase() + data.accessType.slice(1)
-    : "Not specified";
+  const ACCESS_LABELS: Record<string, string> = {
+    "ladder-audit": "Ladder Audit",
+    "ladder-recommendation": "Ladder Recommendation",
+    "hatch-audit": "Hatch Audit",
+    "stairs-audit": "Stairs Audit",
+  };
+  const accessLabel = data.accessType ? (ACCESS_LABELS[data.accessType] ?? data.accessType) : "Not specified";
   bodyText(`Access Type Assessed: ${accessLabel}`); y += 10;
   hRule();
 
@@ -149,9 +153,20 @@ async function generatePdf(data: AssessmentData): Promise<Blob> {
   ); y += 10;
 
   const categories = ["Safety", "Rooftop Accessories"];
-  if (data.accessType === "ladder" || data.accessType === "hatch") categories.push("Communications");
-  if (data.accessType === "stairwell") categories.push("MEP/HVAC");
+  if (data.accessType === "ladder-audit" || data.accessType === "ladder-recommendation") categories.push("Communications");
+  if (data.accessType === "stairs-audit") categories.push("MEP/HVAC");
   for (const cat of categories) { bodyText(`• ${cat}`, { indent: 8 }); y += 3; }
+
+  const hasRoofingCompatFlag = data.flags.some((f) =>
+    f.toLowerCase().includes("roofing manufacturer") || f.toLowerCase().includes("u-anchor")
+  );
+  if (data.accessType === "stairs-audit" && hasRoofingCompatFlag) {
+    y += 6;
+    bodyText(
+      "★ U-Anchor™ by Anchor Products — the only compression-free rooftop attachment included in North American roof manufacturer warranties.",
+      { bold: true, indent: 8 }
+    ); y += 3;
+  }
 
   addFooters();
   return doc.output("blob");
@@ -211,6 +226,7 @@ export default function RooftopPage() {
 
         setProfileName(name);
         setProfileCompany(company);
+        setAssessment((prev) => ({ ...prev, contractorName: name, companyName: company }));
       } finally {
         if (alive) setBooting(false);
       }
@@ -236,9 +252,22 @@ export default function RooftopPage() {
     (async () => {
       setPdfGenerating(true);
       try {
-        const blob = await generatePdf(assessment);
-        triggerBlobDownload(blob, assessment);
+        const snap = assessment;
+        const blob = await generatePdf(snap);
+        triggerBlobDownload(blob, snap);
         setPdfBlob(blob);
+
+        if (userId) {
+          const { error: insertErr } = await supabase.from("assessment_reports").insert({
+            user_id: userId,
+            contractor_name: snap.contractorName || null,
+            company_name: snap.companyName || null,
+            access_type: snap.accessType || null,
+            flags_count: snap.flags.length,
+            file_url: null,
+          });
+          if (insertErr) console.error("assessment_reports insert failed:", insertErr.message);
+        }
       } catch (e: any) {
         setPdfError(e?.message || "PDF generation failed.");
       } finally {
@@ -249,7 +278,7 @@ export default function RooftopPage() {
   }, [assessment.isComplete]);
 
   // ── API call ──────────────────────────────────────────────────────────────
-  async function callApi(msgs: ApiMsg[], name: string, company: string) {
+  async function callApi(msgs: ApiMsg[], name = profileName, company = profileCompany) {
     setLoading(true);
     setOptions([]);
     try {
@@ -266,9 +295,10 @@ export default function RooftopPage() {
       if (res.status === 401) { router.replace("/"); return; }
 
       const data = await res.json();
-      const message: string   = data?.message ?? "Something went wrong. Please try again.";
+      const message: string      = data?.message ?? "Something went wrong. Please try again.";
       const newOptions: string[] = Array.isArray(data?.options) ? data.options : [];
       const isComplete: boolean  = !!data?.isComplete;
+      const apiAccessType: string | null = data?.accessType ?? null;
 
       const aiItem: DisplayItem = { type: "ai", text: message, id: nextId() };
       const aiMsg: ApiMsg = { role: "assistant", content: message };
@@ -277,11 +307,13 @@ export default function RooftopPage() {
       setApiMsgs((prev) => [...prev, aiMsg]);
       setOptions(newOptions);
 
-      // Update assessment data
       setAssessment((prev) => {
         const updated = { ...prev };
 
-        // Flags from this message
+        if (apiAccessType && !prev.accessType) {
+          updated.accessType = apiAccessType as AssessmentData["accessType"];
+        }
+
         const newFlags = message
           .split("\n")
           .filter((l) => l.includes("⚠️"))
@@ -301,7 +333,7 @@ export default function RooftopPage() {
 
         return updated;
       });
-    } catch (e: any) {
+    } catch {
       const errItem: DisplayItem = { type: "ai", text: "Network error. Please try again.", id: nextId() };
       setDisplay((prev) => [...prev, errItem]);
       setOptions(["Try again"]);
@@ -317,36 +349,23 @@ export default function RooftopPage() {
 
       const userItem: DisplayItem = { type: "user", text: option, id: nextId() };
       const userMsg: ApiMsg = { role: "user", content: option };
-
       const nextApiMsgs = [...apiMsgs, userMsg];
+
       setDisplay((prev) => [...prev, userItem]);
       setApiMsgs(nextApiMsgs);
       setOptions([]);
 
-      // Track access type from first user selection
       setAssessment((prev) => {
-        const updated = { ...prev };
-
-        if (!prev.accessType) {
-          const lc = option.toLowerCase();
-          if (lc === "ladder")    updated.accessType = "ladder";
-          if (lc === "hatch")     updated.accessType = "hatch";
-          if (lc === "stairwell") updated.accessType = "stairwell";
-        }
-
-        // Build Q&A log: pair last AI message with this answer
         const lastAi = display.filter((d) => d.type === "ai").slice(-1)[0];
-        if (lastAi) {
-          updated.qaLog = [...prev.qaLog, { question: lastAi.text, answer: option }];
-        }
-
-        return updated;
+        return lastAi
+          ? { ...prev, qaLog: [...prev.qaLog, { question: lastAi.text, answer: option }] }
+          : prev;
       });
 
-      callApi(nextApiMsgs, profileName, profileCompany);
+      callApi(nextApiMsgs);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loading, assessment.isComplete, apiMsgs, display, profileName, profileCompany]
+    [loading, assessment.isComplete, apiMsgs, display]
   );
 
   // ─── Render ────────────────────────────────────────────────────────────────
