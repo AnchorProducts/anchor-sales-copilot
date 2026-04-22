@@ -179,6 +179,8 @@ export default function RooftopPage() {
 
   const [profileName, setProfileName]       = useState("");
   const [profileCompany, setProfileCompany] = useState("");
+  const [profilePhone, setProfilePhone]     = useState("");
+  const [profileEmail, setProfileEmail]     = useState("");
   const [userId, setUserId]                 = useState<string | null>(null);
   const [booting, setBooting]               = useState(true);
 
@@ -216,7 +218,7 @@ export default function RooftopPage() {
 
         const { data: prof } = await supabase
           .from("profiles")
-          .select("full_name,company")
+          .select("full_name,company,phone,email")
           .eq("id", ud.user.id)
           .maybeSingle();
 
@@ -226,6 +228,8 @@ export default function RooftopPage() {
 
         setProfileName(name);
         setProfileCompany(company);
+        setProfilePhone((prof as any)?.phone || "");
+        setProfileEmail((prof as any)?.email || ud.user.email || "");
         setAssessment((prev) => ({ ...prev, contractorName: name, companyName: company }));
       } finally {
         if (alive) setBooting(false);
@@ -437,6 +441,23 @@ export default function RooftopPage() {
 
           {/* Scrollable message history */}
           <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:thin] space-y-3 pb-4">
+
+            {/* Profile card – same pattern as Project Identifier & Commission Claim */}
+            {(profileName || profileEmail) && (
+              <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-sm">
+                <div className="font-semibold text-black">Submitted by</div>
+                <div className="mt-1.5 grid gap-0.5 text-[var(--anchor-gray)]">
+                  {profileName    && <div><span className="font-medium text-black">{profileName}</span></div>}
+                  {profileCompany && <div>{profileCompany}</div>}
+                  {profilePhone   && <div>{profilePhone}</div>}
+                  {profileEmail   && <div>{profileEmail}</div>}
+                </div>
+                <div className="mt-2 text-[11px] text-black/40">
+                  Your contact information is pulled from your account. Update it in your profile settings.
+                </div>
+              </div>
+            )}
+
             {display.map((item) =>
               item.type === "ai" ? (
                 <div

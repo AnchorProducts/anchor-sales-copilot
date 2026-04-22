@@ -7,9 +7,18 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
 
-const SYSTEM_PROMPT = `
+function buildSystemPrompt(contractorName: string, companyName: string): string {
+  const whoLine = contractorName
+    ? `The contractor on this session is ${contractorName}${companyName ? ` from ${companyName}` : ""}. Use this exact name when greeting them. Do NOT substitute any other name.`
+    : companyName
+      ? `The contractor on this session is from ${companyName}. No personal name is available; greet them by company name.`
+      : "No contractor name or company is available. Greet them generically (e.g. 'Hello!').";
+
+  return `
 You are the Anchor Products Rooftop Access & Egress Assessment assistant.
 You guide commercial roofing contractors through a structured compliance audit based on OSHA 1910.23, IBC requirements, and Anchor Products' access and egress product line at anchorp.com.
+
+CONTRACTOR IDENTITY: ${whoLine}
 
 CRITICAL RULE: You MUST respond with valid JSON only — no markdown fences, no extra text, nothing else.
 Format:
@@ -27,7 +36,7 @@ The accessType field: set it to the appropriate value once you know which branch
 Keep accessType null until confirmed. Once set, include it in every subsequent response.
 
 RULES:
-- First message: greet the contractor by name (from context) and ask the entry point question. Do NOT ask for name or company — it is already provided.
+- First message: greet the contractor using the name from CONTRACTOR IDENTITY above, then ask the entry point question. Do NOT ask for name or company — it is already provided.
 - Ask ONE question at a time. Never list multiple questions at once.
 - Follow the decision tree logic exactly. Do not skip branches or reorder questions.
 - options must always be a non-empty array EXCEPT when the assessment is fully complete.
@@ -37,7 +46,7 @@ RULES:
 - When the branch is complete, say exactly: "Your assessment is complete. I am generating your Rooftop Access Report now."
 - Do not discuss anything outside rooftop access safety and Anchor Products.
 
-ENTRY POINT (after collecting name and company):
+ENTRY POINT (after greeting):
 Ask: "Is there any existing access to the roof?"
 options: ["Yes", "No"]
 
@@ -172,6 +181,7 @@ Q6: "Is the stair system securely attached to prevent movement, uplift, and slid
 
 After audit: summarize flags, recommend Anchor Products, end with completion phrase.
 `.trim();
+}
 
 const DT_COMPLETION_TRIGGER =
   "Your assessment is complete. I am generating your Rooftop Access Report now.";
@@ -190,13 +200,6 @@ export async function POST(req: Request) {
     const companyName: string    = (body?.companyName ?? "").trim();
 
     const contextParts: string[] = [];
-    if (contractorName || companyName) {
-      contextParts.push(
-        `Contractor on this session (do not ask for this info — use it to greet them):` +
-        (contractorName ? `\n- Name: ${contractorName}` : "") +
-        (companyName    ? `\n- Company: ${companyName}` : "")
-      );
-    }
     if (messages.length > 0) {
       const transcript = messages
         .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
@@ -215,7 +218,7 @@ export async function POST(req: Request) {
       reasoning: { effort: "minimal" },
       text: { format: { type: "text" }, verbosity: "low" },
       input: [
-        { role: "system", content: [{ type: "input_text", text: SYSTEM_PROMPT }] },
+        { role: "system", content: [{ type: "input_text", text: buildSystemPrompt(contractorName, companyName) }] },
         { role: "user",   content: [{ type: "input_text", text: userPrompt }] },
       ],
     } as any);
