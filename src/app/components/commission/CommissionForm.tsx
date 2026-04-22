@@ -307,7 +307,7 @@ export default function CommissionForm() {
               type="date"
               value={form.estimated_order_date}
               onChange={(e) => update("estimated_order_date", e.target.value)}
-              className="h-10 px-3 text-sm"
+              className="min-h-[44px] w-full px-3 py-2 text-sm"
             />
           </label>
 
