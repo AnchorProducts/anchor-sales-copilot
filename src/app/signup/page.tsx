@@ -84,6 +84,26 @@ export default function SignupPage() {
         },
       });
 
+      // Write directly to profiles so full_name (and other fields) are
+      // immediately available — don't rely on the dashboard's lazy upsert
+      const { data: ud } = await supabase.auth.getUser();
+      if (ud.user) {
+        const isInternal = e.endsWith("@anchorp.com");
+        await supabase.from("profiles").upsert(
+          {
+            id: ud.user.id,
+            email: e,
+            full_name: fullName.trim() || null,
+            company: company.trim() || null,
+            phone: phone.trim() || null,
+            role: isInternal ? "anchor_rep" : "external_rep",
+            user_type: isInternal ? "internal" : "external",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+      }
+
       // Sync tokens → server cookies
       const { data: sdata } = await supabase.auth.getSession();
       const s = sdata.session;
