@@ -7,6 +7,7 @@ import Button from "@/app/components/ui/Button";
 import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
+import { MultiSelect } from "@/app/components/ui/MultiSelect";
 
 type FormState = {
   customer_company: string;
@@ -16,8 +17,8 @@ type FormState = {
   state: string;
   zip: string;
   country: string;
-  roof_type: string;
-  roof_brand: string;
+  roof_type: string[];
+  roof_brand: string[];
   needed_month: string;
   needed_year: string;
   meeting_request_type: "none" | "video_call" | "site_visit";
@@ -130,8 +131,8 @@ export default function LeadForm() {
     state: "",
     zip: "",
     country: "US",
-    roof_type: "",
-    roof_brand: "",
+    roof_type: [],
+    roof_brand: [],
     needed_month: "",
     needed_year: "",
     meeting_request_type: "none",
@@ -236,8 +237,8 @@ export default function LeadForm() {
     if (!clean(form.city) || !clean(form.state) || !clean(form.zip) || !clean(form.country)) {
       return "Project city, state, zip, and country are required.";
     }
-    if (!clean(form.roof_type)) return "Roof type is required.";
-    if (!clean(form.roof_brand)) return "Brand is required.";
+    if (!form.roof_type.length) return "Roof type is required.";
+    if (!form.roof_brand.length) return "Brand is required.";
     if (!clean(form.needed_month) || !clean(form.needed_year)) {
       return "Needed around month and year are required.";
     }
@@ -290,8 +291,8 @@ export default function LeadForm() {
       fd.append("state", form.state);
       fd.append("zip", form.zip);
       fd.append("country", form.country);
-      fd.append("roof_type", form.roof_type);
-      fd.append("roof_brand", form.roof_brand);
+      fd.append("roof_type", form.roof_type.join(", "));
+      fd.append("roof_brand", form.roof_brand.join(", "));
       fd.append("needed_month", form.needed_month);
       fd.append("needed_year", form.needed_year);
       fd.append("meeting_request_type", form.meeting_request_type);
@@ -338,8 +339,8 @@ export default function LeadForm() {
         state: "",
         zip: "",
         country: "US",
-        roof_type: "",
-        roof_brand: "",
+        roof_type: [],
+        roof_brand: [],
         needed_month: "",
         needed_year: "",
         meeting_request_type: "none",
@@ -409,8 +410,8 @@ export default function LeadForm() {
           />
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-4">
-          <label className="grid gap-1 text-sm sm:col-span-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label className="col-span-2 grid gap-1 text-sm">
             <span className="font-semibold">City *</span>
             <Input
               value={form.city}
@@ -460,41 +461,29 @@ export default function LeadForm() {
           </Select>
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           <label className="grid gap-1 text-sm">
             <span className="font-semibold">Roof Type *</span>
-            <Select
+            <MultiSelect
+              options={ROOF_TYPES}
               value={form.roof_type}
-              onChange={(e) => update("roof_type", e.target.value)}
-              className="h-10 px-3 text-sm"
-            >
-              <option value="">Select roof type</option>
-              {ROOF_TYPES.map((roofType) => (
-                <option key={roofType} value={roofType}>
-                  {roofType}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => update("roof_type", v)}
+              placeholder="Select roof type(s)"
+            />
           </label>
 
           <label className="grid gap-1 text-sm">
             <span className="font-semibold">Brand *</span>
-            <Select
+            <MultiSelect
+              options={ROOF_BRANDS}
               value={form.roof_brand}
-              onChange={(e) => update("roof_brand", e.target.value)}
-              className="h-10 px-3 text-sm"
-            >
-              <option value="">Select brand</option>
-              {ROOF_BRANDS.map((brand) => (
-                <option key={brand} value={brand}>
-                  {brand}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => update("roof_brand", v)}
+              placeholder="Select brand(s)"
+            />
           </label>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           <label className="grid gap-1 text-sm">
             <span className="font-semibold">Needed Around Month *</span>
             <Select
@@ -531,20 +520,24 @@ export default function LeadForm() {
         <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
           <div className="text-sm font-semibold text-black">Solution Types *</div>
           <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-            Check one or more, then upload photos/videos and comments for each selected solution.
+            Select one or more, then upload photos/videos and comments for each selected solution.
           </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {SOLUTION_OPTIONS.map((option) => (
-              <label key={option.key} className="flex items-center gap-2 rounded-xl border border-black/10 bg-white p-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={solutions[option.key]?.selected || false}
-                  onChange={() => toggleSolution(option.key)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
+          <div className="mt-3">
+            <MultiSelect
+              options={SOLUTION_OPTIONS.map((o) => o.label)}
+              value={SOLUTION_OPTIONS.filter((o) => solutions[o.key]?.selected).map((o) => o.label)}
+              onChange={(labels) =>
+                setSolutions((prev) => {
+                  const next = { ...prev };
+                  for (const opt of SOLUTION_OPTIONS) {
+                    next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) };
+                  }
+                  return next;
+                })
+              }
+              placeholder="Select solution type(s)"
+            />
           </div>
 
           {selectedSolutions.length > 0 && (

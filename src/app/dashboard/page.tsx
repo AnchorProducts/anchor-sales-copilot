@@ -257,6 +257,27 @@ export default function DashboardPage() {
             </Link>
           )}
 
+          {roleReady && role === "external_rep" && (
+            <Link href="/dashboard/commission/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">Commission Claim</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+                      Submit a commission claim form prior to order shipment.
+                    </div>
+                  </div>
+                  <span className="ds-badge">Commission</span>
+                </div>
+                <div className="mt-5">
+                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                    Submit Claim <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          )}
+
           {roleReady && role === "admin" && (
             <Link href="/dashboard/reports" className="group transition-transform duration-200 hover:-translate-y-0.5">
               <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
