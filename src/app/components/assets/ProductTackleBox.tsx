@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
 
@@ -53,21 +54,7 @@ type TabKey =
   | "case"
   | "other";
 
-const TAB_LABELS: Record<TabKey, string> = {
-  all: "All",
-  spec: "Spec",
-  data: "Data Sheet",
-  install: "Install Guide",
-  sales: "Sales Sheet",
-  intake: "Intake Forms",
-  test: "Test Reports",
-  pricebook: "Pricebook",
-  approval: "Manufacturer Approval Letters",
-  presentation: "Presentation",
-  pics: "Pictures",
-  case: "Case Studies",
-  other: "Other",
-};
+// TAB_LABELS is computed inside the component using t() so it translates
 
 const TAB_ORDER: TabKey[] = [
   "all",
@@ -419,6 +406,15 @@ function prefixCandidatesForProduct(p: ProductRow): string[] {
 export default function ProductTackleBox({ productId }: { productId: string }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const router = useRouter();
+  const { t } = useTranslation();
+
+  const TAB_LABELS: Record<TabKey, string> = {
+    all: t("tabAll"), spec: t("tabSpec"), data: t("tabData"),
+    install: t("tabInstall"), sales: t("tabSales"), intake: t("tabIntake"),
+    test: t("tabTest"), pricebook: t("tabPricebook"), approval: t("tabApproval"),
+    presentation: t("tabPresentation"), pics: t("tabPics"), case: t("tabCase"),
+    other: t("tabOther"),
+  };
 
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<ProductRow | null>(null);
@@ -434,6 +430,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [triedPrefixes, setTriedPrefixes] = useState<string[]>([]);
+  const [accessToken, setAccessToken] = useState("");
 
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({
@@ -455,6 +452,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     setTriedPrefixes([]);
 
     try {
+      // Grab session token for mobile-safe image URLs
+      const { data: sessionData } = await supabase.auth.getSession();
+      setAccessToken(sessionData?.session?.access_token || "");
+
       // Auth / role
       const { data: auth } = await supabase.auth.getUser();
       const user = auth.user;
@@ -655,6 +656,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return PDF_EXTS.has(extOf(path));
   }
 
+  function imgSrc(path: string) {
+    const base = docOpenHref(path, false);
+    return accessToken ? `${base}&token=${encodeURIComponent(accessToken)}` : base;
+  }
+
   // "Open" should be inline (good for iOS Quick Look / in-app viewer)
   function openInline(path: string) {
     window.location.href = docOpenHref(path, false);
@@ -785,11 +791,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           <div className="rounded-3xl border border-black/10 bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <div className="text-[12px] font-semibold text-[#047835]">TACKLE BOX</div>
+                <div className="text-[12px] font-semibold text-[#047835]">{t("tackleBox")}</div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight text-black truncate">{product?.name}</h1>
 
                 <div className="mt-2 text-sm text-[#76777B]">
-                  {product?.sku ? `SKU: ${product.sku}` : "No SKU"}
+                  {product?.sku ? `SKU: ${product.sku}` : t("noSku")}
                   {product?.series ? ` • Series: ${product.series}` : ""}
                   {product?.section ? ` • ${product.section}` : ""}
                 </div>
@@ -803,15 +809,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     product?.active ? "bg-[#9CE2BB] text-[#11500F]" : "bg-black/5 text-black/55"
                   }`}
                 >
-                  {product?.active ? "Active" : "Inactive"}
+                  {product?.active ? t("active") : t("inactive")}
                 </span>
 
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-                  {counts.pub} public{isInternalUser ? ` • ${counts.internal} internal` : ""}
+                  {counts.pub} {t("showingPublic").replace("Showing: ", "")}{isInternalUser ? ` • ${counts.internal} ${t("internal").toLowerCase()}` : ""}
                 </span>
 
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-                  Showing: Public{isInternalUser ? " + Internal" : ""}
+                  {isInternalUser ? t("showingPublicInternal") : t("showingPublic")}
                 </span>
               </div>
             </div>
@@ -837,13 +843,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           </div>
 
           {/* Tab content */}
-          <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-black">{TAB_LABELS[activeTab]}</div>
-                
-              </div>
-
+          <div className="mt-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-black">{TAB_LABELS[activeTab]}</div>
               <div className="text-[12px] text-black/50 shrink-0">
                 {filtered.length} item{filtered.length === 1 ? "" : "s"}
               </div>
@@ -851,7 +853,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
             {filtered.length === 0 ? (
               <div className="mt-4 rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-                Nothing in this tab yet.
+                {t("nothingInTab")}
               </div>
             ) : (() => {
               const images = filtered.filter((a) => IMAGE_EXTS.has(extOf(a.path)));
@@ -874,7 +876,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                             className="block w-full"
                           >
                             <img
-                              src={docOpenHref(a.path, false)}
+                              src={imgSrc(a.path)}
                               alt={a.title || basename(a.path)}
                               className="h-36 w-full object-cover sm:h-44"
                               loading="lazy"
@@ -886,7 +888,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                             </div>
                             {a.visibility === "internal" && (
                               <span className="mt-0.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold text-black/60">
-                                Internal
+                                {t("internal")}
                               </span>
                             )}
                             <div className="mt-2 flex gap-1.5">
@@ -895,14 +897,14 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 onClick={() => openInline(a.path)}
                                 className="flex-1 rounded-lg bg-[#047835] py-1.5 text-[11px] font-semibold text-white"
                               >
-                                View
+                                {t("view")}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => forceDownload(a.path)}
                                 className="flex-1 rounded-lg border border-black/10 bg-white py-1.5 text-[11px] font-semibold text-black"
                               >
-                                Save
+                                {t("save")}
                               </button>
                             </div>
                           </div>
@@ -926,12 +928,12 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
+                                  <div className="text-sm font-semibold text-black truncate">{a.title || t("untitled")}</div>
                                   {badge && (
                                     <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">{badge}</span>
                                   )}
                                   {a.visibility === "internal" && (
-                                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">Internal</span>
+                                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">{t("internal")}</span>
                                   )}
                                 </div>
                                 <div className="mt-1 text-[12px] text-[#76777B] truncate">
@@ -972,15 +974,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 </div>
               );
             })()}
-          </div>
+          </div>{/* end tab content */}
 
           {/* Image upload — visible to all internal users */}
           {isInternalUser && (
             <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
-              <div className="text-sm font-semibold text-black">Upload Product Images</div>
-              <div className="mt-1 text-[12px] text-[#76777B]">
-                Images upload into the Pictures tab automatically.
-              </div>
+              <div className="text-sm font-semibold text-black">{t("uploadProductImages")}</div>
+              <div className="mt-1 text-[12px] text-[#76777B]">{t("imagesUploadNote")}</div>
 
               <label className="mt-4 block cursor-pointer">
                 <input
@@ -1005,10 +1005,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     </svg>
                   </div>
                   <div>
-                    <span className="text-sm font-semibold" style={{ color: "#047835" }}>Tap to select images</span>
+                    <span className="text-sm font-semibold" style={{ color: "#047835" }}>{t("tapToSelectImages")}</span>
                     <span className="text-sm text-black/40"> or drag & drop</span>
                   </div>
-                  <div className="text-[11px] text-black/35">PNG, JPG, WebP, GIF accepted · multiple allowed</div>
+                  <div className="text-[11px] text-black/35">{t("pngJpgAccepted")}</div>
                 </div>
               </label>
 
@@ -1042,7 +1042,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 >
                   {uploadingImages
                     ? "Uploading…"
-                    : `Upload ${imageFiles.length} image${imageFiles.length !== 1 ? "s" : ""}`}
+                    : `${t("uploadProductImages")} (${imageFiles.length})`}
                 </button>
               )}
 
@@ -1055,10 +1055,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           {/* Admin-only Add Asset */}
           {isAdmin && (
             <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
-              <div className="text-sm font-semibold text-black">Add asset</div>
-              <div className="mt-1 text-sm text-[#76777B]">
-                Admin-only. Path is the object name inside the <span className="font-semibold">knowledge</span> bucket.
-              </div>
+              <div className="text-sm font-semibold text-black">{t("addAsset")}</div>
+              <div className="mt-1 text-sm text-[#76777B]">{t("adminOnlyNote")}</div>
 
               <form onSubmit={submitAddAsset} className="mt-4 grid gap-3 sm:grid-cols-4">
                 <input
@@ -1109,7 +1107,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <input
                   value={form.path}
                   onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
-                  placeholder="knowledge path (e.g. anchor/u-anchors/u2000/kee/data-sheet.pdf)"
+                  placeholder={t("knowledgePathPlaceholder")}
                   className="h-10 sm:col-span-4 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                 />
 
@@ -1119,13 +1117,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     disabled={adding}
                     className="inline-flex h-10 items-center justify-center rounded-2xl bg-[#047835] px-4 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {adding ? "Adding…" : "Add asset"}
+                    {adding ? t("adding") : t("addAsset")}
                   </button>
 
                   {formMsg ? (
                     <div className="text-sm text-black/70">{formMsg}</div>
                   ) : (
-                    <div className="text-[12px] text-black/50">Tip: Storage listing works without this.</div>
+                    <div className="text-[12px] text-black/50">{t("tipStorage")}</div>
                   )}
                 </div>
               </form>

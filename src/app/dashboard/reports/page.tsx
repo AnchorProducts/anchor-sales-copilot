@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
 
 export const dynamic = "force-dynamic";
@@ -174,17 +175,18 @@ export default function ReportsPage() {
   const totalConvs   = users.reduce((s, u) => s + u.conversationCount, 0);
   const totalLeads   = users.reduce((s, u) => s + u.leadCount, 0);
 
+  const { t } = useTranslation();
   return (
     <main className="ds-page">
       <AppNavbar
-        title="Anchor Sales Co-Pilot"
-        subtitle="External User Reports"
-        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+        title={t("anchorSalesCoPilot")}
+        subtitle={t("externalUserReports")}
+        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
       <div className="ds-container py-10 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {loading && (
-          <div className="text-sm text-[var(--anchor-gray)]">Loading…</div>
+          <div className="text-sm text-[var(--anchor-gray)]">{t("loading")}</div>
         )}
 
         {error && (
@@ -198,10 +200,10 @@ export default function ReportsPage() {
             {/* Summary stats */}
             <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
               {[
-                { label: "External Users", value: users.length },
-                { label: "Copilot Sessions", value: totalConvs },
-                { label: "Project Leads", value: totalLeads },
-                { label: "DT Assessments", value: totalReports },
+                { label: t("externalUsers"), value: users.length },
+                { label: t("copilotSessions"), value: totalConvs },
+                { label: t("projectLeads"), value: totalLeads },
+                { label: t("dtAssessments"), value: totalReports },
               ].map((s) => (
                 <Card key={s.label} className="p-5 text-center">
                   <div className="text-3xl font-bold text-[var(--anchor-deep)]">{s.value}</div>
@@ -213,12 +215,12 @@ export default function ReportsPage() {
             {/* Per-user table */}
             <Card className="overflow-hidden p-0">
               <div className="border-b border-[var(--border)] px-6 py-4">
-                <h2 className="text-base font-semibold">External Users</h2>
+                <h2 className="text-base font-semibold">{t("externalUsers")}</h2>
               </div>
 
               {users.length === 0 && (
                 <div className="px-6 py-10 text-center text-sm text-[var(--anchor-gray)]">
-                  No external users yet.
+                  {t("noExternalUsers")}
                 </div>
               )}
 
@@ -242,18 +244,18 @@ export default function ReportsPage() {
                       <div className="hidden shrink-0 items-center gap-6 text-center sm:flex">
                         <div>
                           <div className="text-sm font-semibold text-[var(--anchor-deep)]">{u.conversationCount}</div>
-                          <div className="text-[11px] text-[var(--anchor-gray)]">Sessions</div>
+                          <div className="text-[11px] text-[var(--anchor-gray)]">{t("sessions")}</div>
                         </div>
                         <div>
                           <div className="text-sm font-semibold text-[var(--anchor-deep)]">{u.leadCount}</div>
-                          <div className="text-[11px] text-[var(--anchor-gray)]">Leads</div>
+                          <div className="text-[11px] text-[var(--anchor-gray)]">{t("leads")}</div>
                         </div>
                         <div>
                           <div className="text-sm font-semibold text-[var(--anchor-deep)]">{u.reports.length}</div>
-                          <div className="text-[11px] text-[var(--anchor-gray)]">Reports</div>
+                          <div className="text-[11px] text-[var(--anchor-gray)]">{t("reportsTab")}</div>
                         </div>
                         <div className="text-xs text-[var(--anchor-gray)]">
-                          Joined {fmt(u.created_at)}
+                          {t("joined")} {fmt(u.created_at)}
                         </div>
                       </div>
                       <span className="ml-2 shrink-0 text-[var(--anchor-gray)]">
@@ -265,12 +267,12 @@ export default function ReportsPage() {
                     {expanded === u.id && (
                       <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] px-6 py-4">
                         <div className="mb-3 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-[var(--anchor-gray)]">
-                          <span>Rooftop Assessment Reports</span>
+                          <span>{t("rooftopAssessmentReports")}</span>
                           {u.phone && <span className="font-normal normal-case">· {u.phone}</span>}
                         </div>
 
                         {u.reports.length === 0 ? (
-                          <p className="text-sm text-[var(--anchor-gray)]">No assessment reports yet.</p>
+                          <p className="text-sm text-[var(--anchor-gray)]">{t("noAssessmentReports")}</p>
                         ) : (
                           <div className="flex flex-col gap-3">
                             {u.reports.map((r) => (
@@ -283,7 +285,7 @@ export default function ReportsPage() {
                                     {r.contractor_name || "—"} · {r.company_name || "—"}
                                   </div>
                                   <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[var(--anchor-gray)]">
-                                    <span className="capitalize">{r.access_type || "Unknown access"}</span>
+                                    <span className="capitalize">{r.access_type || t("unknownAccess")}</span>
                                     <span>·</span>
                                     <span>{fmtDateTime(r.created_at)}</span>
                                     {r.flags_count > 0 && (
@@ -303,7 +305,7 @@ export default function ReportsPage() {
                                     rel="noopener noreferrer"
                                     className="shrink-0 rounded-lg border border-[var(--anchor-green)] px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white"
                                   >
-                                    View PDF
+                                    {t("viewPdf")}
                                   </a>
                                 )}
                               </div>

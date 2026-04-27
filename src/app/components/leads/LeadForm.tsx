@@ -8,6 +8,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type FormState = {
   customer_company: string;
@@ -98,6 +99,7 @@ type UserProfile = {
 export default function LeadForm() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -369,14 +371,12 @@ export default function LeadForm() {
   return (
     <form onSubmit={submit}>
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
-        <div className="text-sm font-semibold text-black">Project Identifier</div>
-        <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-          Select solution type(s), add photos/videos for each, and include scheduling availability.
-        </div>
+        <div className="text-sm font-semibold text-black">{t("projectIdentifierTitle")}</div>
+        <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("projectIdentifierFormDesc")}</div>
 
         {profile && (
           <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Submitted by</div>
+            <div className="text-sm font-semibold text-black">{t("submittedBy")}</div>
             <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
               {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
               {profile.company && <div>{profile.company}</div>}
@@ -384,7 +384,7 @@ export default function LeadForm() {
               {profile.email && <div>{profile.email}</div>}
             </div>
             <div className="mt-2 text-[11px] text-black/40">
-              Your contact information is pulled from your account. Update it in your profile settings.
+              {t("yourContactInfo")}
             </div>
           </div>
         )}
@@ -392,160 +392,93 @@ export default function LeadForm() {
         <div className="mt-4 grid gap-4">
           {!profile?.company && (
             <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">Customer Company Name *</span>
+              <span className="font-semibold">{t("customerCompanyName")}</span>
               <Input
                 value={form.customer_company}
                 onChange={(e) => update("customer_company", e.target.value)}
                 className="h-11 px-3 text-sm"
-                placeholder="Company name"
+                placeholder={t("companyPlaceholder")}
               />
             </label>
           )}
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">Project Details / Job Description *</span>
-            <Textarea
-              value={form.details}
-              onChange={(e) => update("details", e.target.value)}
-              className="min-h-[120px] px-3 py-3 text-sm"
-              placeholder="Describe the job, scope, and timeline..."
-            />
+            <span className="font-semibold">{t("projectDetailsJob")}</span>
+            <Textarea value={form.details} onChange={(e) => update("details", e.target.value)} className="min-h-[120px] px-3 py-3 text-sm" placeholder={t("describeJob")} />
           </label>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">Project Address *</span>
-            <Input
-              value={form.project_address}
-              onChange={(e) => update("project_address", e.target.value)}
-              className="h-11 px-3 text-sm"
-              placeholder="Street address"
-            />
+            <span className="font-semibold">{t("projectAddress")}</span>
+            <Input value={form.project_address} onChange={(e) => update("project_address", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("streetAddress")} />
           </label>
 
-          {/* City full-width, then State + Zip side by side */}
           <div className="grid gap-3">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">City *</span>
-              <Input
-                value={form.city}
-                onChange={(e) => update("city", e.target.value)}
-                className="h-11 px-3 text-sm"
-                placeholder="City"
-              />
+              <span className="font-semibold">{t("city")}</span>
+              <Input value={form.city} onChange={(e) => update("city", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("cityPlain")} />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">State *</span>
-                <Select
-                  value={form.state}
-                  onChange={(e) => update("state", e.target.value)}
-                  className="h-11 px-3 text-sm"
-                >
-                  <option value="">State</option>
-                  {US_STATES.map((state) => (
-                    <option key={state} value={state}>{state}</option>
-                  ))}
+                <span className="font-semibold">{t("state")}</span>
+                <Select value={form.state} onChange={(e) => update("state", e.target.value)} className="h-11 px-3 text-sm">
+                  <option value="">{t("statePlain")}</option>
+                  {US_STATES.map((state) => (<option key={state} value={state}>{state}</option>))}
                 </Select>
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">Zip *</span>
-                <Input
-                  value={form.zip}
-                  onChange={(e) => update("zip", e.target.value)}
-                  className="h-11 px-3 text-sm"
-                  placeholder="Zip"
-                />
+                <span className="font-semibold">{t("zip")}</span>
+                <Input value={form.zip} onChange={(e) => update("zip", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("zipPlain")} />
               </label>
             </div>
           </div>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">Country *</span>
-            <Select
-              value={form.country}
-              onChange={(e) => update("country", e.target.value)}
-              className="h-11 px-3 text-sm"
-            >
-              {COUNTRIES.map((country) => (
-                <option key={country.value} value={country.value}>
-                  {country.label}
-                </option>
-              ))}
+            <span className="font-semibold">{t("country")}</span>
+            <Select value={form.country} onChange={(e) => update("country", e.target.value)} className="h-11 px-3 text-sm">
+              {COUNTRIES.map((country) => (<option key={country.value} value={country.value}>{country.label}</option>))}
             </Select>
           </label>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">Roof Type *</span>
-            <MultiSelect
-              options={ROOF_TYPES}
-              value={form.roof_type}
-              onChange={(v) => update("roof_type", v)}
-              placeholder="Select roof type(s)"
-            />
+            <span className="font-semibold">{t("roofType")}</span>
+            <MultiSelect options={ROOF_TYPES} value={form.roof_type} onChange={(v) => update("roof_type", v)} placeholder={t("selectRoofTypes")} />
           </label>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">Brand *</span>
-            <MultiSelect
-              options={ROOF_BRANDS}
-              value={form.roof_brand}
-              onChange={(v) => update("roof_brand", v)}
-              placeholder="Select brand(s)"
-            />
+            <span className="font-semibold">{t("brand")}</span>
+            <MultiSelect options={ROOF_BRANDS} value={form.roof_brand} onChange={(v) => update("roof_brand", v)} placeholder={t("selectBrands")} />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">Needed Month *</span>
-              <Select
-                value={form.needed_month}
-                onChange={(e) => update("needed_month", e.target.value)}
-                className="h-11 px-3 text-sm"
-              >
-                <option value="">Month</option>
+              <span className="font-semibold">{t("neededMonth")}</span>
+              <Select value={form.needed_month} onChange={(e) => update("needed_month", e.target.value)} className="h-11 px-3 text-sm">
+                <option value="">{t("monthPlaceholder")}</option>
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                  <option key={month} value={String(month)}>
-                    {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
-                  </option>
+                  <option key={month} value={String(month)}>{new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}</option>
                 ))}
               </Select>
             </label>
             <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">Needed Year *</span>
-              <Select
-                value={form.needed_year}
-                onChange={(e) => update("needed_year", e.target.value)}
-                className="h-11 px-3 text-sm"
-              >
-                <option value="">Year</option>
-                {years.map((year) => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
+              <span className="font-semibold">{t("neededYear")}</span>
+              <Select value={form.needed_year} onChange={(e) => update("needed_year", e.target.value)} className="h-11 px-3 text-sm">
+                <option value="">{t("yearPlaceholder")}</option>
+                {years.map((year) => (<option key={year} value={year}>{year}</option>))}
               </Select>
             </label>
           </div>
 
           {/* ── Solution Types ─────────────────────────────────────────────── */}
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Solution Types *</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-              Select one or more, then upload photos/videos and comments for each.
-            </div>
+            <div className="text-sm font-semibold text-black">{t("solutionTypes")}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("selectOneOrMore")}</div>
 
             <div className="mt-3">
               <MultiSelect
                 options={SOLUTION_OPTIONS.map((o) => o.label)}
                 value={SOLUTION_OPTIONS.filter((o) => solutions[o.key]?.selected).map((o) => o.label)}
-                onChange={(labels) =>
-                  setSolutions((prev) => {
-                    const next = { ...prev };
-                    for (const opt of SOLUTION_OPTIONS) {
-                      next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) };
-                    }
-                    return next;
-                  })
-                }
-                placeholder="Select solution type(s)"
+                onChange={(labels) => setSolutions((prev) => { const next = { ...prev }; for (const opt of SOLUTION_OPTIONS) { next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) }; } return next; })}
+                placeholder={t("selectSolutionTypes")}
               />
             </div>
 
@@ -559,77 +492,40 @@ export default function LeadForm() {
                       <div className="mt-3 grid gap-3">
                         {option.key === "other" && (
                           <label className="grid gap-1.5 text-sm">
-                            <span className="font-semibold">Solution Name / Description *</span>
-                            <Input
-                              value={otherLabel}
-                              onChange={(e) => setOtherLabel(e.target.value)}
-                              className="h-11 px-3 text-sm"
-                              placeholder="Describe the solution type"
-                            />
+                            <span className="font-semibold">{t("solutionNameDesc")}</span>
+                            <Input value={otherLabel} onChange={(e) => setOtherLabel(e.target.value)} className="h-11 px-3 text-sm" placeholder={t("describeSolutionType")} />
                           </label>
                         )}
                         <div className="grid gap-1.5 text-sm">
-                          <span className="font-semibold">Photos / Videos *</span>
+                          <span className="font-semibold">{t("photosVideos")}</span>
                           <label className="cursor-pointer">
-                            <input
-                              type="file"
-                              multiple
-                              accept="image/*,video/*"
-                              onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))}
-                              className="sr-only"
-                            />
+                            <input type="file" multiple accept="image/*,video/*" onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))} className="sr-only" />
                             <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-[var(--surface-soft)] px-4 py-6 text-center transition-colors active:border-[var(--anchor-green)] active:bg-[#F0FDF4]">
                               <div className="flex items-center gap-2 text-black/30">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                                  <circle cx="12" cy="13" r="3"/>
-                                </svg>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="2" y="6" width="15" height="12" rx="2"/>
-                                  <path d="m22 8-5 4 5 4V8z"/>
-                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="15" height="12" rx="2"/><path d="m22 8-5 4 5 4V8z"/></svg>
                               </div>
-                              <div>
-                                <span className="text-sm font-semibold" style={{ color: "var(--anchor-green)" }}>
-                                  Tap to upload
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-black/35">Photos and videos accepted</div>
+                              <div><span className="text-sm font-semibold" style={{ color: "var(--anchor-green)" }}>{t("tapToUpload")}</span></div>
+                              <div className="text-[11px] text-black/35">{t("photosVideosAccepted")}</div>
                             </div>
                           </label>
-                          {entry.files.length > 0 && (
-                            <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>
-                          )}
+                          {entry.files.length > 0 && <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>}
                         </div>
 
                         {entry.files.length > 0 && (
                           <div className="grid gap-2">
                             {entry.files.map((file, fileIndex) => (
-                              <div
-                                key={`${file.name}-${file.size}-${file.lastModified}-${fileIndex}`}
-                                className="flex items-center justify-between rounded-lg border border-black/10 px-3 py-2 text-[12px]"
-                              >
+                              <div key={`${file.name}-${file.size}-${file.lastModified}-${fileIndex}`} className="flex items-center justify-between rounded-lg border border-black/10 px-3 py-2 text-[12px]">
                                 <span className="truncate pr-3">{file.name}</span>
-                                <Button
-                                  onClick={() => removeSolutionFile(option.key, fileIndex)}
-                                  className="shrink-0 px-3 py-1.5 text-[12px]"
-                                  variant="secondary"
-                                >
-                                  Remove
-                                </Button>
+                                <Button onClick={() => removeSolutionFile(option.key, fileIndex)} className="shrink-0 px-3 py-1.5 text-[12px]" variant="secondary">{t("remove")}</Button>
                               </div>
                             ))}
                           </div>
                         )}
 
                         <label className="grid gap-1.5 text-sm">
-                          <span className="font-semibold">Comments</span>
-                          <Textarea
-                            value={entry.comment}
-                            onChange={(e) => updateSolutionComment(option.key, e.target.value)}
-                            className="min-h-[88px] px-3 py-3 text-sm"
-                            placeholder="Add notes specific to this solution type"
-                          />
+                          <span className="font-semibold">{t("comments")}</span>
+                          <Textarea value={entry.comment} onChange={(e) => updateSolutionComment(option.key, e.target.value)} className="min-h-[88px] px-3 py-3 text-sm" placeholder={t("addNotes")} />
                         </label>
                       </div>
                     </div>
@@ -641,113 +537,61 @@ export default function LeadForm() {
 
           {/* ── Scheduling ─────────────────────────────────────────────────── */}
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Scheduling Request</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-              Request a video call or site visit with the assigned regional sales rep.
-            </div>
-
+            <div className="text-sm font-semibold text-black">{t("schedulingRequest")}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("requestVideoOrSiteVisit")}</div>
             <div className="mt-3 grid gap-3">
               <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">Request Type</span>
-                <Select
-                  value={form.meeting_request_type}
-                  onChange={(e) => update("meeting_request_type", e.target.value as FormState["meeting_request_type"])}
-                  className="h-11 px-3 text-sm"
-                >
-                  <option value="none">No scheduling request</option>
-                  <option value="video_call">Video call</option>
-                  <option value="site_visit">Site visit</option>
+                <span className="font-semibold">{t("requestType")}</span>
+                <Select value={form.meeting_request_type} onChange={(e) => update("meeting_request_type", e.target.value as FormState["meeting_request_type"])} className="h-11 px-3 text-sm">
+                  <option value="none">{t("noSchedulingRequest")}</option>
+                  <option value="video_call">{t("videoCall")}</option>
+                  <option value="site_visit">{t("siteVisit")}</option>
                 </Select>
               </label>
-
               <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">Best Contact Phone</span>
-                <Input
-                  value={form.video_call_phone}
-                  onChange={(e) => update("video_call_phone", e.target.value)}
-                  className="h-11 px-3 text-sm"
-                  placeholder="(555) 555-5555"
-                />
+                <span className="font-semibold">{t("bestContactPhone")}</span>
+                <Input value={form.video_call_phone} onChange={(e) => update("video_call_phone", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("phonePlaceholder")} />
               </label>
-
               <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">Preferred Availability</span>
-                <Textarea
-                  value={form.preferred_times}
-                  onChange={(e) => update("preferred_times", e.target.value)}
-                  className="min-h-[88px] px-3 py-3 text-sm"
-                  placeholder="List date/time options with timezone, one per line"
-                />
+                <span className="font-semibold">{t("preferredAvailability")}</span>
+                <Textarea value={form.preferred_times} onChange={(e) => update("preferred_times", e.target.value)} className="min-h-[88px] px-3 py-3 text-sm" placeholder={t("listDateTimeOptions")} />
               </label>
             </div>
           </div>
 
           {/* ── Contractors ────────────────────────────────────────────────── */}
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Contractors on this Project</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-              Add contact information for any contractors involved in this project.
-            </div>
+            <div className="text-sm font-semibold text-black">{t("contractorsOnProject")}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("addContactInfoContractors")}</div>
 
             {contractors.length > 0 && (
               <div className="mt-3 grid gap-3">
                 {contractors.map((contractor, index) => (
                   <div key={index} className="rounded-xl border border-black/10 bg-white p-4">
                     <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-black">Contractor {index + 1}</div>
-                      <Button
-                        onClick={() => removeContractor(index)}
-                        className="px-3 py-1.5 text-[12px]"
-                        variant="secondary"
-                      >
-                        Remove
-                      </Button>
+                      <div className="text-sm font-semibold text-black">{t("contractor")} {index + 1}</div>
+                      <Button onClick={() => removeContractor(index)} className="px-3 py-1.5 text-[12px]" variant="secondary">{t("remove")}</Button>
                     </div>
                     <div className="grid gap-3">
                       <label className="grid gap-1.5 text-sm">
-                        <span className="font-semibold">Name</span>
-                        <Input
-                          value={contractor.name}
-                          onChange={(e) => updateContractor(index, "name", e.target.value)}
-                          className="h-11 px-3 text-sm"
-                          placeholder="Full name"
-                        />
+                        <span className="font-semibold">{t("fullName")}</span>
+                        <Input value={contractor.name} onChange={(e) => updateContractor(index, "name", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("fullNamePlain")} />
                       </label>
                       <label className="grid gap-1.5 text-sm">
-                        <span className="font-semibold">Company</span>
-                        <Input
-                          value={contractor.company}
-                          onChange={(e) => updateContractor(index, "company", e.target.value)}
-                          className="h-11 px-3 text-sm"
-                          placeholder="Company name"
-                        />
+                        <span className="font-semibold">{t("company")}</span>
+                        <Input value={contractor.company} onChange={(e) => updateContractor(index, "company", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("companyPlaceholder")} />
                       </label>
                       <label className="grid gap-1.5 text-sm">
-                        <span className="font-semibold">Role / Trade</span>
-                        <Input
-                          value={contractor.role}
-                          onChange={(e) => updateContractor(index, "role", e.target.value)}
-                          className="h-11 px-3 text-sm"
-                          placeholder="e.g. Roofing contractor, Electrician"
-                        />
+                        <span className="font-semibold">{t("roleTrade")}</span>
+                        <Input value={contractor.role} onChange={(e) => updateContractor(index, "role", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("roleExample")} />
                       </label>
                       <label className="grid gap-1.5 text-sm">
-                        <span className="font-semibold">Phone</span>
-                        <Input
-                          value={contractor.phone}
-                          onChange={(e) => updateContractor(index, "phone", e.target.value)}
-                          className="h-11 px-3 text-sm"
-                          placeholder="(555) 555-5555"
-                        />
+                        <span className="font-semibold">{t("phone")}</span>
+                        <Input value={contractor.phone} onChange={(e) => updateContractor(index, "phone", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("phonePlaceholder")} />
                       </label>
                       <label className="grid gap-1.5 text-sm">
-                        <span className="font-semibold">Email</span>
-                        <Input
-                          value={contractor.email}
-                          onChange={(e) => updateContractor(index, "email", e.target.value)}
-                          className="h-11 px-3 text-sm"
-                          placeholder="email@example.com"
-                        />
+                        <span className="font-semibold">{t("email")}</span>
+                        <Input value={contractor.email} onChange={(e) => updateContractor(index, "email", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("emailExample")} />
                       </label>
                     </div>
                   </div>
@@ -755,31 +599,18 @@ export default function LeadForm() {
               </div>
             )}
 
-            <Button
-              onClick={addContractor}
-              className="mt-3 w-full py-3 text-sm sm:w-auto sm:px-4"
-              variant="secondary"
-            >
-              + Add contractor
+            <Button onClick={addContractor} className="mt-3 w-full py-3 text-sm sm:w-auto sm:px-4" variant="secondary">
+              {t("addContractor")}
             </Button>
           </div>
         </div>
 
-        {error && (
-          <Alert className="mt-4" tone="error">{error}</Alert>
-        )}
-        {success && (
-          <Alert className="mt-4" tone="success">{success}</Alert>
-        )}
+        {error && <Alert className="mt-4" tone="error">{error}</Alert>}
+        {success && <Alert className="mt-4" tone="success">{t("leadSubmittedThanks")}</Alert>}
 
         <div className="mt-5">
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-3 text-sm sm:w-auto sm:px-6"
-            variant="primary"
-          >
-            {submitting ? "Submitting…" : "Submit lead"}
+          <Button type="submit" disabled={submitting} className="w-full py-3 text-sm sm:w-auto sm:px-6" variant="primary">
+            {submitting ? t("submitting") : t("submitLead")}
           </Button>
         </div>
       </Card>

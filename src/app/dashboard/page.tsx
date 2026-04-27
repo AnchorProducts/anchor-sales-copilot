@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Card } from "@/app/components/ui/Card";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export const dynamic = "force-dynamic";
 
@@ -131,19 +132,18 @@ export default function DashboardPage() {
   }, [booting, supabase]);
 
   const isInternal = role === "admin" || role === "anchor_rep";
+  const { t } = useTranslation();
 
   return (
     <main className="ds-page">
       <AppNavbar
         title="Anchor Sales Co-Pilot"
         subtitle="Dashboard"
-        menuItems={[{ label: "Sign out", onClick: signOut }]}
+        menuItems={[{ label: t("settings"), href: "/dashboard/settings" }, { label: t("signOut"), onClick: signOut }]}
         hero={
           <div className="flex flex-col gap-1 text-left">
-            <h1 className="text-2xl text-white! sm:text-3xl">Welcome back</h1>
-            <p className="max-w-2xl text-sm text-white/80">
-              Jump into Copilot, manage assets, or run a rooftop safety check.
-            </p>
+            <h1 className="text-2xl text-white! sm:text-3xl">{t("welcomeBack")}</h1>
+            <p className="max-w-2xl text-sm text-white/80">{t("dashboardSubtitle")}</p>
           </div>
         }
       />
@@ -164,15 +164,13 @@ export default function DashboardPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">Chat Copilot</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                    Get solution recommendations and practical next steps.
-                  </div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">Get solution recommendations and practical next steps.</div>
                 </div>
                 <span className="ds-badge">AI</span>
               </div>
               <div className="mt-5">
                 <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  Open Copilot <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  {t("openCopilot")} <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
             </Card>
@@ -182,16 +180,14 @@ export default function DashboardPage() {
             <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold">Asset Management</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                    Manuals, CAD, images, sales sheets, and more.
-                  </div>
+                  <div className="text-lg font-semibold">{t("assetManagement")}</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("assetManagementDesc")}</div>
                 </div>
                 <span className="ds-badge">Library</span>
               </div>
               <div className="mt-5">
                 <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  View Assets <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  {t("viewAssets")} <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
             </Card>
@@ -201,16 +197,14 @@ export default function DashboardPage() {
             <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold">Rooftop Equipment Audit</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                    OSHA-guided rooftop access & egress safety verification.
-                  </div>
+                  <div className="text-lg font-semibold">{t("rooftopAudit")}</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("rooftopAuditDesc")}</div>
                 </div>
                 <span className="ds-badge">Safety</span>
               </div>
               <div className="mt-5">
                 <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  Start Assessment <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  {t("startAssessment")} <span className="inline-block transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
             </Card>
@@ -221,16 +215,14 @@ export default function DashboardPage() {
               <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-semibold">Project Identifier</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                      Send photos and project details directly to inside sales.
-                    </div>
+                    <div className="text-lg font-semibold">{t("projectIdentifier")}</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("projectIdentifierDesc")}</div>
                   </div>
                   <span className="ds-badge">Projects</span>
                 </div>
                 <div className="mt-5">
                   <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    Submit Project <span className="inline-block transition group-hover:translate-x-1">→</span>
+                    {t("submitProject")} <span className="inline-block transition group-hover:translate-x-1">→</span>
                   </div>
                 </div>
               </Card>
@@ -242,16 +234,14 @@ export default function DashboardPage() {
               <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-semibold">Commission Claim</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                      Submit a commission claim form prior to order shipment.
-                    </div>
+                    <div className="text-lg font-semibold">{t("commissionClaim")}</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("commissionClaimDesc")}</div>
                   </div>
                   <span className="ds-badge">Commission</span>
                 </div>
                 <div className="mt-5">
                   <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    Submit Claim <span className="inline-block transition group-hover:translate-x-1">→</span>
+                    {t("submitClaim")} <span className="inline-block transition group-hover:translate-x-1">→</span>
                   </div>
                 </div>
               </Card>
@@ -264,9 +254,7 @@ export default function DashboardPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">User Reports</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-                      External user activity, projects, and rooftop assessments.
-                    </div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">External user activity, projects, and rooftop assessments.</div>
                   </div>
                   <span className="ds-badge">Admin</span>
                 </div>
@@ -278,6 +266,23 @@ export default function DashboardPage() {
               </Card>
             </Link>
           )}
+
+          <Link href="/dashboard/settings" className="group transition-transform duration-200 hover:-translate-y-0.5">
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold">{t("profileSettings")}</div>
+                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("profileSettingsDesc")}</div>
+                </div>
+                <span className="ds-badge">Account</span>
+              </div>
+              <div className="mt-5">
+                <div className="text-sm font-semibold text-[var(--anchor-green)]">
+                  {t("openSettings")} <span className="inline-block transition group-hover:translate-x-1">→</span>
+                </div>
+              </div>
+            </Card>
+          </Link>
         </div>
 
       </div>

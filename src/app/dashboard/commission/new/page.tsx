@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import CommissionForm from "@/app/components/commission/CommissionForm";
 import { Card } from "@/app/components/ui/Card";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export const dynamic = "force-dynamic";
 
@@ -28,24 +29,23 @@ export default function CommissionClaimPage() {
     return () => { alive = false; };
   }, [router, supabase]);
 
+  const { t } = useTranslation();
   return (
     <main className="ds-page">
       <AppNavbar
-        title="Commission Claim"
-        subtitle="Independent Representative"
-        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+        title={t("commissionClaim")}
+        subtitle={t("independentRepresentative")}
+        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
-          <div className="ds-caption">Independent Representative</div>
-          <h1 className="mt-2 text-2xl">Commission Claim Form</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-            Complete and submit prior to order shipment. Late requests will not be considered.
-          </p>
+          <div className="ds-caption">{t("independentRepresentative")}</div>
+          <h1 className="mt-2 text-2xl">{t("commissionClaimFormTitle")}</h1>
+          <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("completeAndSubmit")}</p>
         </Card>
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">Loading…</Card>
+          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : (
           <CommissionForm />
         )}

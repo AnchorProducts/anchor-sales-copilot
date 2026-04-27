@@ -7,6 +7,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type UserProfile = {
   full_name: string | null;
@@ -110,6 +111,7 @@ const INITIAL_FORM: FormState = {
 
 export default function CommissionForm() {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -209,254 +211,143 @@ export default function CommissionForm() {
   return (
     <form onSubmit={submit}>
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
-        <div className="text-sm font-semibold text-black">Commission Claim Form</div>
+        <div className="text-sm font-semibold text-black">{t("commissionClaimFormTitle")}</div>
         <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-          This form must be completed and submitted prior to order shipment for any commission to be calculated.{" "}
-          <span className="font-semibold text-black">Late requests will not be considered.</span>
+          {t("commissionFormDesc")}{" "}
+          <span className="font-semibold text-black">{t("lateRequestsNote")}</span>
         </div>
 
-        {/* Rep info – auto-populated from registration */}
         {profile && (
           <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Rep Firm / Individual</div>
+            <div className="text-sm font-semibold text-black">{t("repFirmIndividual")}</div>
             <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
               {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
               {profile.company && <div>{profile.company}</div>}
               {profile.phone && <div>{profile.phone}</div>}
               {profile.email && <div>{profile.email}</div>}
             </div>
-            <div className="mt-2 text-[11px] text-black/40">
-              Your contact information is pulled from your account. Update it in your profile settings.
-            </div>
+            <div className="mt-2 text-[11px] text-black/40">{t("yourContactInfo")}</div>
           </div>
         )}
 
         <div className="mt-5 grid gap-5">
-          {/* Certification */}
           <label className="flex items-start gap-3 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.certified}
-              onChange={(e) => update("certified", e.target.checked)}
-              className="mt-0.5 shrink-0"
-            />
-            <span className="text-sm">
-              I hereby certify that I am the independent salesperson that was the primary point of contact for the below described order.
-            </span>
+            <input type="checkbox" checked={form.certified} onChange={(e) => update("certified", e.target.checked)} className="mt-0.5 shrink-0" />
+            <span className="text-sm">{t("certifyText")}</span>
           </label>
 
-          {/* YES / NO questions */}
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
             <div className="grid gap-4">
               <div>
-                <div className="mb-2 text-sm">I am unaware of any other salesperson or entity that had a role in securing the sale.</div>
+                <div className="mb-2 text-sm">{t("unawareQuestion")}</div>
                 <div className="flex gap-4 text-sm">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="unaware_other_salesperson"
-                      value="yes"
-                      checked={form.unaware_other_salesperson === "yes"}
-                      onChange={() => update("unaware_other_salesperson", "yes")}
-                    />
-                    <span className="font-semibold">YES</span>
+                    <input type="radio" name="unaware_other_salesperson" value="yes" checked={form.unaware_other_salesperson === "yes"} onChange={() => update("unaware_other_salesperson", "yes")} />
+                    <span className="font-semibold">{t("yes")}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="unaware_other_salesperson"
-                      value="no"
-                      checked={form.unaware_other_salesperson === "no"}
-                      onChange={() => update("unaware_other_salesperson", "no")}
-                    />
-                    <span className="font-semibold">NO</span>
+                    <input type="radio" name="unaware_other_salesperson" value="no" checked={form.unaware_other_salesperson === "no"} onChange={() => update("unaware_other_salesperson", "no")} />
+                    <span className="font-semibold">{t("no")}</span>
                   </label>
                 </div>
               </div>
-
               <div>
-                <div className="mb-2 text-sm">The specifier was assisted by separate sales efforts other than my own.</div>
+                <div className="mb-2 text-sm">{t("specifierQuestion")}</div>
                 <div className="flex gap-4 text-sm">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="specifier_assisted"
-                      value="yes"
-                      checked={form.specifier_assisted === "yes"}
-                      onChange={() => update("specifier_assisted", "yes")}
-                    />
-                    <span className="font-semibold">YES</span>
+                    <input type="radio" name="specifier_assisted" value="yes" checked={form.specifier_assisted === "yes"} onChange={() => update("specifier_assisted", "yes")} />
+                    <span className="font-semibold">{t("yes")}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="specifier_assisted"
-                      value="no"
-                      checked={form.specifier_assisted === "no"}
-                      onChange={() => update("specifier_assisted", "no")}
-                    />
-                    <span className="font-semibold">NO</span>
+                    <input type="radio" name="specifier_assisted" value="no" checked={form.specifier_assisted === "no"} onChange={() => update("specifier_assisted", "no")} />
+                    <span className="font-semibold">{t("no")}</span>
                   </label>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Order details row 1 */}
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Estimated Order Date</span>
-            <Input
-              type="date"
-              value={form.estimated_order_date}
-              onChange={(e) => update("estimated_order_date", e.target.value)}
-              className="min-h-[44px] w-full px-3 py-2 text-sm"
-            />
+            <span className="font-semibold">{t("estimatedOrderDate")}</span>
+            <Input type="date" value={form.estimated_order_date} onChange={(e) => update("estimated_order_date", e.target.value)} className="min-h-[44px] w-full px-3 py-2 text-sm" />
           </label>
 
           {!profile?.company && (
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">Company Placing Order *</span>
-              <Input
-                value={form.company_placing_order}
-                onChange={(e) => update("company_placing_order", e.target.value)}
-                className="h-10 px-3 text-sm"
-                placeholder="Company name"
-              />
+              <span className="font-semibold">{t("companyPlacingOrder")}</span>
+              <Input value={form.company_placing_order} onChange={(e) => update("company_placing_order", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("companyPlaceholder")} />
             </label>
           )}
 
           <div className="grid grid-cols-3 gap-3">
             <label className="col-span-2 grid gap-1 text-sm">
-              <span className="font-semibold">City</span>
-              <Input
-                value={form.order_city}
-                onChange={(e) => update("order_city", e.target.value)}
-                className="h-10 px-3 text-sm"
-                placeholder="City"
-              />
+              <span className="font-semibold">{t("shipCity")}</span>
+              <Input value={form.order_city} onChange={(e) => update("order_city", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("cityPlain")} />
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">State</span>
-              <Select
-                value={form.order_state}
-                onChange={(e) => update("order_state", e.target.value)}
-                className="h-10 px-3 text-sm"
-              >
-                <option value="">Select state</option>
-                {US_STATES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+              <span className="font-semibold">{t("shipState")}</span>
+              <Select value={form.order_state} onChange={(e) => update("order_state", e.target.value)} className="h-10 px-3 text-sm">
+                <option value="">{t("selectState")}</option>
+                {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
             </label>
           </div>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">U-Anchor(s) Ordered</span>
-            <MultiSelect
-              options={U_ANCHOR_OPTIONS}
-              value={form.u_anchors_ordered}
-              onChange={(v) => update("u_anchors_ordered", v)}
-              placeholder="Select U-Anchor model(s)"
-            />
+            <span className="font-semibold">{t("uAnchorsOrdered")}</span>
+            <MultiSelect options={U_ANCHOR_OPTIONS} value={form.u_anchors_ordered} onChange={(v) => update("u_anchors_ordered", v)} placeholder={t("selectUAnchors")} />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Qty</span>
-            <Input
-              value={form.qty}
-              onChange={(e) => update("qty", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="Qty"
-            />
+            <span className="font-semibold">{t("qty")}</span>
+            <Input value={form.qty} onChange={(e) => update("qty", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("qty")} />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Roof Brand</span>
-            <MultiSelect
-              options={ROOF_BRANDS}
-              value={form.roof_brand}
-              onChange={(v) => update("roof_brand", v)}
-              placeholder="Select brand(s)"
-            />
+            <span className="font-semibold">{t("roofBrand")}</span>
+            <MultiSelect options={ROOF_BRANDS} value={form.roof_brand} onChange={(v) => update("roof_brand", v)} placeholder={t("selectBrands")} />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Other Items Being Ordered</span>
-            <MultiSelect
-              options={OTHER_ITEMS}
-              value={form.other_items}
-              onChange={(v) => update("other_items", v)}
-              placeholder="Select solution(s)"
-            />
+            <span className="font-semibold">{t("otherItemsOrdered")}</span>
+            <MultiSelect options={OTHER_ITEMS} value={form.other_items} onChange={(v) => update("other_items", v)} placeholder={t("selectSolutions")} />
           </label>
 
-          {/* Ship-to */}
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Ship To Address</span>
-            <Input
-              value={form.ship_to_address}
-              onChange={(e) => update("ship_to_address", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="Street address"
-            />
+            <span className="font-semibold">{t("shipToAddress")}</span>
+            <Input value={form.ship_to_address} onChange={(e) => update("ship_to_address", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("streetAddress")} />
           </label>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="col-span-2 grid gap-1 text-sm">
-              <span className="font-semibold">City</span>
-              <Input
-                value={form.ship_city}
-                onChange={(e) => update("ship_city", e.target.value)}
-                className="h-10 px-3 text-sm"
-                placeholder="City"
-              />
+              <span className="font-semibold">{t("shipCity")}</span>
+              <Input value={form.ship_city} onChange={(e) => update("ship_city", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("cityPlain")} />
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">State</span>
-              <Select
-                value={form.ship_state}
-                onChange={(e) => update("ship_state", e.target.value)}
-                className="h-10 px-3 text-sm"
-              >
-                <option value="">Select state</option>
-                {US_STATES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+              <span className="font-semibold">{t("shipState")}</span>
+              <Select value={form.ship_state} onChange={(e) => update("ship_state", e.target.value)} className="h-10 px-3 text-sm">
+                <option value="">{t("selectState")}</option>
+                {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
               </Select>
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">Zip Code</span>
-              <Input
-                value={form.ship_zip}
-                onChange={(e) => update("ship_zip", e.target.value)}
-                className="h-10 px-3 text-sm"
-                placeholder="Zip"
-              />
+              <span className="font-semibold">{t("zipCode")}</span>
+              <Input value={form.ship_zip} onChange={(e) => update("ship_zip", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("zipPlain")} />
             </label>
           </div>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Project Description</span>
-            <Textarea
-              value={form.project_description}
-              onChange={(e) => update("project_description", e.target.value)}
-              className="min-h-[120px] px-3 py-2 text-sm"
-              placeholder="Describe the project..."
-            />
+            <span className="font-semibold">{t("projectDescription")}</span>
+            <Textarea value={form.project_description} onChange={(e) => update("project_description", e.target.value)} className="min-h-[120px] px-3 py-2 text-sm" placeholder={t("describeProject")} />
           </label>
         </div>
 
         {error && <Alert className="mt-4" tone="error">{error}</Alert>}
-        {success && <Alert className="mt-4" tone="success">{success}</Alert>}
+        {success && <Alert className="mt-4" tone="success">{t("commissionSubmitted")}</Alert>}
 
         <div className="mt-5 flex gap-2">
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="px-4 py-2 text-[12px]"
-            variant="primary"
-          >
-            {submitting ? "Submitting…" : "Submit Claim"}
+          <Button type="submit" disabled={submitting} className="px-4 py-2 text-[12px]" variant="primary">
+            {submitting ? t("submitting") : t("submitCommissionClaim")}
           </Button>
         </div>
       </Card>

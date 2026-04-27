@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const STATUSES = ["new", "assigned", "contacted", "qualified", "closed_won", "closed_lost"] as const;
 
@@ -80,6 +81,7 @@ function formatNeeded(month: number | null, year: number | null) {
 
 export default function LeadDetail({ id }: { id: string }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
 
   const [lead, setLead] = useState<LeadRow | null>(null);
   const [reps, setReps] = useState<RepRow[]>([]);
@@ -203,29 +205,9 @@ export default function LeadDetail({ id }: { id: string }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="rounded-3xl border border-black/10 bg-white p-5 text-sm text-black/60 shadow-sm">
-        Loading…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-sm">
-        {error}
-      </div>
-    );
-  }
-
-  if (!lead) {
-    return (
-      <div className="rounded-3xl border border-black/10 bg-white p-5 text-sm text-black/60 shadow-sm">
-        Lead not found.
-      </div>
-    );
-  }
+  if (loading) return <div className="rounded-3xl border border-black/10 bg-white p-5 text-sm text-black/60 shadow-sm">{t("loading")}</div>;
+  if (error) return <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-sm">{error}</div>;
+  if (!lead) return <div className="rounded-3xl border border-black/10 bg-white p-5 text-sm text-black/60 shadow-sm">{t("leadNotFound")}</div>;
 
   const attachmentByPath = new Map(attachments.map((a) => [a.path, a]));
   const solutionRequests = Array.isArray(lead.solution_requests) ? lead.solution_requests : [];
@@ -233,105 +215,96 @@ export default function LeadDetail({ id }: { id: string }) {
   return (
     <div className="grid gap-5">
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-        <div className="text-sm font-semibold text-black">Lead details</div>
+        <div className="text-sm font-semibold text-black">{t("leadDetails")}</div>
         <div className="mt-2 text-sm text-[#76777B]">{lead.customer_company}</div>
 
         <div className="mt-4 grid gap-3 text-sm">
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Project address</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("projectAddress")}</div>
             <div>{lead.project_address || "—"}</div>
           </div>
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Location</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("location")}</div>
             <div>{lead.location_text}</div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Country</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("country")}</div>
               <div>{lead.country || "—"}</div>
             </div>
             <div>
-              <div className="text-[12px] font-semibold text-black/70">State</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("state")}</div>
               <div>{lead.state || "—"}</div>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Inside sales</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("insideSales")}</div>
               <div>
                 {lead.inside_sales_name || lead.inside_sales_email
                   ? `${lead.inside_sales_name || "—"}${lead.inside_sales_email ? ` (${lead.inside_sales_email})` : ""}`
-                  : "Unassigned"}
+                  : t("unassigned")}
               </div>
             </div>
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Outside sales assignment</div>
-              <div>{lead.outside_sales_name || "Not set"}</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("outsideSalesAssignment")}</div>
+              <div>{lead.outside_sales_name || t("notSet")}</div>
             </div>
           </div>
           {lead.assignment_note && (
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Assignment note</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("assignmentNote")}</div>
               <div className="whitespace-pre-wrap">{lead.assignment_note}</div>
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Roof type</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("roofType")}</div>
               <div>{lead.roof_type || "—"}</div>
             </div>
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Brand</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("brand")}</div>
               <div>{lead.roof_brand || "—"}</div>
             </div>
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Needed around</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("neededAround")}</div>
               <div>{formatNeeded(lead.needed_month, lead.needed_year)}</div>
             </div>
           </div>
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Details</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("details")}</div>
             <div className="whitespace-pre-wrap">{lead.details}</div>
           </div>
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Scheduling request</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("schedulingRequest")}</div>
             <div>{formatMeetingType(lead.meeting_request_type, lead.wants_video_call)}</div>
           </div>
-          {(lead.meeting_request_type === "video_call" ||
-            lead.meeting_request_type === "site_visit" ||
-            lead.wants_video_call) &&
-            lead.preferred_times && (
-              <div>
-                <div className="text-[12px] font-semibold text-black/70">Preferred availability</div>
-                <div className="whitespace-pre-wrap">
-                  {Array.isArray(lead.preferred_times)
-                    ? lead.preferred_times.join("\n")
-                    : String(lead.preferred_times)}
-                </div>
-              </div>
-            )}
-          {(lead.meeting_request_type === "video_call" ||
-            lead.meeting_request_type === "site_visit" ||
-            lead.wants_video_call) && (
+          {(lead.meeting_request_type === "video_call" || lead.meeting_request_type === "site_visit" || lead.wants_video_call) && lead.preferred_times && (
             <div>
-              <div className="text-[12px] font-semibold text-black/70">Contact phone</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("preferredAvailabilityLabel")}</div>
+              <div className="whitespace-pre-wrap">{Array.isArray(lead.preferred_times) ? lead.preferred_times.join("\n") : String(lead.preferred_times)}</div>
+            </div>
+          )}
+          {(lead.meeting_request_type === "video_call" || lead.meeting_request_type === "site_visit" || lead.wants_video_call) && (
+            <div>
+              <div className="text-[12px] font-semibold text-black/70">{t("contactPhone")}</div>
               <div>{lead.video_call_phone || "—"}</div>
             </div>
           )}
           <div>
-            <div className="text-[12px] font-semibold text-black/70">Created by</div>
-            <div>{lead.created_by_email || "Unknown"}</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("createdBy")}</div>
+            <div>{lead.created_by_email || t("unknown")}</div>
           </div>
         </div>
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-        <div className="text-sm font-semibold text-black">Solution uploads</div>
+        <div className="text-sm font-semibold text-black">{t("solutionUploads")}</div>
 
         {solutionRequests.length === 0 ? (
           attachments.length === 0 ? (
             <div className="mt-3 rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-              No solution-specific uploads.
+              {t("noSolutionUploads")}
             </div>
           ) : (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -361,7 +334,7 @@ export default function LeadDetail({ id }: { id: string }) {
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {(solution.attachments || []).length === 0 ? (
                     <div className="rounded-xl border border-black/10 bg-[#F6F7F8] p-3 text-[12px] text-black/60">
-                      No files.
+                      {t("noFiles")}
                     </div>
                   ) : (
                     solution.attachments.map((att) => {
@@ -388,11 +361,11 @@ export default function LeadDetail({ id }: { id: string }) {
       </section>
 
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
-        <div className="text-sm font-semibold text-black">Lead actions</div>
+        <div className="text-sm font-semibold text-black">{t("leadActions")}</div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Status</span>
+            <span className="font-semibold">{t("status")}</span>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
@@ -407,13 +380,13 @@ export default function LeadDetail({ id }: { id: string }) {
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Assign rep</span>
+            <span className="font-semibold">{t("assignRep")}</span>
             <select
               value={assignedRep}
               onChange={(e) => setAssignedRep(e.target.value)}
               className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm"
             >
-              <option value="">Unassigned</option>
+              <option value="">{t("unassigned")}</option>
               {reps.map((r) => (
                 <option key={r.id} value={r.id}>
                   {clean(r.email) || r.id}
@@ -423,7 +396,7 @@ export default function LeadDetail({ id }: { id: string }) {
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Meeting link</span>
+            <span className="font-semibold">{t("meetingLink")}</span>
             <input
               value={meetingLink}
               onChange={(e) => setMeetingLink(e.target.value)}
@@ -446,7 +419,7 @@ export default function LeadDetail({ id }: { id: string }) {
             disabled={saving}
             className="inline-flex items-center justify-center rounded-xl bg-[#047835] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? t("saving") : t("saveChangesCta")}
           </button>
 
           <button
@@ -455,7 +428,7 @@ export default function LeadDetail({ id }: { id: string }) {
             disabled={syncing}
             className="inline-flex items-center justify-center rounded-xl border border-black/10 px-4 py-2 text-[12px] font-semibold text-black/70 hover:bg-black/[0.03] disabled:opacity-60"
           >
-            {syncing ? "Syncing…" : "Sync to HubSpot"}
+            {syncing ? t("syncing") : t("syncToHubSpot")}
           </button>
 
           {syncMsg && <span className="self-center text-[12px] text-black/60">{syncMsg}</span>}
@@ -465,7 +438,7 @@ export default function LeadDetail({ id }: { id: string }) {
       <section className="rounded-3xl border border-black/10 bg-white p-5 shadow-sm">
         <div className="text-sm font-semibold text-black">HubSpot</div>
         <div className="mt-2 text-[12px] text-[#76777B]">
-          Sync status: {lead.hubspot_sync_status || "pending"}
+          {t("syncStatus")}: {lead.hubspot_sync_status || "pending"}
         </div>
         {lead.hubspot_sync_status === "failed" && lead.hubspot_sync_error && (
           <div className="mt-1 text-[12px] text-red-600">{lead.hubspot_sync_error}</div>
