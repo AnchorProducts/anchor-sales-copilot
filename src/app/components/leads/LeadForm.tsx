@@ -75,6 +75,7 @@ const SOLUTION_OPTIONS: SolutionOption[] = [
   { key: "camera-mount", label: "Camera Mount" },
   { key: "electrical-disconnect", label: "Electrical Disconnect" },
   { key: "guy-wire", label: "Guy Wire Securement" },
+  { key: "other", label: "Other" },
 ];
 
 function clean(v: string) {
@@ -110,16 +111,18 @@ export default function LeadForm() {
         .select("full_name,company,phone,email")
         .eq("id", user.id)
         .maybeSingle();
-      setProfile(
-        data
-          ? {
-              full_name: (data as any).full_name || null,
-              company: (data as any).company || null,
-              phone: (data as any).phone || null,
-              email: (data as any).email || user.email || null,
-            }
-          : { full_name: null, company: null, phone: null, email: user.email || null }
-      );
+      const resolved: UserProfile = data
+        ? {
+            full_name: (data as any).full_name || null,
+            company: (data as any).company || null,
+            phone: (data as any).phone || null,
+            email: (data as any).email || user.email || null,
+          }
+        : { full_name: null, company: null, phone: null, email: user.email || null };
+      setProfile(resolved);
+      if (resolved.company) {
+        setForm((f) => ({ ...f, customer_company: resolved.company! }));
+      }
     })();
   }, [supabase]);
 
@@ -141,6 +144,7 @@ export default function LeadForm() {
   });
 
   const [solutions, setSolutions] = useState<Record<string, SolutionInput>>(buildInitialSolutions());
+  const [otherLabel, setOtherLabel] = useState("");
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -246,10 +250,15 @@ export default function LeadForm() {
       return "Select at least one solution type.";
     }
 
+    if (selectedSolutions.some((o) => o.key === "other") && !otherLabel.trim()) {
+      return "Please describe the other solution type.";
+    }
+
     for (const option of selectedSolutions) {
       const entry = solutions[option.key];
+      const displayLabel = option.key === "other" ? (otherLabel.trim() || "Other") : option.label;
       if (!entry || entry.files.length === 0) {
-        return `Add at least one photo or video for ${option.label}.`;
+        return `Add at least one photo or video for ${displayLabel}.`;
       }
     }
 
@@ -308,7 +317,7 @@ export default function LeadForm() {
       for (const option of selectedSolutions) {
         const entry = solutions[option.key];
         fd.append(`solution_${solutionIndex}_key`, option.key);
-        fd.append(`solution_${solutionIndex}_label`, option.label);
+        fd.append(`solution_${solutionIndex}_label`, option.key === "other" ? (otherLabel.trim() || "Other") : option.label);
         fd.append(`solution_${solutionIndex}_comment`, entry.comment);
         for (const file of entry.files) {
           fd.append(`solution_${solutionIndex}_files`, file);
@@ -348,6 +357,7 @@ export default function LeadForm() {
         video_call_phone: "",
       });
       setSolutions(buildInitialSolutions());
+      setOtherLabel("");
       setContractors([]);
       setSubmitting(false);
     } catch (e: any) {
@@ -380,15 +390,17 @@ export default function LeadForm() {
       )}
 
       <div className="mt-4 grid gap-3">
-        <label className="grid gap-1 text-sm">
-          <span className="font-semibold">Customer Company Name *</span>
-          <Input
-            value={form.customer_company}
-            onChange={(e) => update("customer_company", e.target.value)}
-            className="h-10 px-3 text-sm"
-            placeholder="Company name"
-          />
-        </label>
+        {!profile?.company && (
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold">Customer Company Name *</span>
+            <Input
+              value={form.customer_company}
+              onChange={(e) => update("customer_company", e.target.value)}
+              className="h-10 px-3 text-sm"
+              placeholder="Company name"
+            />
+          </label>
+        )}
 
         <label className="grid gap-1 text-sm">
           <span className="font-semibold">Project Details / Job Description *</span>
@@ -548,19 +560,53 @@ export default function LeadForm() {
                   <div key={option.key} className="rounded-xl border border-black/10 bg-white p-3">
                     <div className="text-sm font-semibold text-black">{option.label}</div>
                     <div className="mt-2 grid gap-2">
-                      <label className="grid gap-1 text-sm">
+                      {option.key === "other" && (
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-semibold">Solution Name / Description *</span>
+                          <Input
+                            value={otherLabel}
+                            onChange={(e) => setOtherLabel(e.target.value)}
+                            className="h-10 px-3 text-sm"
+                            placeholder="Describe the solution type"
+                          />
+                        </label>
+                      )}
+                      <div className="grid gap-1 text-sm">
                         <span className="font-semibold">Photos / Videos *</span>
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*,video/*"
-                          onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))}
-                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-                        />
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))}
+                            className="sr-only"
+                          />
+                          <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-[var(--surface-soft)] px-4 py-5 text-center transition-colors hover:border-[var(--anchor-green)] hover:bg-[#F0FDF4]">
+                            <div className="flex items-center gap-2 text-black/30">
+                              {/* Camera icon */}
+                              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                <circle cx="12" cy="13" r="3"/>
+                              </svg>
+                              {/* Video icon */}
+                              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="6" width="15" height="12" rx="2"/>
+                                <path d="m22 8-5 4 5 4V8z"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <span className="text-sm font-semibold" style={{ color: "var(--anchor-green)" }}>
+                                Tap to upload
+                              </span>
+                              <span className="text-sm text-black/40"> or drag & drop</span>
+                            </div>
+                            <div className="text-[11px] text-black/35">Photos and videos accepted</div>
+                          </div>
+                        </label>
                         {entry.files.length > 0 && (
                           <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>
                         )}
-                      </label>
+                      </div>
 
                       {entry.files.length > 0 && (
                         <div className="grid gap-1">
