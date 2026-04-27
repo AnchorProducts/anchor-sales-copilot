@@ -445,6 +445,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   });
   const [formMsg, setFormMsg] = useState<string | null>(null);
 
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageUploadMsg, setImageUploadMsg] = useState<string | null>(null);
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -685,6 +689,52 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
   }
 
+  async function uploadImages() {
+    if (!imageFiles.length || !product) return;
+    setUploadingImages(true);
+    setImageUploadMsg(null);
+
+    const prefix = storagePrefix || prefixCandidatesForProduct(product)[0] || `solutions/${slugifyName(product.name)}`;
+
+    const fd = new FormData();
+    fd.append("prefix", normalizePrefix(prefix));
+    for (const file of imageFiles) fd.append("files", file);
+
+    try {
+      const res = await fetch("/api/assets/upload-images", {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setImageUploadMsg(json?.error || "Upload failed.");
+        setUploadingImages(false);
+        return;
+      }
+
+      const failed: { name: string; error?: string }[] = json.failed > 0
+        ? (json.results as any[]).filter((r) => !r.ok)
+        : [];
+
+      const successCount = imageFiles.length - failed.length;
+
+      if (failed.length) {
+        setImageUploadMsg(
+          `${successCount} uploaded. Failed: ${failed.map((f) => `${f.name} (${f.error})`).join("; ")}`
+        );
+      } else {
+        setImageUploadMsg(`${successCount} image${successCount !== 1 ? "s" : ""} uploaded.`);
+        setImageFiles([]);
+        await load();
+      }
+    } catch (e: any) {
+      setImageUploadMsg(e?.message || "Upload failed.");
+    }
+
+    setUploadingImages(false);
+  }
+
   async function submitAddAsset(e: React.FormEvent) {
     e.preventDefault();
     setFormMsg(null);
@@ -799,104 +849,208 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3">
-              {filtered.length === 0 ? (
-                <div className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
-                  Nothing in this tab yet.
-                  
-                </div>
-              ) : (
-                filtered.map((a) => {
-                  const badge = groupBadgeFromPath(a.path);
-                  const pdf = isPdf(a.path);
+            {filtered.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-black/10 bg-[#F6F7F8] p-4 text-sm text-black/60">
+                Nothing in this tab yet.
+              </div>
+            ) : (() => {
+              const images = filtered.filter((a) => IMAGE_EXTS.has(extOf(a.path)));
+              const docs   = filtered.filter((a) => !IMAGE_EXTS.has(extOf(a.path)));
 
-                  return (
-                    <div
-                      key={a.id}
-                      className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
-                            {badge ? (
-                              <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">
-                                {badge}
-                              </span>
-                            ) : null}
-                            {a.visibility === "internal" ? (
-                              <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">
+              return (
+                <div className="mt-4 space-y-4">
+                  {/* ── Image grid ─────────────────────────────────── */}
+                  {images.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {images.map((a) => (
+                        <div
+                          key={a.id}
+                          className="overflow-hidden rounded-2xl border border-black/10 bg-[#F6F7F8]"
+                        >
+                          {/* Thumbnail — clicks open full-size */}
+                          <button
+                            type="button"
+                            onClick={() => openInline(a.path)}
+                            className="block w-full"
+                          >
+                            <img
+                              src={docOpenHref(a.path, false)}
+                              alt={a.title || basename(a.path)}
+                              className="h-36 w-full object-cover sm:h-44"
+                              loading="lazy"
+                            />
+                          </button>
+                          <div className="px-3 py-2">
+                            <div className="truncate text-[12px] font-semibold text-black">
+                              {a.title || basename(a.path)}
+                            </div>
+                            {a.visibility === "internal" && (
+                              <span className="mt-0.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold text-black/60">
                                 Internal
                               </span>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-1 text-[12px] text-[#76777B] truncate">
-                            {typeFromPath(a.path)} • {a.path}
+                            )}
+                            <div className="mt-2 flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openInline(a.path)}
+                                className="flex-1 rounded-lg bg-[#047835] py-1.5 text-[11px] font-semibold text-white"
+                              >
+                                View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => forceDownload(a.path)}
+                                className="flex-1 rounded-lg border border-black/10 bg-white py-1.5 text-[11px] font-semibold text-black"
+                              >
+                                Save
+                              </button>
+                            </div>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
 
-                        {/* Actions */}
-<div className="w-full sm:w-auto sm:shrink-0">
-  <div className="flex w-full gap-2 sm:justify-end">
-    {(() => {
-      const ext = extOf(a.path);
-      const canOpenInline = ["pdf", "png", "jpg", "jpeg", "mp4"].includes(ext);
+                  {/* ── Document list ───────────────────────────────── */}
+                  {docs.length > 0 && (
+                    <div className="grid gap-3">
+                      {docs.map((a) => {
+                        const badge = groupBadgeFromPath(a.path);
+                        const ext = extOf(a.path);
+                        const canOpenInline = ["pdf", "mp4"].includes(ext);
+                        return (
+                          <div
+                            key={a.id}
+                            className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
+                                  {badge && (
+                                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">{badge}</span>
+                                  )}
+                                  {a.visibility === "internal" && (
+                                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">Internal</span>
+                                  )}
+                                </div>
+                                <div className="mt-1 text-[12px] text-[#76777B] truncate">
+                                  {typeFromPath(a.path)} • {a.path}
+                                </div>
+                              </div>
+                              <div className="flex w-full gap-2 sm:w-auto sm:justify-end">
+                                {canOpenInline && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openInline(a.path)}
+                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
+                                  >
+                                    Open →
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => shareAsset(a.path)}
+                                  className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
+                                >
+                                  Share
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => forceDownload(a.path)}
+                                  className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
+                                >
+                                  Download
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
 
-      return (
-        <>
-          {/* Open (inline-friendly files) */}
-          {canOpenInline && (
-            <button
-              type="button"
-              onClick={() => openInline(a.path)}
-              className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
-            >
-              Open →
-            </button>
-          )}
+          {/* Image upload — visible to all internal users */}
+          {isInternalUser && (
+            <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
+              <div className="text-sm font-semibold text-black">Upload Product Images</div>
+              <div className="mt-1 text-[12px] text-[#76777B]">
+                Images upload into the Pictures tab automatically.
+              </div>
 
-          {/* Download (mobile only when Open is NOT available) */}
-          {!canOpenInline && (
-            <button
-              type="button"
-              onClick={() => forceDownload(a.path)}
-              className="inline-flex flex-1 sm:hidden items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-            >
-              Download
-            </button>
-          )}
+              <label className="mt-4 block cursor-pointer">
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    const incoming = Array.from(e.target.files || []);
+                    setImageFiles((prev) => {
+                      const existing = new Set(prev.map((f) => f.name + f.size));
+                      return [...prev, ...incoming.filter((f) => !existing.has(f.name + f.size))];
+                    });
+                    e.target.value = "";
+                  }}
+                  className="sr-only"
+                />
+                <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-black/15 bg-[#F6F7F8] px-4 py-6 text-center transition-colors hover:border-[#047835] hover:bg-[#F0FDF4] active:border-[#047835] active:bg-[#F0FDF4]">
+                  <div className="flex items-center gap-2 text-black/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                      <circle cx="12" cy="13" r="3"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold" style={{ color: "#047835" }}>Tap to select images</span>
+                    <span className="text-sm text-black/40"> or drag & drop</span>
+                  </div>
+                  <div className="text-[11px] text-black/35">PNG, JPG, WebP, GIF accepted · multiple allowed</div>
+                </div>
+              </label>
 
-          {/* Share (desktop only) */}
-          <button
-            type="button"
-            onClick={() => shareAsset(a.path)}
-            className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-          >
-            Share
-          </button>
+              {imageFiles.length > 0 && (
+                <div className="mt-3 grid gap-2">
+                  {imageFiles.map((file, i) => (
+                    <div
+                      key={`${file.name}-${file.size}-${i}`}
+                      className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-[12px]"
+                    >
+                      <span className="truncate pr-3 text-black">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setImageFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="shrink-0 rounded-lg border border-black/10 px-2.5 py-1 text-[11px] font-semibold text-black hover:bg-black/5"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-          {/* Download (desktop always) */}
-          <button
-            type="button"
-            onClick={() => forceDownload(a.path)}
-            className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-          >
-            Download
-          </button>
-        </>
-      );
-    })()}
-  </div>
-</div>          
-                        </div>
-                      </div>
-                    
-                  );
-                })
+              {imageFiles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={uploadImages}
+                  disabled={uploadingImages}
+                  className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white transition disabled:opacity-60 sm:w-auto sm:px-6"
+                  style={{ backgroundColor: "#047835" }}
+                >
+                  {uploadingImages
+                    ? "Uploading…"
+                    : `Upload ${imageFiles.length} image${imageFiles.length !== 1 ? "s" : ""}`}
+                </button>
+              )}
+
+              {imageUploadMsg && (
+                <div className="mt-3 text-sm text-black/70">{imageUploadMsg}</div>
               )}
             </div>
-          </div>
+          )}
 
           {/* Admin-only Add Asset */}
           {isAdmin && (
