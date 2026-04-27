@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import Button from "@/app/components/ui/Button";
 
 const DT_COMPLETION_TRIGGER =
@@ -388,49 +387,11 @@ export default function RooftopPage() {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* ── Navbar ──────────────────────────────────────────────────────────── */}
-      <Navbar>
-        <NavbarInner>
-          <div className="flex min-w-0 items-center gap-3">
-            <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
-            <div className="min-w-0 leading-tight">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold tracking-wide text-white">
-                  Rooftop Equipment Audit
-                </span>
-                <span
-                  className="hidden sm:inline-flex"
-                  style={{
-                    alignItems: "center",
-                    padding: "2px 10px",
-                    borderRadius: "9999px",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "white",
-                    backgroundColor: "#11500F",
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                  }}
-                >
-                  OSHA Guide
-                </span>
-              </div>
-              <div className="truncate text-[12px] text-white/80">
-                {profileName ? `${profileName}${profileCompany ? ` · ${profileCompany}` : ""}` : "Safety Verification"}
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {progressCount > 0 && (
-              <span className="hidden text-xs text-white/70 sm:block">
-                {progressCount} question{progressCount !== 1 ? "s" : ""} answered
-              </span>
-            )}
-            <Link href="/dashboard">
-              <Button variant="ghost" className="h-9 px-3 text-sm">Dashboard</Button>
-            </Link>
-          </div>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Rooftop Equipment Audit"
+        subtitle={profileName ? `${profileName}${profileCompany ? ` · ${profileCompany}` : ""}` : "OSHA Safety Guide"}
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       {/* Green accent strip */}
       <div style={{ height: 3, background: "linear-gradient(90deg, #047835, #9CE2BB)", flexShrink: 0 }} />

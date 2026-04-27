@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import Button from "@/app/components/ui/Button";
 import { Card } from "@/app/components/ui/Card";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 export const dynamic = "force-dynamic";
 
@@ -135,38 +134,19 @@ export default function DashboardPage() {
 
   return (
     <main className="ds-page">
-      <Navbar>
-        <NavbarInner className="flex-col items-start gap-4 py-4">
-          <div className="flex w-full min-w-0 items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
-
-              <div className="min-w-0 leading-tight">
-                <div className="truncate text-sm font-semibold tracking-wide text-white">
-                  Anchor Sales Co-Pilot
-                </div>
-                <div className="truncate text-[12px] text-white/80">Dashboard</div>
-              </div>
-            </div>
-
-            <Button
-              onClick={signOut}
-              className="h-9 min-w-0 max-w-[110px] overflow-hidden whitespace-nowrap text-ellipsis px-3"
-              title="Sign out"
-              variant="ghost"
-            >
-              Sign out
-            </Button>
-          </div>
-
-          <div className="mt-4 flex w-full flex-col gap-1 text-left sm:mt-8 sm:gap-2">
+      <AppNavbar
+        title="Anchor Sales Co-Pilot"
+        subtitle="Dashboard"
+        menuItems={[{ label: "Sign out", onClick: signOut }]}
+        hero={
+          <div className="flex flex-col gap-1 text-left">
             <h1 className="text-2xl text-white! sm:text-3xl">Welcome back</h1>
             <p className="max-w-2xl text-sm text-white/80">
               Jump into Copilot, manage assets, or run a rooftop safety check.
             </p>
           </div>
-        </NavbarInner>
-      </Navbar>
+        }
+      />
 
       <div className="ds-container py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-10">
         {/* Quick actions */}

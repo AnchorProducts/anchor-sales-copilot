@@ -1,13 +1,12 @@
 // src/app/assets/page.tsx
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import AssetsBrowser from "../components/assets/AssetsBrowser";
 import { Card } from "@/app/components/ui/Card";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 export const dynamic = "force-dynamic";
 
@@ -39,33 +38,11 @@ export default function AssetsPage() {
 
   return (
     <main className="ds-page">
-      {/* Top bar */}
-      <Navbar>
-        <NavbarInner className="max-w-5xl">
-          <div className="flex items-center gap-3 min-w-0">
-            <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo shrink-0" />
-
-            <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate text-white">
-                Asset Management
-              </div>
-              <div className="text-[12px] text-white/80 truncate">
-                Tackle boxes • Asset Library
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/dashboard"
-              className="inline-flex"
-              title="Back to Dashboard"
-            >
-              <span className="ds-btn ds-btn-ghost h-9 px-3">Dashboard</span>
-            </Link>
-          </div>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Asset Management"
+        subtitle="Tackle boxes · Asset Library"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       {/* Page body */}
       <div className="mx-auto max-w-5xl px-5 py-6">

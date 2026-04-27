@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import LeadsTable from "@/app/components/leads/LeadsTable";
 import { Card } from "@/app/components/ui/Card";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 function isInternalRole(role: string) {
   return role === "admin" || role === "anchor_rep";
@@ -53,24 +52,11 @@ export default function LeadsPageClient() {
 
   return (
     <main className="ds-page">
-      <Navbar>
-        <NavbarInner>
-          <div className="flex min-w-0 items-center gap-3">
-            <Link href="/dashboard" className="inline-flex shrink-0 items-center">
-              <img src="/anchorp.svg" alt="Anchor" className="ds-logo" />
-            </Link>
-
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-semibold tracking-wide text-white">Leads</div>
-              <div className="truncate text-[12px] text-white/80">Internal management</div>
-            </div>
-          </div>
-
-          <Link href="/dashboard" className="ds-btn ds-btn-ghost h-9 px-3">
-            Dashboard
-          </Link>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Leads"
+        subtitle="Internal management"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       <div className="ds-container py-6">
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">

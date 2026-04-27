@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
-import Button from "@/app/components/ui/Button";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 
 export const dynamic = "force-dynamic";
@@ -178,24 +176,11 @@ export default function ReportsPage() {
 
   return (
     <main className="ds-page">
-      <Navbar>
-        <NavbarInner className="flex-col items-start gap-4 py-4">
-          <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <img src="/anchorp.svg" alt="Anchor" className="ds-logo shrink-0" />
-              <div className="min-w-0 leading-tight">
-                <div className="truncate text-sm font-semibold tracking-wide text-white">
-                  Anchor Sales Co-Pilot
-                </div>
-                <div className="truncate text-[12px] text-white/80">External User Reports</div>
-              </div>
-            </div>
-            <Link href="/dashboard">
-              <Button variant="ghost" className="h-9 px-3">← Dashboard</Button>
-            </Link>
-          </div>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Anchor Sales Co-Pilot"
+        subtitle="External User Reports"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       <div className="ds-container py-10 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {loading && (
