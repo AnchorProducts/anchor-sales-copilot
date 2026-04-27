@@ -368,113 +368,113 @@ export default function LeadForm() {
 
   return (
     <form onSubmit={submit}>
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
-      <div className="text-sm font-semibold text-black">Project Identifier</div>
-      <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-        Select solution type(s), add photos/videos for each, and include scheduling availability.
-      </div>
-
-      {profile && (
-        <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-          <div className="text-sm font-semibold text-black">Submitted by</div>
-          <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
-            {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
-            {profile.company && <div>{profile.company}</div>}
-            {profile.phone && <div>{profile.phone}</div>}
-            {profile.email && <div>{profile.email}</div>}
-          </div>
-          <div className="mt-2 text-[11px] text-black/40">
-            Your contact information is pulled from your account. Update it in your profile settings.
-          </div>
+      <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
+        <div className="text-sm font-semibold text-black">Project Identifier</div>
+        <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+          Select solution type(s), add photos/videos for each, and include scheduling availability.
         </div>
-      )}
 
-      <div className="mt-4 grid gap-3">
-        {!profile?.company && (
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Customer Company Name *</span>
-            <Input
-              value={form.customer_company}
-              onChange={(e) => update("customer_company", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="Company name"
-            />
-          </label>
+        {profile && (
+          <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+            <div className="text-sm font-semibold text-black">Submitted by</div>
+            <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
+              {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
+              {profile.company && <div>{profile.company}</div>}
+              {profile.phone && <div>{profile.phone}</div>}
+              {profile.email && <div>{profile.email}</div>}
+            </div>
+            <div className="mt-2 text-[11px] text-black/40">
+              Your contact information is pulled from your account. Update it in your profile settings.
+            </div>
+          </div>
         )}
 
-        <label className="grid gap-1 text-sm">
-          <span className="font-semibold">Project Details / Job Description *</span>
-          <Textarea
-            value={form.details}
-            onChange={(e) => update("details", e.target.value)}
-            className="min-h-[120px] px-3 py-2 text-sm"
-            placeholder="Describe the job, scope, and timeline..."
-          />
-        </label>
+        <div className="mt-4 grid gap-4">
+          {!profile?.company && (
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-semibold">Customer Company Name *</span>
+              <Input
+                value={form.customer_company}
+                onChange={(e) => update("customer_company", e.target.value)}
+                className="h-11 px-3 text-sm"
+                placeholder="Company name"
+              />
+            </label>
+          )}
 
-        <label className="grid gap-1 text-sm">
-          <span className="font-semibold">Project Address *</span>
-          <Input
-            value={form.project_address}
-            onChange={(e) => update("project_address", e.target.value)}
-            className="h-10 px-3 text-sm"
-            placeholder="Street address"
-          />
-        </label>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label className="col-span-2 grid gap-1 text-sm">
-            <span className="font-semibold">City *</span>
-            <Input
-              value={form.city}
-              onChange={(e) => update("city", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="City"
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-semibold">Project Details / Job Description *</span>
+            <Textarea
+              value={form.details}
+              onChange={(e) => update("details", e.target.value)}
+              className="min-h-[120px] px-3 py-3 text-sm"
+              placeholder="Describe the job, scope, and timeline..."
             />
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">State *</span>
+
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-semibold">Project Address *</span>
+            <Input
+              value={form.project_address}
+              onChange={(e) => update("project_address", e.target.value)}
+              className="h-11 px-3 text-sm"
+              placeholder="Street address"
+            />
+          </label>
+
+          {/* City full-width, then State + Zip side by side */}
+          <div className="grid gap-3">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-semibold">City *</span>
+              <Input
+                value={form.city}
+                onChange={(e) => update("city", e.target.value)}
+                className="h-11 px-3 text-sm"
+                placeholder="City"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">State *</span>
+                <Select
+                  value={form.state}
+                  onChange={(e) => update("state", e.target.value)}
+                  className="h-11 px-3 text-sm"
+                >
+                  <option value="">State</option>
+                  {US_STATES.map((state) => (
+                    <option key={state} value={state}>{state}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">Zip *</span>
+                <Input
+                  value={form.zip}
+                  onChange={(e) => update("zip", e.target.value)}
+                  className="h-11 px-3 text-sm"
+                  placeholder="Zip"
+                />
+              </label>
+            </div>
+          </div>
+
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-semibold">Country *</span>
             <Select
-              value={form.state}
-              onChange={(e) => update("state", e.target.value)}
-              className="h-10 px-3 text-sm"
+              value={form.country}
+              onChange={(e) => update("country", e.target.value)}
+              className="h-11 px-3 text-sm"
             >
-              <option value="">Select state</option>
-              {US_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
+              {COUNTRIES.map((country) => (
+                <option key={country.value} value={country.value}>
+                  {country.label}
                 </option>
               ))}
             </Select>
           </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Zip *</span>
-            <Input
-              value={form.zip}
-              onChange={(e) => update("zip", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="Zip"
-            />
-          </label>
-        </div>
 
-        <label className="grid gap-1 text-sm">
-          <span className="font-semibold">Country *</span>
-          <Select
-            value={form.country}
-            onChange={(e) => update("country", e.target.value)}
-            className="h-10 px-3 text-sm"
-          >
-            {COUNTRIES.map((country) => (
-              <option key={country.value} value={country.value}>
-                {country.label}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">Roof Type *</span>
             <MultiSelect
               options={ROOF_TYPES}
@@ -484,7 +484,7 @@ export default function LeadForm() {
             />
           </label>
 
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">Brand *</span>
             <MultiSelect
               options={ROOF_BRANDS}
@@ -493,302 +493,295 @@ export default function LeadForm() {
               placeholder="Select brand(s)"
             />
           </label>
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Needed Around Month *</span>
-            <Select
-              value={form.needed_month}
-              onChange={(e) => update("needed_month", e.target.value)}
-              className="h-10 px-3 text-sm"
-            >
-              <option value="">Select month</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                <option key={month} value={String(month)}>
-                  {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Needed Around Year *</span>
-            <Select
-              value={form.needed_year}
-              onChange={(e) => update("needed_year", e.target.value)}
-              className="h-10 px-3 text-sm"
-            >
-              <option value="">Select year</option>
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
-
-        <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-          <div className="text-sm font-semibold text-black">Solution Types *</div>
-          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-            Select one or more, then upload photos/videos and comments for each selected solution.
-          </div>
-
-          <div className="mt-3">
-            <MultiSelect
-              options={SOLUTION_OPTIONS.map((o) => o.label)}
-              value={SOLUTION_OPTIONS.filter((o) => solutions[o.key]?.selected).map((o) => o.label)}
-              onChange={(labels) =>
-                setSolutions((prev) => {
-                  const next = { ...prev };
-                  for (const opt of SOLUTION_OPTIONS) {
-                    next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) };
-                  }
-                  return next;
-                })
-              }
-              placeholder="Select solution type(s)"
-            />
-          </div>
-
-          {selectedSolutions.length > 0 && (
-            <div className="mt-4 grid gap-3">
-              {selectedSolutions.map((option) => {
-                const entry = solutions[option.key];
-                return (
-                  <div key={option.key} className="rounded-xl border border-black/10 bg-white p-3">
-                    <div className="text-sm font-semibold text-black">{option.label}</div>
-                    <div className="mt-2 grid gap-2">
-                      {option.key === "other" && (
-                        <label className="grid gap-1 text-sm">
-                          <span className="font-semibold">Solution Name / Description *</span>
-                          <Input
-                            value={otherLabel}
-                            onChange={(e) => setOtherLabel(e.target.value)}
-                            className="h-10 px-3 text-sm"
-                            placeholder="Describe the solution type"
-                          />
-                        </label>
-                      )}
-                      <div className="grid gap-1 text-sm">
-                        <span className="font-semibold">Photos / Videos *</span>
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/*,video/*"
-                            onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))}
-                            className="sr-only"
-                          />
-                          <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-[var(--surface-soft)] px-4 py-5 text-center transition-colors hover:border-[var(--anchor-green)] hover:bg-[#F0FDF4]">
-                            <div className="flex items-center gap-2 text-black/30">
-                              {/* Camera icon */}
-                              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                                <circle cx="12" cy="13" r="3"/>
-                              </svg>
-                              {/* Video icon */}
-                              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="2" y="6" width="15" height="12" rx="2"/>
-                                <path d="m22 8-5 4 5 4V8z"/>
-                              </svg>
-                            </div>
-                            <div>
-                              <span className="text-sm font-semibold" style={{ color: "var(--anchor-green)" }}>
-                                Tap to upload
-                              </span>
-                              <span className="text-sm text-black/40"> or drag & drop</span>
-                            </div>
-                            <div className="text-[11px] text-black/35">Photos and videos accepted</div>
-                          </div>
-                        </label>
-                        {entry.files.length > 0 && (
-                          <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>
-                        )}
-                      </div>
-
-                      {entry.files.length > 0 && (
-                        <div className="grid gap-1">
-                          {entry.files.map((file, fileIndex) => (
-                            <div
-                              key={`${file.name}-${file.size}-${file.lastModified}-${fileIndex}`}
-                              className="flex items-center justify-between rounded-lg border border-black/10 px-2 py-1 text-[12px]"
-                            >
-                              <span className="truncate pr-3">{file.name}</span>
-                              <Button
-                                onClick={() => removeSolutionFile(option.key, fileIndex)}
-                                className="px-2 py-0.5 text-[11px]"
-                                variant="secondary"
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <label className="grid gap-1 text-sm">
-                        <span className="font-semibold">Comments</span>
-                        <Textarea
-                          value={entry.comment}
-                          onChange={(e) => updateSolutionComment(option.key, e.target.value)}
-                          className="min-h-[80px] px-3 py-2 text-sm"
-                          placeholder="Add notes specific to this solution type"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-          <div className="text-sm font-semibold text-black">Scheduling Request (Video Call or Site Visit)</div>
-          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-            This goes to the assigned regional sales rep so they can send scheduling availability (Calendly-style flow).
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-sm">
-              <span className="font-semibold">Request Type</span>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-semibold">Needed Month *</span>
               <Select
-                value={form.meeting_request_type}
-                onChange={(e) => update("meeting_request_type", e.target.value as FormState["meeting_request_type"])}
-                className="h-10 px-3 text-sm"
+                value={form.needed_month}
+                onChange={(e) => update("needed_month", e.target.value)}
+                className="h-11 px-3 text-sm"
               >
-                <option value="none">No scheduling request</option>
-                <option value="video_call">Video call</option>
-                <option value="site_visit">Site visit</option>
+                <option value="">Month</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                  <option key={month} value={String(month)}>
+                    {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
+                  </option>
+                ))}
               </Select>
             </label>
-
-            <label className="grid gap-1 text-sm">
-              <span className="font-semibold">Best Contact Phone</span>
-              <Input
-                value={form.video_call_phone}
-                onChange={(e) => update("video_call_phone", e.target.value)}
-                className="h-10 px-3 text-sm"
-                placeholder="(555) 555-5555"
-              />
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-semibold">Needed Year *</span>
+              <Select
+                value={form.needed_year}
+                onChange={(e) => update("needed_year", e.target.value)}
+                className="h-11 px-3 text-sm"
+              >
+                <option value="">Year</option>
+                {years.map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </Select>
             </label>
           </div>
 
-          <label className="mt-3 grid gap-1 text-sm">
-            <span className="font-semibold">Preferred Availability (for video call/site visit)</span>
-            <Textarea
-              value={form.preferred_times}
-              onChange={(e) => update("preferred_times", e.target.value)}
-              className="min-h-[90px] px-3 py-2 text-sm"
-              placeholder="List date/time options with timezone, one per line"
-            />
-          </label>
-        </div>
-        <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-          <div className="text-sm font-semibold text-black">Contractors on this Project</div>
-          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-            Add contact information for any contractors involved in this project.
+          {/* ── Solution Types ─────────────────────────────────────────────── */}
+          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+            <div className="text-sm font-semibold text-black">Solution Types *</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+              Select one or more, then upload photos/videos and comments for each.
+            </div>
+
+            <div className="mt-3">
+              <MultiSelect
+                options={SOLUTION_OPTIONS.map((o) => o.label)}
+                value={SOLUTION_OPTIONS.filter((o) => solutions[o.key]?.selected).map((o) => o.label)}
+                onChange={(labels) =>
+                  setSolutions((prev) => {
+                    const next = { ...prev };
+                    for (const opt of SOLUTION_OPTIONS) {
+                      next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) };
+                    }
+                    return next;
+                  })
+                }
+                placeholder="Select solution type(s)"
+              />
+            </div>
+
+            {selectedSolutions.length > 0 && (
+              <div className="mt-4 grid gap-3">
+                {selectedSolutions.map((option) => {
+                  const entry = solutions[option.key];
+                  return (
+                    <div key={option.key} className="rounded-xl border border-black/10 bg-white p-4">
+                      <div className="text-sm font-semibold text-black">{option.label}</div>
+                      <div className="mt-3 grid gap-3">
+                        {option.key === "other" && (
+                          <label className="grid gap-1.5 text-sm">
+                            <span className="font-semibold">Solution Name / Description *</span>
+                            <Input
+                              value={otherLabel}
+                              onChange={(e) => setOtherLabel(e.target.value)}
+                              className="h-11 px-3 text-sm"
+                              placeholder="Describe the solution type"
+                            />
+                          </label>
+                        )}
+                        <div className="grid gap-1.5 text-sm">
+                          <span className="font-semibold">Photos / Videos *</span>
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,video/*"
+                              onChange={(e) => addSolutionFiles(option.key, Array.from(e.target.files || []))}
+                              className="sr-only"
+                            />
+                            <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-[var(--surface-soft)] px-4 py-6 text-center transition-colors active:border-[var(--anchor-green)] active:bg-[#F0FDF4]">
+                              <div className="flex items-center gap-2 text-black/30">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                  <circle cx="12" cy="13" r="3"/>
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="2" y="6" width="15" height="12" rx="2"/>
+                                  <path d="m22 8-5 4 5 4V8z"/>
+                                </svg>
+                              </div>
+                              <div>
+                                <span className="text-sm font-semibold" style={{ color: "var(--anchor-green)" }}>
+                                  Tap to upload
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-black/35">Photos and videos accepted</div>
+                            </div>
+                          </label>
+                          {entry.files.length > 0 && (
+                            <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>
+                          )}
+                        </div>
+
+                        {entry.files.length > 0 && (
+                          <div className="grid gap-2">
+                            {entry.files.map((file, fileIndex) => (
+                              <div
+                                key={`${file.name}-${file.size}-${file.lastModified}-${fileIndex}`}
+                                className="flex items-center justify-between rounded-lg border border-black/10 px-3 py-2 text-[12px]"
+                              >
+                                <span className="truncate pr-3">{file.name}</span>
+                                <Button
+                                  onClick={() => removeSolutionFile(option.key, fileIndex)}
+                                  className="shrink-0 px-3 py-1.5 text-[12px]"
+                                  variant="secondary"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <label className="grid gap-1.5 text-sm">
+                          <span className="font-semibold">Comments</span>
+                          <Textarea
+                            value={entry.comment}
+                            onChange={(e) => updateSolutionComment(option.key, e.target.value)}
+                            className="min-h-[88px] px-3 py-3 text-sm"
+                            placeholder="Add notes specific to this solution type"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {contractors.length > 0 && (
+          {/* ── Scheduling ─────────────────────────────────────────────────── */}
+          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+            <div className="text-sm font-semibold text-black">Scheduling Request</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+              Request a video call or site visit with the assigned regional sales rep.
+            </div>
+
             <div className="mt-3 grid gap-3">
-              {contractors.map((contractor, index) => (
-                <div key={index} className="rounded-xl border border-black/10 bg-white p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold text-black">Contractor {index + 1}</div>
-                    <Button
-                      onClick={() => removeContractor(index)}
-                      className="px-2 py-0.5 text-[11px]"
-                      variant="secondary"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                  <div className="grid gap-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="grid gap-1 text-sm">
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">Request Type</span>
+                <Select
+                  value={form.meeting_request_type}
+                  onChange={(e) => update("meeting_request_type", e.target.value as FormState["meeting_request_type"])}
+                  className="h-11 px-3 text-sm"
+                >
+                  <option value="none">No scheduling request</option>
+                  <option value="video_call">Video call</option>
+                  <option value="site_visit">Site visit</option>
+                </Select>
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">Best Contact Phone</span>
+                <Input
+                  value={form.video_call_phone}
+                  onChange={(e) => update("video_call_phone", e.target.value)}
+                  className="h-11 px-3 text-sm"
+                  placeholder="(555) 555-5555"
+                />
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">Preferred Availability</span>
+                <Textarea
+                  value={form.preferred_times}
+                  onChange={(e) => update("preferred_times", e.target.value)}
+                  className="min-h-[88px] px-3 py-3 text-sm"
+                  placeholder="List date/time options with timezone, one per line"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* ── Contractors ────────────────────────────────────────────────── */}
+          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+            <div className="text-sm font-semibold text-black">Contractors on this Project</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+              Add contact information for any contractors involved in this project.
+            </div>
+
+            {contractors.length > 0 && (
+              <div className="mt-3 grid gap-3">
+                {contractors.map((contractor, index) => (
+                  <div key={index} className="rounded-xl border border-black/10 bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-black">Contractor {index + 1}</div>
+                      <Button
+                        onClick={() => removeContractor(index)}
+                        className="px-3 py-1.5 text-[12px]"
+                        variant="secondary"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="grid gap-3">
+                      <label className="grid gap-1.5 text-sm">
                         <span className="font-semibold">Name</span>
                         <Input
                           value={contractor.name}
                           onChange={(e) => updateContractor(index, "name", e.target.value)}
-                          className="h-10 px-3 text-sm"
+                          className="h-11 px-3 text-sm"
                           placeholder="Full name"
                         />
                       </label>
-                      <label className="grid gap-1 text-sm">
+                      <label className="grid gap-1.5 text-sm">
                         <span className="font-semibold">Company</span>
                         <Input
                           value={contractor.company}
                           onChange={(e) => updateContractor(index, "company", e.target.value)}
-                          className="h-10 px-3 text-sm"
+                          className="h-11 px-3 text-sm"
                           placeholder="Company name"
                         />
                       </label>
-                    </div>
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-semibold">Role / Trade</span>
-                      <Input
-                        value={contractor.role}
-                        onChange={(e) => updateContractor(index, "role", e.target.value)}
-                        className="h-10 px-3 text-sm"
-                        placeholder="e.g. Roofing contractor, Electrician"
-                      />
-                    </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="grid gap-1 text-sm">
+                      <label className="grid gap-1.5 text-sm">
+                        <span className="font-semibold">Role / Trade</span>
+                        <Input
+                          value={contractor.role}
+                          onChange={(e) => updateContractor(index, "role", e.target.value)}
+                          className="h-11 px-3 text-sm"
+                          placeholder="e.g. Roofing contractor, Electrician"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 text-sm">
                         <span className="font-semibold">Phone</span>
                         <Input
                           value={contractor.phone}
                           onChange={(e) => updateContractor(index, "phone", e.target.value)}
-                          className="h-10 px-3 text-sm"
+                          className="h-11 px-3 text-sm"
                           placeholder="(555) 555-5555"
                         />
                       </label>
-                      <label className="grid gap-1 text-sm">
+                      <label className="grid gap-1.5 text-sm">
                         <span className="font-semibold">Email</span>
                         <Input
                           value={contractor.email}
                           onChange={(e) => updateContractor(index, "email", e.target.value)}
-                          className="h-10 px-3 text-sm"
+                          className="h-11 px-3 text-sm"
                           placeholder="email@example.com"
                         />
                       </label>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
 
+            <Button
+              onClick={addContractor}
+              className="mt-3 w-full py-3 text-sm sm:w-auto sm:px-4"
+              variant="secondary"
+            >
+              + Add contractor
+            </Button>
+          </div>
+        </div>
+
+        {error && (
+          <Alert className="mt-4" tone="error">{error}</Alert>
+        )}
+        {success && (
+          <Alert className="mt-4" tone="success">{success}</Alert>
+        )}
+
+        <div className="mt-5">
           <Button
-            onClick={addContractor}
-            className="mt-3 px-3 py-1.5 text-[12px]"
-            variant="secondary"
+            type="submit"
+            disabled={submitting}
+            className="w-full py-3 text-sm sm:w-auto sm:px-6"
+            variant="primary"
           >
-            + Add contractor
+            {submitting ? "Submitting…" : "Submit lead"}
           </Button>
         </div>
-      </div>
-
-      {error && (
-        <Alert className="mt-4" tone="error">{error}</Alert>
-      )}
-      {success && (
-        <Alert className="mt-4" tone="success">{success}</Alert>
-      )}
-
-      <div className="mt-4 flex gap-2">
-        <Button
-          type="submit"
-          disabled={submitting}
-          className="px-4 py-2 text-[12px]"
-          variant="primary"
-        >
-          {submitting ? "Submitting…" : "Submit lead"}
-        </Button>
-      </div>
       </Card>
     </form>
   );
