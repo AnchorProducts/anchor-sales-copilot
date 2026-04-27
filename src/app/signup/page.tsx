@@ -129,7 +129,7 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         <Card className="border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="mb-12 flex items-center gap-3">
-            <img src="/anchorplogin.svg" alt="Anchor" className="ds-logo shrink-0" />
+            <img src={process.env.NEXT_PUBLIC_APP_MODE === "internal" ? "/internal_anchorplogin.svg" : "/anchorplogin.svg"} alt="Anchor" className="ds-logo shrink-0" />
             <div>
               <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
                 Anchor Sales Co-Pilot

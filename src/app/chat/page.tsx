@@ -8,6 +8,7 @@ import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import ChatSidebar from "@/app/components/ChatSidebar";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -413,6 +414,7 @@ export default function ChatPage() {
 
   const ready = !profileLoading && !historyLoading && !!userId && !!conversationId;
   const inputDisabled = !ready;
+  const { t } = useTranslation();
 
   const roleLabel = useMemo(() => {
     if (role === "anchor_rep")   return "Anchor Rep";
@@ -498,13 +500,13 @@ export default function ChatPage() {
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <AppNavbar
-        title="Anchor Sales Co-Pilot"
-        subtitle="Sales · Assets · Leads"
-        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+        title={t("anchorSalesCoPilot")}
+        subtitle={t("salesAssetsLeads")}
+        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
         mobileMenuItems={[
-          { label: "New Chat", onClick: newChat },
-          { label: "Chat History", onClick: () => setSidebarOpen(true) },
-          { label: "Dashboard", href: "/dashboard" },
+          { label: t("newChat"), onClick: newChat },
+          { label: t("chatHistory"), onClick: () => setSidebarOpen(true) },
+          { label: t("dashboard"), href: "/dashboard" },
         ]}
       />
 
@@ -582,7 +584,7 @@ export default function ChatPage() {
                             {m.role === "assistant" && m.docs && m.docs.length > 0 && (
                               <div className="mt-3 border-t border-black/8 pt-3">
                                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)] sm:text-[11px]">
-                                  Related Documents
+                                  {t("relatedDocuments")}
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                   {m.docs.map((doc) => (
@@ -597,7 +599,7 @@ export default function ChatPage() {
                                         <div className="truncate font-semibold text-black">{doc.title}</div>
                                         <div className="text-[11px] text-[var(--anchor-gray)]">{doc.doc_type}</div>
                                       </div>
-                                      <span className="shrink-0 text-[var(--anchor-green)] font-medium">Open →</span>
+                                      <span className="shrink-0 text-[var(--anchor-green)] font-medium">{t("open")}</span>
                                     </a>
                                   ))}
                                 </div>
@@ -609,12 +611,12 @@ export default function ChatPage() {
                           {showFeedbackWidget && (
                             <div className="mt-1.5 px-1">
                               {fb.sent ? (
-                                <span className="text-[11px] text-[var(--anchor-gray)]">Feedback saved — thanks.</span>
+                                <span className="text-[11px] text-[var(--anchor-gray)]">{t("feedbackSaved")}</span>
                               ) : fb.open ? (
                                 <div className="mt-1 flex flex-col gap-2">
                                   <textarea
                                     rows={2}
-                                    placeholder="What was wrong or missing? (optional)"
+                                    placeholder={t("whatWasWrong")}
                                     value={fb.note}
                                     onChange={(e) => setFb(idx, { note: e.target.value })}
                                     className="ds-textarea text-xs"
@@ -626,14 +628,14 @@ export default function ChatPage() {
                                       onClick={() => submitFeedback(idx, messages)}
                                       className="ds-btn ds-btn-destructive px-3 py-1.5 text-xs disabled:opacity-50"
                                     >
-                                      {fb.busy ? "Saving…" : "Submit"}
+                                      {fb.busy ? t("saving") : t("submit")}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => setFb(idx, { open: false, note: "" })}
                                       className="ds-btn ds-btn-secondary px-3 py-1.5 text-xs"
                                     >
-                                      Cancel
+                                      {t("cancel")}
                                     </button>
                                   </div>
                                 </div>
@@ -643,18 +645,18 @@ export default function ChatPage() {
                                     type="button"
                                     onClick={() => { setFb(idx, { rating: "good" }); submitFeedback(idx, messages); }}
                                     className="text-[11px] text-[var(--anchor-gray)] hover:text-[var(--anchor-green)] transition"
-                                    title="Accurate"
+                                    title={t("accurate")}
                                   >
-                                    ✓ Accurate
+                                    {t("accurate")}
                                   </button>
                                   <span className="text-[11px] text-black/20">·</span>
                                   <button
                                     type="button"
                                     onClick={() => setFb(idx, { rating: "bad", open: true })}
                                     className="text-[11px] text-[var(--anchor-gray)] hover:text-red-600 transition"
-                                    title="Needs correction"
+                                    title={t("needsCorrection")}
                                   >
-                                    Needs correction
+                                    {t("needsCorrection")}
                                   </button>
                                 </div>
                               )}
@@ -667,7 +669,7 @@ export default function ChatPage() {
 
                   {(historyLoading || loading) && (
                     <div className="max-w-[88%] rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-[13.5px] text-black/70 sm:px-4 sm:py-3 sm:text-sm">
-                      {historyLoading ? "Loading chat…" : "Thinking…"}
+                      {historyLoading ? t("loadingChat") : t("thinking")}
                     </div>
                   )}
 
@@ -681,7 +683,7 @@ export default function ChatPage() {
                 <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
                   <Input
                     className="min-w-0 flex-1 px-3 py-2.5 text-[15px] sm:py-3 sm:text-sm disabled:opacity-60"
-                    placeholder={inputDisabled ? "Loading your chat…" : "Message Anchor Co-Pilot…"}
+                    placeholder={inputDisabled ? t("loadingYourChat") : t("messageAnchorCoPilot")}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     disabled={inputDisabled}
@@ -701,7 +703,7 @@ export default function ChatPage() {
                     aria-label="Send"
                   >
                     <span className="sm:hidden">↑</span>
-                    <span className="hidden sm:inline">Send</span>
+                    <span className="hidden sm:inline">{t("send")}</span>
                   </Button>
                 </div>
               </div>

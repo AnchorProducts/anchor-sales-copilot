@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type ConversationRow = {
   id: string;
@@ -77,6 +78,7 @@ export default function ChatSidebar({
     await onDelete?.(id);
   }
 
+  const { t } = useTranslation();
   const PANEL_HEADER =
     "border-b border-black/10 px-4 py-3 flex items-center justify-between gap-2 shrink-0";
   const MUTED = "text-[#76777B]";
@@ -85,27 +87,26 @@ export default function ChatSidebar({
     <div ref={rootRef} className="h-full min-h-0 flex flex-col bg-transparent">
       {/* Header */}
       <div className={PANEL_HEADER}>
-        <div className="text-sm font-semibold text-black">Chats</div>
+        <div className="text-sm font-semibold text-black">{t("chats")}</div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onNewChat}
             className="h-8 rounded-md border border-black/10 bg-white px-3 text-[12px] font-semibold text-[#047835] hover:bg-black/[0.03] transition"
-            title="Start a new chat"
+            title={t("startNewChat")}
           >
-            New chat
+            {t("newChat")}
           </button>
 
-          {/* ✅ Only shows on mobile drawer when you pass onClose */}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
               className="h-8 rounded-md border border-black/10 bg-white px-3 text-[12px] text-black/80 hover:bg-black/[0.03] transition"
-              title="Close"
+              title={t("close")}
             >
-              Close
+              {t("close")}
             </button>
           )}
         </div>
@@ -114,9 +115,9 @@ export default function ChatSidebar({
       {/* List */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 bg-transparent">
         {loading ? (
-          <div className={`p-3 text-sm ${MUTED}`}>Loading…</div>
+          <div className={`p-3 text-sm ${MUTED}`}>{t("loading")}</div>
         ) : conversations.length === 0 ? (
-          <div className={`p-3 text-sm ${MUTED}`}>No chats yet.</div>
+          <div className={`p-3 text-sm ${MUTED}`}>{t("noChatsYet")}</div>
         ) : (
           <div className="space-y-1">
             {conversations.map((c) => {
@@ -157,7 +158,7 @@ export default function ChatSidebar({
                             }}
                             className="rounded-md border border-black/10 bg-[#047835] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#11500F] transition"
                           >
-                            Save
+                            {t("save")}
                           </button>
                           <button
                             type="button"
@@ -167,7 +168,7 @@ export default function ChatSidebar({
                             }}
                             className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-black/70 hover:bg-black/[0.03] transition"
                           >
-                            Cancel
+                            {t("cancel")}
                           </button>
                         </div>
                       </div>
@@ -207,14 +208,14 @@ export default function ChatSidebar({
                         onClick={() => startRename(c.id, titleOrNew(c.title))}
                         className="w-full px-3 py-2 text-left text-[12px] text-black hover:bg-black/[0.03] transition"
                       >
-                        Rename
+                        {t("rename")}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(c.id)}
                         className="w-full px-3 py-2 text-left text-[12px] text-red-600 hover:bg-black/[0.03] transition"
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     </div>
                   )}
@@ -227,7 +228,7 @@ export default function ChatSidebar({
 
       {/* Footer */}
       <div className="border-t border-black/10 px-4 py-3 text-[11px] text-[#76777B] shrink-0">
-        Tip: Click a chat to continue where you left off.
+        {t("tipClickChat")}
         {activeIndex >= 0 ? (
           <span className="ml-2 text-black/40">
             ({activeIndex + 1}/{conversations.length})

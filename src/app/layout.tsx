@@ -1,27 +1,28 @@
 // src/app/layout.tsx
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { isInternal, APP_NAME, APP_SHORT } from "@/lib/appMode";
 
 export const metadata: Metadata = {
   title: {
-    default: "Anchor Sales Co-Pilot",
-    template: "%s • Anchor Sales Co-Pilot",
+    default: APP_NAME,
+    template: `%s • ${APP_NAME}`,
   },
-  description: "Sales • Assets • Leads",
+  description: isInternal
+    ? "Internal sales tools — leads, assets, and reporting."
+    : "Sales • Assets • Leads",
 
-  // ✅ This controls mobile browser + PWA status bar color
   themeColor: "#047835",
 
-  // ✅ Proper Apple PWA config
   appleWebApp: {
     capable: true,
-    title: "Anchor Co-Pilot",
+    title: APP_SHORT,
     statusBarStyle: "black-translucent",
   },
 
   icons: {
     icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+    apple: isInternal ? "/internal_apple-touch-icon.png" : "/apple-touch-icon.png",
   },
 };
 
@@ -39,6 +40,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        {/* Apply saved theme before first paint to prevent flash */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){
+            try {
+              var t = localStorage.getItem('anchor-theme') || 'light';
+              if (t === 'system') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+              document.documentElement.setAttribute('data-theme', t);
+              var l = localStorage.getItem('anchor-lang') || 'en';
+              document.documentElement.setAttribute('lang', l);
+            } catch(e){}
+          })();
+        `}} />
+      </head>
       <body>
         {children}
       </body>

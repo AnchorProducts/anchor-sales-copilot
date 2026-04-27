@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input } from "@/app/components/ui/Field";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -165,6 +166,7 @@ async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Pr
 
 export default function AssetsBrowser() {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -322,17 +324,15 @@ export default function AssetsBrowser() {
     <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-semibold text-black">Browse tackle boxes</div>
-          <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-            Specs live inside each product tackle box (not a separate category).
-          </div>
+          <div className="text-sm font-semibold text-black">{t("browseTackleBoxes")}</div>
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("specsNote")}</div>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search…"
+            placeholder={t("search")}
             className="h-10 w-full bg-[var(--surface-soft)] px-4 text-sm sm:w-[280px]"
           />
         </div>
@@ -340,31 +340,18 @@ export default function AssetsBrowser() {
 
       <div className="mt-4 flex flex-col gap-2">
         <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [-webkit-overflow-scrolling:touch]">
-          <button type="button" onClick={() => setFilter("all")} className={btnClass(filter === "all")}>
-            All
-          </button>
-          <button type="button" onClick={() => setFilter("solution")} className={btnClass(filter === "solution")}>
-            Solutions
-          </button>
-          <button type="button" onClick={() => setFilter("anchor")} className={btnClass(filter === "anchor")}>
-            Anchors
-          </button>
-
+          <button type="button" onClick={() => setFilter("all")} className={btnClass(filter === "all")}>{t("all")}</button>
+          <button type="button" onClick={() => setFilter("solution")} className={btnClass(filter === "solution")}>{t("solutions")}</button>
+          <button type="button" onClick={() => setFilter("anchor")} className={btnClass(filter === "anchor")}>{t("anchors")}</button>
           {isInternalUser && (
-            <button
-              type="button"
-              onClick={() => setFilter("internal_assets")}
-              className={btnClass(filter === "internal_assets")}
-            >
-              Internal assets
-            </button>
+            <button type="button" onClick={() => setFilter("internal_assets")} className={btnClass(filter === "internal_assets")}>{t("internalAssets")}</button>
           )}
         </div>
 
         <div className="flex justify-end">
           <span className="inline-flex items-center rounded-full bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
-            <span className="sm:hidden">Showing: Pub{isInternalUser ? " + Int" : ""}</span>
-            <span className="hidden sm:inline">Showing: Public{isInternalUser ? " + Internal" : ""}</span>
+            <span className="sm:hidden">{isInternalUser ? t("showingPubInt") : t("showingPub")}</span>
+            <span className="hidden sm:inline">{isInternalUser ? t("showingPublicInternal") : t("showingPublic")}</span>
           </span>
         </div>
       </div>
@@ -373,9 +360,9 @@ export default function AssetsBrowser() {
         {error ? (
           <Alert tone="error">{error}</Alert>
         ) : loading ? (
-          <Alert tone="neutral">Loading…</Alert>
+          <Alert tone="neutral">{t("loading")}</Alert>
         ) : filtered.length === 0 ? (
-          <Alert tone="neutral">No products found.</Alert>
+          <Alert tone="neutral">{t("noProductsFound")}</Alert>
         ) : (
           <div className="grid gap-3">
             {filtered.map((p) => {
@@ -385,7 +372,7 @@ export default function AssetsBrowser() {
                 <Link
                   key={p.id}
                   href={productHref(p)}
-                  title="Open tackle box"
+                  title={t("openTackleBox")}
                   className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-white p-4 transition duration-200 hover:bg-[var(--surface-soft)]"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -403,7 +390,7 @@ export default function AssetsBrowser() {
 
                     <div className="w-full sm:w-auto sm:shrink-0">
                       <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-                        Open →
+                        {t("open")}
                       </div>
                     </div>
                   </div>

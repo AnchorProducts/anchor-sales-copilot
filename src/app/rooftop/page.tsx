@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import Button from "@/app/components/ui/Button";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const DT_COMPLETION_TRIGGER =
   "Your assessment is complete. I am generating your Rooftop Access Report now.";
@@ -175,6 +176,7 @@ async function generatePdf(data: AssessmentData): Promise<Blob> {
 export default function RooftopPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
 
   const [profileName, setProfileName]       = useState("");
   const [profileCompany, setProfileCompany] = useState("");
@@ -388,9 +390,9 @@ export default function RooftopPage() {
 
       {/* ── Navbar ──────────────────────────────────────────────────────────── */}
       <AppNavbar
-        title="Rooftop Equipment Audit"
-        subtitle={profileName ? `${profileName}${profileCompany ? ` · ${profileCompany}` : ""}` : "OSHA Safety Guide"}
-        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+        title={t("rooftopEquipmentAudit")}
+        subtitle={profileName ? `${profileName}${profileCompany ? ` · ${profileCompany}` : ""}` : t("oshaGuide")}
+        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
       {/* Green accent strip */}
@@ -473,19 +475,19 @@ export default function RooftopPage() {
                       border: "2px solid rgba(4,120,53,0.25)", borderTopColor: "#047835",
                       borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0,
                     }} />
-                    Generating your report…
+                    {t("generatingReport")}
                   </div>
                 )}
                 {pdfBlob && !pdfGenerating && (
                   <div className="flex flex-col gap-2">
-                    <div className="font-semibold" style={{ color: "#047835" }}>Report downloaded successfully.</div>
+                    <div className="font-semibold" style={{ color: "#047835" }}>{t("reportDownloaded")}</div>
                     <button
                       type="button"
                       onClick={() => triggerBlobDownload(pdfBlob, assessment)}
                       className="self-start rounded-lg px-4 py-2 text-xs font-semibold text-white transition"
                       style={{ backgroundColor: "#047835" }}
                     >
-                      Download again
+                      {t("downloadAgain")}
                     </button>
                   </div>
                 )}
