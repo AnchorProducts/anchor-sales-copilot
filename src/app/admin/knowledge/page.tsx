@@ -5,9 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import AdminKnowledgeTabs from "@/app/components/admin/AdminKnowledgeTabs";
-import Button from "@/app/components/ui/Button";
 import { Alert } from "@/app/components/ui/Alert";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 type Role = "admin" | "anchor_rep" | "external_rep";
 type UserType = "internal" | "external";
@@ -98,30 +97,11 @@ export default function AdminKnowledgePage() {
 
   return (
     <main className="min-h-screen anchor-app-bg text-white">
-      <Navbar className="anchor-topbar">
-        <NavbarInner>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-wide">Knowledge Admin</div>
-            <div className="text-[12px] text-white/60">
-              Review feedback + corrections • Promote fixes into knowledge docs
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="rounded-[12px] border border-white/20 bg-white/10 px-2 py-1 text-[11px] text-white/80">
-              {profile.role === "admin" ? "Admin" : "Anchor Rep"}
-            </div>
-
-            <Button
-              onClick={() => router.push("/chat")}
-              className="h-9 px-3"
-              variant="ghost"
-            >
-              Back to chat
-            </Button>
-          </div>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Knowledge Admin"
+        subtitle="Review feedback · Promote fixes"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       <div className="mx-auto max-w-6xl px-4 py-4">
         <AdminKnowledgeTabs role={profile.role as Role} />

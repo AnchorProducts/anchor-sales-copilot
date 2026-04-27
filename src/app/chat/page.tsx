@@ -1,13 +1,12 @@
 // src/app/chat/page.tsx
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import ChatSidebar from "@/app/components/ChatSidebar";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -498,56 +497,16 @@ export default function ChatPage() {
     <main className="ds-page flex h-dvh flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <Navbar>
-        <NavbarInner className="px-3 py-2 sm:px-6 sm:py-3.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="shrink-0"
-              title="Refresh"
-              aria-label="Refresh"
-            >
-              <img src="/anchorp.svg" alt="Anchor Products" className="h-8 w-auto sm:h-10 block" />
-            </button>
-
-            <div className="min-w-0 leading-tight">
-              <span className="block truncate text-[13px] font-semibold tracking-wide text-white sm:text-sm">
-                Anchor Sales Co-Pilot
-              </span>
-              <span className="hidden truncate text-[11px] text-white/70 sm:block">Sales • Assets • Leads</span>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* Mobile: toggle sidebar drawer */}
-            <button
-              type="button"
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="inline-flex h-8 items-center rounded-lg border border-white/20 px-2.5 text-[12px] font-semibold text-white hover:bg-white/10 transition sm:hidden"
-              title="Chat history"
-            >
-              Chats
-            </button>
-            <Button
-              onClick={() => window.location.reload()}
-              className="hidden h-9 px-3 sm:inline-flex"
-              title="Refresh chat"
-              aria-label="Refresh chat"
-              variant="ghost"
-            >
-              Refresh
-            </Button>
-            <Link
-              href="/dashboard"
-              className="ds-btn ds-btn-ghost inline-flex h-8 items-center px-2.5 text-[12px] sm:h-9 sm:px-3 sm:text-sm"
-              title="Return to Dashboard"
-            >
-              Dashboard
-            </Link>
-          </div>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Anchor Sales Co-Pilot"
+        subtitle="Sales · Assets · Leads"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+        mobileMenuItems={[
+          { label: "New Chat", onClick: newChat },
+          { label: "Chat History", onClick: () => setSidebarOpen(true) },
+          { label: "Dashboard", href: "/dashboard" },
+        ]}
+      />
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-hidden">

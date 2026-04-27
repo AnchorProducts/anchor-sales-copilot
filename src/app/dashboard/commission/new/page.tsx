@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import CommissionForm from "@/app/components/commission/CommissionForm";
 import { Card } from "@/app/components/ui/Card";
-import { Navbar, NavbarInner } from "@/app/components/ui/Navbar";
+import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 export const dynamic = "force-dynamic";
 
@@ -31,22 +30,11 @@ export default function CommissionClaimPage() {
 
   return (
     <main className="ds-page">
-      <Navbar>
-        <NavbarInner className="max-w-5xl">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link href="/dashboard" className="inline-flex shrink-0 items-center">
-              <img src="/anchorp.svg" alt="Anchor" className="ds-logo" />
-            </Link>
-            <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate text-white">Commission Claim</div>
-              <div className="text-[12px] text-white/80 truncate">Independent Representative</div>
-            </div>
-          </div>
-          <Link href="/dashboard" className="ds-btn ds-btn-ghost h-9 px-3">
-            Dashboard
-          </Link>
-        </NavbarInner>
-      </Navbar>
+      <AppNavbar
+        title="Commission Claim"
+        subtitle="Independent Representative"
+        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
