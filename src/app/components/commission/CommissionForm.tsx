@@ -126,16 +126,18 @@ export default function CommissionForm() {
         .select("full_name,company,phone,email")
         .eq("id", user.id)
         .maybeSingle();
-      setProfile(
-        data
-          ? {
-              full_name: (data as any).full_name || null,
-              company: (data as any).company || null,
-              phone: (data as any).phone || null,
-              email: (data as any).email || user.email || null,
-            }
-          : { full_name: null, company: null, phone: null, email: user.email || null }
-      );
+      const resolved: UserProfile = data
+        ? {
+            full_name: (data as any).full_name || null,
+            company: (data as any).company || null,
+            phone: (data as any).phone || null,
+            email: (data as any).email || user.email || null,
+          }
+        : { full_name: null, company: null, phone: null, email: user.email || null };
+      setProfile(resolved);
+      if (resolved.company) {
+        setForm((f) => ({ ...f, company_placing_order: resolved.company! }));
+      }
     })();
   }, [supabase]);
 
@@ -311,15 +313,17 @@ export default function CommissionForm() {
             />
           </label>
 
-          <label className="grid gap-1 text-sm">
-            <span className="font-semibold">Company Placing Order *</span>
-            <Input
-              value={form.company_placing_order}
-              onChange={(e) => update("company_placing_order", e.target.value)}
-              className="h-10 px-3 text-sm"
-              placeholder="Company name"
-            />
-          </label>
+          {!profile?.company && (
+            <label className="grid gap-1 text-sm">
+              <span className="font-semibold">Company Placing Order *</span>
+              <Input
+                value={form.company_placing_order}
+                onChange={(e) => update("company_placing_order", e.target.value)}
+                className="h-10 px-3 text-sm"
+                placeholder="Company name"
+              />
+            </label>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             <label className="col-span-2 grid gap-1 text-sm">
