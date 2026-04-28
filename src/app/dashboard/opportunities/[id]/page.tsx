@@ -59,23 +59,23 @@ export default function LeadDetailPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <Link
-              href="/dashboard/leads"
+              href="/dashboard/opportunities"
               className="inline-flex shrink-0 items-center"
             >
               <img src="/anchorp.svg" alt="Anchor" className="ds-logo" />
             </Link>
 
             <div className="leading-tight min-w-0">
-              <div className="text-sm font-semibold tracking-wide truncate text-white">Lead detail</div>
+              <div className="text-sm font-semibold tracking-wide truncate text-white">Opportunity detail</div>
               <div className="text-[12px] text-white/80 truncate">Internal management</div>
             </div>
           </div>
 
           <Link
-            href="/dashboard/leads"
+            href="/dashboard/opportunities"
             className="h-9 inline-flex items-center rounded-md border border-white/20 bg-white/10 px-3 text-[12px] font-semibold text-white hover:bg-white/15 transition"
           >
-            Leads
+            Opportunities
           </Link>
         </div>
       </header>

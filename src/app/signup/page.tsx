@@ -170,6 +170,9 @@ export default function SignupPage() {
             disabled={otpSent}
             className="mt-2"
           />
+          <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+            Optional. Required to receive opportunity follow-ups by call or text.
+          </p>
 
           <label className="mt-4 block text-xs font-semibold text-[var(--anchor-gray)]">Email</label>
           <Input

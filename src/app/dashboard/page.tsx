@@ -211,7 +211,7 @@ export default function DashboardPage() {
           </Link>
 
           {roleReady && role === "external_rep" && (
-            <Link href="/dashboard/leads/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
+            <Link href="/dashboard/opportunities/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
               <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
                 <div className="flex items-start justify-between gap-3">
                   <div>

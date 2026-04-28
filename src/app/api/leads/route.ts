@@ -15,7 +15,27 @@ const STATUS_SET = new Set([
   "closed_lost",
 ]);
 
-const MEETING_REQUEST_TYPES = new Set(["none", "video_call", "site_visit"]);
+const CONTACT_METHODS = new Set(["email", "phone_call", "phone_text"]);
+
+const CONTACT_METHOD_LABELS: Record<string, string> = {
+  email: "Email",
+  phone_call: "Phone (call)",
+  phone_text: "Phone (text)",
+};
+
+const PROJECT_TIMELINE_LABELS: Record<string, string> = {
+  immediate: "Immediate",
+  "2_4_weeks": "2-4 weeks",
+  "2_3_months": "2-3 months",
+  "3_6_months": "3-6 months",
+  "6_12_months": "6-12 months",
+  over_1_year: "Over 1 year",
+};
+
+function formatProjectTimeline(value: string | null | undefined): string {
+  if (!value) return "—";
+  return PROJECT_TIMELINE_LABELS[value] ?? value;
+}
 
 type RegionalAssignment = {
   inside_sales_name: string;
@@ -83,14 +103,6 @@ function sanitizePathSegment(input: string) {
 function buildLocation(projectAddress: string, city: string, state: string, zip: string, country: string) {
   const parts = [clean(projectAddress), clean(city), upper(state), clean(zip), upper(country)].filter(Boolean);
   return parts.join(", ");
-}
-
-function parsePreferredTimes(input: string) {
-  const lines = String(input || "")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  return lines.length ? lines : null;
 }
 
 function toInt(input: string) {
@@ -210,7 +222,7 @@ function buildLeadDashboardUrl(req: Request, leadId: string) {
       : `https://${configuredBase}`
     : new URL(req.url).origin;
 
-  return `${base}/dashboard/leads/${encodeURIComponent(leadId)}`;
+  return `${base}/dashboard/opportunities/${encodeURIComponent(leadId)}`;
 }
 
 async function sendInsideSalesLeadEmail(params: {
@@ -224,11 +236,9 @@ async function sendInsideSalesLeadEmail(params: {
   locationText: string;
   roofType: string;
   roofBrand: string;
-  neededMonth: number;
-  neededYear: number;
-  meetingRequestType: "none" | "video_call" | "site_visit";
-  preferredTimes: string[] | null;
-  contactPhone: string | null;
+  projectTimeline: string;
+  preferredContactMethod: string;
+  preferredContactValue: string;
   createdByEmail: string | null;
   submitterName: string | null;
   submitterCompany: string | null;
@@ -244,23 +254,17 @@ async function sendInsideSalesLeadEmail(params: {
   if (!to) return;
 
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
-  const meetingType =
-    params.meetingRequestType === "video_call"
-      ? "Video call"
-      : params.meetingRequestType === "site_visit"
-        ? "Site visit"
-        : "None";
+  const contactMethodLabel = CONTACT_METHOD_LABELS[params.preferredContactMethod] || params.preferredContactMethod;
 
-  const monthName = new Date(2000, params.neededMonth - 1, 1).toLocaleString("en-US", { month: "long" });
   const dashboardUrl = buildLeadDashboardUrl(params.req, params.leadId);
   const solutionsSummary = params.selectedSolutions
     .map((s) => `- ${s.label}: ${s.filesCount} file(s)${s.comment ? ` | Comment: ${s.comment}` : ""}`)
     .join("\n");
 
-  const subject = `New Lead Assigned - ${params.customerCompany} (${params.leadId.slice(0, 8)})`;
+  const subject = `New Opportunity Assigned - ${params.customerCompany} (${params.leadId.slice(0, 8)})`;
 
   const lines: string[] = [];
-  lines.push(`New job lead submitted and assigned.`);
+  lines.push(`New job opportunity submitted and assigned.`);
   lines.push("");
   lines.push(`Inside Sales: ${params.insideSalesName || "Unspecified"} <${params.toEmail}>`);
   lines.push(`Outside Sales: ${params.outsideSalesName || "Not set"}`);
@@ -271,21 +275,16 @@ async function sendInsideSalesLeadEmail(params: {
   lines.push(`Submitted By: ${submitterParts.join(" | ") || "Unknown"}`);
   lines.push(`Location: ${params.locationText}`);
   lines.push(`Roof: ${params.roofType} / ${params.roofBrand}`);
-  lines.push(`Needed Around: ${monthName} ${params.neededYear}`);
-  lines.push(`Scheduling Request: ${meetingType}`);
-  if (params.contactPhone) lines.push(`Contact Phone: ${params.contactPhone}`);
-  if (params.preferredTimes?.length) {
-    lines.push("Preferred Availability:");
-    for (const slot of params.preferredTimes) lines.push(`- ${slot}`);
-  }
+  lines.push(`Project Timeline: ${formatProjectTimeline(params.projectTimeline)}`);
+  lines.push(`Best Contact: ${contactMethodLabel} - ${params.preferredContactValue}`);
   lines.push("");
-  lines.push("Lead Details:");
+  lines.push("Opportunity Details:");
   lines.push(params.details || "(none)");
   lines.push("");
   lines.push("Selected Solutions and Upload Counts:");
   lines.push(solutionsSummary || "- None");
   lines.push("");
-  lines.push(`Review Lead: ${dashboardUrl}`);
+  lines.push(`Review Opportunity: ${dashboardUrl}`);
 
   const result = await resend.emails.send({
     from,
@@ -325,20 +324,9 @@ export async function POST(req: Request) {
     const country = upper(form.get("country"));
     const roof_type = clean(form.get("roof_type"));
     const roof_brand = clean(form.get("roof_brand"));
-    const needed_month = toInt(clean(form.get("needed_month")));
-    const needed_year = toInt(clean(form.get("needed_year")));
+    const project_timeline = clean(form.get("project_timeline"));
 
-    const rawMeetingType = clean(form.get("meeting_request_type"));
-    const legacyWantsVideoCall = String(form.get("wants_video_call")) === "true";
-    const meeting_request_type = (MEETING_REQUEST_TYPES.has(rawMeetingType)
-      ? rawMeetingType
-      : legacyWantsVideoCall
-        ? "video_call"
-        : "none") as "none" | "video_call" | "site_visit";
-
-    const preferred_times_raw = clean(form.get("preferred_times"));
-    const preferred_times = meeting_request_type === "none" ? null : parsePreferredTimes(preferred_times_raw);
-    const video_call_phone = clean(form.get("video_call_phone"));
+    const preferred_contact_method = clean(form.get("preferred_contact_method"));
 
     const submitter_name = clean(form.get("submitter_name")) || null;
     const submitter_company = clean(form.get("submitter_company")) || null;
@@ -360,18 +348,15 @@ export async function POST(req: Request) {
     }
 
     if (!customer_company) return NextResponse.json({ error: "Customer company is required." }, { status: 400 });
-    if (!details) return NextResponse.json({ error: "Lead details are required." }, { status: 400 });
+    if (!details) return NextResponse.json({ error: "Opportunity details are required." }, { status: 400 });
     if (!project_address) return NextResponse.json({ error: "Project address is required." }, { status: 400 });
     if (!city || !state || !zip || !country) {
       return NextResponse.json({ error: "Project city, state, zip, and country are required." }, { status: 400 });
     }
     if (!roof_type) return NextResponse.json({ error: "Roof type is required." }, { status: 400 });
     if (!roof_brand) return NextResponse.json({ error: "Brand is required." }, { status: 400 });
-    if (!needed_month || needed_month < 1 || needed_month > 12) {
-      return NextResponse.json({ error: "Valid needed month is required." }, { status: 400 });
-    }
-    if (!needed_year || needed_year < 2020 || needed_year > 2100) {
-      return NextResponse.json({ error: "Valid needed year is required." }, { status: 400 });
+    if (!project_timeline || !PROJECT_TIMELINE_LABELS[project_timeline]) {
+      return NextResponse.json({ error: "Valid project timeline is required." }, { status: 400 });
     }
     if (parsedSolutions.length === 0) {
       return NextResponse.json({ error: "Select at least one solution type and add media." }, { status: 400 });
@@ -394,12 +379,30 @@ export async function POST(req: Request) {
       }
     }
 
-    if (meeting_request_type !== "none" && !video_call_phone) {
-      return NextResponse.json({ error: "Contact phone number is required for scheduling requests." }, { status: 400 });
+    if (!CONTACT_METHODS.has(preferred_contact_method)) {
+      return NextResponse.json({ error: "Valid contact method is required." }, { status: 400 });
     }
 
-    if (meeting_request_type !== "none" && !preferred_times?.length) {
-      return NextResponse.json({ error: "Preferred availability is required for scheduling requests." }, { status: 400 });
+    const { data: profileRow } = await supabaseAdmin
+      .from("profiles")
+      .select("email,phone")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const profileEmail = clean((profileRow as any)?.email) || clean(user.email || "");
+    const profilePhone = clean((profileRow as any)?.phone);
+
+    let preferred_contact_value: string;
+    if (preferred_contact_method === "email") {
+      if (!profileEmail) {
+        return NextResponse.json({ error: "Your profile is missing an email address." }, { status: 400 });
+      }
+      preferred_contact_value = profileEmail;
+    } else {
+      if (!profilePhone) {
+        return NextResponse.json({ error: "Add a phone number to your profile to use a phone contact method." }, { status: 400 });
+      }
+      preferred_contact_value = profilePhone;
     }
 
     const region_code = deriveRegionCode(country, state);
@@ -411,8 +414,6 @@ export async function POST(req: Request) {
     const inside_sales_name = regionalAssignment?.inside_sales_name || null;
     const inside_sales_email = regionalAssignment?.inside_sales_email || null;
     const outside_sales_name = regionalAssignment?.outside_sales_name || null;
-
-    const wants_video_call = meeting_request_type === "video_call";
 
     const { data: leadRow, error: insErr } = await supabaseAdmin
       .from("leads")
@@ -430,9 +431,9 @@ export async function POST(req: Request) {
         assignment_note,
         roof_type,
         roof_brand,
-        needed_month,
-        needed_year,
-        meeting_request_type,
+        project_timeline,
+        preferred_contact_method,
+        preferred_contact_value,
         created_by: user.id,
         created_by_email: user.email || null,
         submitter_name,
@@ -441,9 +442,6 @@ export async function POST(req: Request) {
         attachments: [],
         solution_requests: [],
         status: "new",
-        wants_video_call,
-        preferred_times,
-        video_call_phone: meeting_request_type !== "none" ? video_call_phone : null,
         hubspot_sync_status: "pending",
         hubspot_sync_error: null,
       })
@@ -451,7 +449,7 @@ export async function POST(req: Request) {
       .single();
 
     if (insErr || !leadRow?.id) {
-      return NextResponse.json({ error: insErr?.message || "Failed to create lead." }, { status: 500 });
+      return NextResponse.json({ error: insErr?.message || "Failed to create opportunity." }, { status: 500 });
     }
 
     const leadId = leadRow.id as string;
@@ -557,7 +555,7 @@ export async function POST(req: Request) {
       .eq("id", leadId);
 
     if (updErr) {
-      return NextResponse.json({ error: updErr.message || "Failed to update lead." }, { status: 500 });
+      return NextResponse.json({ error: updErr.message || "Failed to update opportunity." }, { status: 500 });
     }
 
     // Fire-and-forget HubSpot sync
@@ -600,11 +598,9 @@ export async function POST(req: Request) {
           locationText: location_text,
           roofType: roof_type,
           roofBrand: roof_brand,
-          neededMonth: needed_month,
-          neededYear: needed_year,
-          meetingRequestType: meeting_request_type,
-          preferredTimes: preferred_times,
-          contactPhone: video_call_phone || null,
+          projectTimeline: project_timeline,
+          preferredContactMethod: preferred_contact_method,
+          preferredContactValue: preferred_contact_value,
           createdByEmail: user.email || null,
           submitterName: submitter_name,
           submitterCompany: submitter_company,
@@ -632,7 +628,7 @@ export async function POST(req: Request) {
       email_notification: emailNotification,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Failed to submit lead." }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Failed to submit opportunity." }, { status: 500 });
   }
 }
 
@@ -664,6 +660,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ leads: data || [] });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Failed to load leads." }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Failed to load opportunities." }, { status: 500 });
   }
 }

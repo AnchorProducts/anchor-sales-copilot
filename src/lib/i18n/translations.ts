@@ -40,7 +40,7 @@ export const translations = {
     rooftopAudit: "Rooftop Equipment Audit",
     rooftopAuditDesc: "OSHA-guided rooftop access & egress safety verification.",
     startAssessment: "Start Assessment",
-    projectIdentifier: "Project Identifier",
+    projectIdentifier: "Opportunity Identifier",
     projectIdentifierDesc: "Send photos and project details directly to inside sales.",
     submitProject: "Submit Project",
     commissionClaim: "Commission Claim",
@@ -73,7 +73,7 @@ export const translations = {
 
     // ── Chat ─────────────────────────────────────────────────────────────────
     anchorSalesCoPilot: "Anchor Sales Co-Pilot",
-    salesAssetsLeads: "Sales · Assets · Leads",
+    salesAssetsLeads: "Sales · Assets · Opportunities",
     newChat: "New Chat",
     chatHistory: "Chat History",
     loadingYourChat: "Loading your chat…",
@@ -139,15 +139,17 @@ export const translations = {
     tipStorage: "Tip: Storage listing works without this.",
 
     // ── Lead form ────────────────────────────────────────────────────────────
-    projectIdentifierTitle: "Project Identifier",
+    projectIdentifierTitle: "Opportunity Identifier",
     projectIdentifierFormDesc: "Select solution type(s), add photos/videos for each, and include scheduling availability.",
     submittedBy: "Submitted by",
     yourContactInfo: "Your contact information is pulled from your account. Update it in your profile settings.",
-    customerCompanyName: "Customer Company Name *",
-    projectDetailsJob: "Project Details / Job Description *",
+    customerCompanyName: "Project Owner *",
+    projectDetailsJob: "Tell Us About the Project *",
     describeJob: "Describe the job, scope, and timeline...",
-    projectAddress: "Project Address *",
+    projectAddress: "Project Site Address *",
     streetAddress: "Street address",
+    projectOwnerPlaceholder: "Project owner name or company",
+    jobSiteStreetAddress: "Project site street address",
     city: "City *",
     cityPlain: "City",
     state: "State *",
@@ -163,6 +165,15 @@ export const translations = {
     monthPlaceholder: "Month",
     neededYear: "Needed Year *",
     yearPlaceholder: "Year",
+    projectTimeline: "Project Timeline *",
+    projectTimelinePlaceholder: "Select timeline",
+    projectTimelineLabel: "Project timeline",
+    timelineImmediate: "Immediate",
+    timeline_2_4_weeks: "2-4 weeks",
+    timeline_2_3_months: "2-3 months",
+    timeline_3_6_months: "3-6 months",
+    timeline_6_12_months: "6-12 months",
+    timelineOver1Year: "Over 1 year",
     solutionTypes: "Solution Types *",
     selectOneOrMore: "Select one or more, then upload photos/videos and comments for each.",
     selectSolutionTypes: "Select solution type(s)",
@@ -182,6 +193,13 @@ export const translations = {
     bestContactPhone: "Best Contact Phone",
     preferredAvailability: "Preferred Availability",
     listDateTimeOptions: "List date/time options with timezone, one per line",
+    bestWayToContact: "Best way to contact you *",
+    bestWayToContactDesc: "Inside sales will reach out using your selected method.",
+    contactEmail: "Email",
+    contactPhoneCall: "Phone (call)",
+    contactPhoneText: "Phone (text)",
+    addPhoneInSettings: "Add a phone number in",
+    bestContactLabel: "Best contact",
     contractorsOnProject: "Contractors on this Project",
     addContactInfoContractors: "Add contact information for any contractors involved in this project.",
     contractor: "Contractor",
@@ -190,8 +208,8 @@ export const translations = {
     roleExample: "e.g. Roofing contractor, Electrician",
     emailExample: "email@example.com",
     addContractor: "+ Add contractor",
-    submitLead: "Submit lead",
-    leadSubmittedThanks: "Lead submitted. Thanks!",
+    submitLead: "Submit opportunity",
+    leadSubmittedThanks: "Opportunity submitted. Thanks!",
 
     // ── Commission form ───────────────────────────────────────────────────────
     commissionClaimFormTitle: "Commission Claim Form",
@@ -230,16 +248,16 @@ export const translations = {
     downloadAgain: "Download again",
 
     // ── Leads list ────────────────────────────────────────────────────────────
-    leads: "Leads",
+    leads: "Opportunities",
     internalManagement: "Internal management",
     operations: "Operations",
-    leadQueue: "Lead Queue",
+    leadQueue: "Opportunity Queue",
     leadQueueDesc: "Track assignment, status, and follow-up progress across incoming opportunities.",
     internalAccessOnly: "Internal access only.",
 
-    // ── Leads new page ────────────────────────────────────────────────────────
+    // ── Opportunities new page ────────────────────────────────────────────────
     externalContractors: "External contractors",
-    leadIntake: "Lead Intake",
+    leadIntake: "Opportunity Intake",
     shareProjectReqs: "Share project requirements, media, and scheduling details for inside sales review.",
 
     // ── Commission new page ───────────────────────────────────────────────────
@@ -250,7 +268,7 @@ export const translations = {
     externalUserReports: "External User Reports",
     externalUsers: "External Users",
     copilotSessions: "Copilot Sessions",
-    projectLeads: "Project Leads",
+    projectLeads: "Project Opportunities",
     dtAssessments: "DT Assessments",
     noExternalUsers: "No external users yet.",
     sessions: "Sessions",
@@ -261,8 +279,8 @@ export const translations = {
     unknownAccess: "Unknown access",
     viewPdf: "View PDF",
 
-    // ── Lead detail ───────────────────────────────────────────────────────────
-    leadDetails: "Lead details",
+    // ── Opportunity detail ────────────────────────────────────────────────────
+    leadDetails: "Opportunity details",
     location: "Location",
     insideSales: "Inside sales",
     unassigned: "Unassigned",
@@ -278,14 +296,14 @@ export const translations = {
     solutionUploads: "Solution uploads",
     noSolutionUploads: "No solution-specific uploads.",
     noFiles: "No files.",
-    leadActions: "Lead actions",
+    leadActions: "Opportunity actions",
     status: "Status",
     assignRep: "Assign rep",
     meetingLink: "Meeting link",
     syncToHubSpot: "Sync to HubSpot",
     syncing: "Syncing…",
     syncStatus: "Sync status",
-    leadNotFound: "Lead not found.",
+    leadNotFound: "Opportunity not found.",
     saveChangesCta: "Save changes",
   },
 

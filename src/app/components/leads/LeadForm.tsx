@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
@@ -9,6 +10,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 
 type FormState = {
   customer_company: string;
@@ -20,11 +22,7 @@ type FormState = {
   country: string;
   roof_type: string[];
   roof_brand: string[];
-  needed_month: string;
-  needed_year: string;
-  meeting_request_type: "none" | "video_call" | "site_visit";
-  preferred_times: string;
-  video_call_phone: string;
+  preferred_contact_method: "email" | "phone_call" | "phone_text";
 };
 
 type SolutionOption = { key: string; label: string };
@@ -43,12 +41,19 @@ type Contractor = {
   email: string;
 };
 
-const ROOF_TYPES = ["KEE", "PVC", "TPO", "EDPM", "APP", "SBS", "SBS TORCH", "Coatings"];
-const ROOF_BRANDS = ["Carlisle", "GAF", "IB"];
 const COUNTRIES = [
   { value: "US", label: "United States" },
   { value: "CA", label: "Canada" },
   { value: "MX", label: "Mexico" },
+];
+
+const TIMELINE_OPTIONS = [
+  { value: "immediate", labelKey: "timelineImmediate" as const },
+  { value: "2_4_weeks", labelKey: "timeline_2_4_weeks" as const },
+  { value: "2_3_months", labelKey: "timeline_2_3_months" as const },
+  { value: "3_6_months", labelKey: "timeline_3_6_months" as const },
+  { value: "6_12_months", labelKey: "timeline_6_12_months" as const },
+  { value: "over_1_year", labelKey: "timelineOver1Year" as const },
 ];
 
 const US_STATES = [
@@ -138,11 +143,7 @@ export default function LeadForm() {
     country: "US",
     roof_type: [],
     roof_brand: [],
-    needed_month: "",
-    needed_year: "",
-    meeting_request_type: "none",
-    preferred_times: "",
-    video_call_phone: "",
+    preferred_contact_method: "email",
   });
 
   const [solutions, setSolutions] = useState<Record<string, SolutionInput>>(buildInitialSolutions());
@@ -152,10 +153,10 @@ export default function LeadForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const years = useMemo(() => {
-    const now = new Date().getFullYear();
-    return Array.from({ length: 8 }, (_, i) => String(now + i));
-  }, []);
+  // Continuous slider 0-599, divided into 6 buckets of 100 each.
+  const [timelinePos, setTimelinePos] = useState(50);
+  const timelineIdx = Math.min(TIMELINE_OPTIONS.length - 1, Math.floor(timelinePos / 100));
+  const timelineSlug = TIMELINE_OPTIONS[timelineIdx].value;
 
   const selectedSolutions = useMemo(
     () => SOLUTION_OPTIONS.filter((opt) => solutions[opt.key]?.selected),
@@ -238,16 +239,13 @@ export default function LeadForm() {
 
   function validate() {
     if (!clean(form.customer_company)) return "Customer company is required.";
-    if (!clean(form.details)) return "Lead details are required.";
+    if (!clean(form.details)) return "Opportunity details are required.";
     if (!clean(form.project_address)) return "Project address is required.";
     if (!clean(form.city) || !clean(form.state) || !clean(form.zip) || !clean(form.country)) {
       return "Project city, state, zip, and country are required.";
     }
     if (!form.roof_type.length) return "Roof type is required.";
     if (!form.roof_brand.length) return "Brand is required.";
-    if (!clean(form.needed_month) || !clean(form.needed_year)) {
-      return "Needed around month and year are required.";
-    }
     if (selectedSolutions.length === 0) {
       return "Select at least one solution type.";
     }
@@ -264,11 +262,13 @@ export default function LeadForm() {
       }
     }
 
-    if (form.meeting_request_type !== "none" && !clean(form.preferred_times)) {
-      return "Please add preferred meeting/site visit times.";
+    if (form.preferred_contact_method === "phone_call" || form.preferred_contact_method === "phone_text") {
+      if (!clean(profile?.phone || "")) {
+        return "Add a phone number to your profile to use a phone contact method.";
+      }
     }
-    if (form.meeting_request_type !== "none" && !clean(form.video_call_phone)) {
-      return "Please add a contact phone number for scheduling.";
+    if (form.preferred_contact_method === "email" && !clean(profile?.email || "")) {
+      return "Your profile is missing an email address.";
     }
 
     return null;
@@ -304,11 +304,8 @@ export default function LeadForm() {
       fd.append("country", form.country);
       fd.append("roof_type", form.roof_type.join(", "));
       fd.append("roof_brand", form.roof_brand.join(", "));
-      fd.append("needed_month", form.needed_month);
-      fd.append("needed_year", form.needed_year);
-      fd.append("meeting_request_type", form.meeting_request_type);
-      fd.append("preferred_times", form.preferred_times);
-      fd.append("video_call_phone", form.video_call_phone);
+      fd.append("project_timeline", timelineSlug);
+      fd.append("preferred_contact_method", form.preferred_contact_method);
 
       fd.append("submitter_name", profile?.full_name || "");
       fd.append("submitter_company", profile?.company || "");
@@ -336,12 +333,12 @@ export default function LeadForm() {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setError(json?.error || "Failed to submit lead.");
+        setError(json?.error || "Failed to submit opportunity.");
         setSubmitting(false);
         return;
       }
 
-      setSuccess("Lead submitted. Thanks!");
+      setSuccess("Opportunity submitted. Thanks!");
       setForm({
         customer_company: "",
         details: "",
@@ -352,18 +349,15 @@ export default function LeadForm() {
         country: "US",
         roof_type: [],
         roof_brand: [],
-        needed_month: "",
-        needed_year: "",
-        meeting_request_type: "none",
-        preferred_times: "",
-        video_call_phone: "",
+            preferred_contact_method: "email",
       });
       setSolutions(buildInitialSolutions());
       setOtherLabel("");
       setContractors([]);
+      setTimelinePos(50);
       setSubmitting(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to submit lead.");
+      setError(e?.message || "Failed to submit opportunity.");
       setSubmitting(false);
     }
   }
@@ -397,7 +391,7 @@ export default function LeadForm() {
                 value={form.customer_company}
                 onChange={(e) => update("customer_company", e.target.value)}
                 className="h-11 px-3 text-sm"
-                placeholder={t("companyPlaceholder")}
+                placeholder={t("projectOwnerPlaceholder")}
               />
             </label>
           )}
@@ -409,7 +403,7 @@ export default function LeadForm() {
 
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">{t("projectAddress")}</span>
-            <Input value={form.project_address} onChange={(e) => update("project_address", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("streetAddress")} />
+            <Input value={form.project_address} onChange={(e) => update("project_address", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("jobSiteStreetAddress")} />
           </label>
 
           <div className="grid gap-3">
@@ -449,23 +443,36 @@ export default function LeadForm() {
             <MultiSelect options={ROOF_BRANDS} value={form.roof_brand} onChange={(v) => update("roof_brand", v)} placeholder={t("selectBrands")} />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">{t("neededMonth")}</span>
-              <Select value={form.needed_month} onChange={(e) => update("needed_month", e.target.value)} className="h-11 px-3 text-sm">
-                <option value="">{t("monthPlaceholder")}</option>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                  <option key={month} value={String(month)}>{new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-semibold">{t("neededYear")}</span>
-              <Select value={form.needed_year} onChange={(e) => update("needed_year", e.target.value)} className="h-11 px-3 text-sm">
-                <option value="">{t("yearPlaceholder")}</option>
-                {years.map((year) => (<option key={year} value={year}>{year}</option>))}
-              </Select>
-            </label>
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">{t("projectTimeline")}</span>
+              <span className="shrink-0 font-semibold text-[var(--anchor-green)]">
+                {t(TIMELINE_OPTIONS[timelineIdx].labelKey)}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={TIMELINE_OPTIONS.length * 100 - 1}
+              step={1}
+              value={timelinePos}
+              onChange={(e) => setTimelinePos(Number(e.target.value))}
+              className="w-full accent-[var(--anchor-green)]"
+              aria-label={t("projectTimeline")}
+            />
+            <div
+              className="grid gap-1 text-[10px] leading-tight text-[var(--anchor-gray)] sm:text-[11px]"
+              style={{ gridTemplateColumns: `repeat(${TIMELINE_OPTIONS.length}, minmax(0, 1fr))` }}
+            >
+              {TIMELINE_OPTIONS.map((opt, i) => (
+                <div
+                  key={opt.value}
+                  className={`text-center break-words ${i === timelineIdx ? "font-semibold text-[var(--anchor-green)]" : ""}`}
+                >
+                  {t(opt.labelKey)}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ── Solution Types ─────────────────────────────────────────────── */}
@@ -535,27 +542,57 @@ export default function LeadForm() {
             )}
           </div>
 
-          {/* ── Scheduling ─────────────────────────────────────────────────── */}
+          {/* ── Best way to contact ────────────────────────────────────────── */}
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">{t("schedulingRequest")}</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("requestVideoOrSiteVisit")}</div>
-            <div className="mt-3 grid gap-3">
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">{t("requestType")}</span>
-                <Select value={form.meeting_request_type} onChange={(e) => update("meeting_request_type", e.target.value as FormState["meeting_request_type"])} className="h-11 px-3 text-sm">
-                  <option value="none">{t("noSchedulingRequest")}</option>
-                  <option value="video_call">{t("videoCall")}</option>
-                  <option value="site_visit">{t("siteVisit")}</option>
-                </Select>
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">{t("bestContactPhone")}</span>
-                <Input value={form.video_call_phone} onChange={(e) => update("video_call_phone", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("phonePlaceholder")} />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-semibold">{t("preferredAvailability")}</span>
-                <Textarea value={form.preferred_times} onChange={(e) => update("preferred_times", e.target.value)} className="min-h-[88px] px-3 py-3 text-sm" placeholder={t("listDateTimeOptions")} />
-              </label>
+            <div className="text-sm font-semibold text-black">{t("bestWayToContact")}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("bestWayToContactDesc")}</div>
+            <div className="mt-3 grid gap-2">
+              {(() => {
+                const phone = clean(profile?.phone || "");
+                const email = clean(profile?.email || "");
+                const options: Array<{
+                  value: FormState["preferred_contact_method"];
+                  labelKey: "contactEmail" | "contactPhoneCall" | "contactPhoneText";
+                  display: string;
+                  disabled: boolean;
+                }> = [
+                  { value: "email", labelKey: "contactEmail", display: email || t("notSet"), disabled: !email },
+                  { value: "phone_call", labelKey: "contactPhoneCall", display: phone || t("notSet"), disabled: !phone },
+                  { value: "phone_text", labelKey: "contactPhoneText", display: phone || t("notSet"), disabled: !phone },
+                ];
+                return (
+                  <>
+                    {options.map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`flex items-start gap-3 rounded-lg border border-black/10 bg-white px-3 py-3 text-sm ${opt.disabled ? "opacity-50" : "cursor-pointer hover:border-[var(--anchor-green)]"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="preferred_contact_method"
+                          value={opt.value}
+                          checked={form.preferred_contact_method === opt.value}
+                          onChange={() => update("preferred_contact_method", opt.value)}
+                          disabled={opt.disabled}
+                          className="mt-0.5 h-4 w-4 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold">{t(opt.labelKey)}</div>
+                          <div className="truncate text-[12px] text-[var(--anchor-gray)]">{opt.display}</div>
+                        </div>
+                      </label>
+                    ))}
+                    {!phone && (
+                      <div className="text-[12px] text-[var(--anchor-gray)]">
+                        {t("addPhoneInSettings")}{" "}
+                        <Link href="/dashboard/settings" className="underline text-[var(--anchor-green)]">
+                          {t("settings")}
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
