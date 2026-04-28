@@ -8,6 +8,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { ROOF_BRANDS } from "@/lib/roofing/options";
 
 type UserProfile = {
   full_name: string | null;
@@ -58,8 +59,6 @@ const U_ANCHOR_OPTIONS = [
   "U3600 SBS Torch",
   "U3800 Coatings",
 ];
-
-const ROOF_BRANDS = ["Carlisle", "GAF", "IB", "Firestone", "Johns Manville", "Versico", "Other"];
 
 const OTHER_ITEMS = [
   "Solar / PV Racking",

@@ -45,7 +45,7 @@ export default function LeadsTable() {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setError(json?.error || "Failed to load leads.");
+        setError(json?.error || "Failed to load opportunities.");
         setLeads([]);
         setLoading(false);
         return;
@@ -54,7 +54,7 @@ export default function LeadsTable() {
       setLeads((json?.leads || []) as LeadRow[]);
       setLoading(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to load leads.");
+      setError(e?.message || "Failed to load opportunities.");
       setLeads([]);
       setLoading(false);
     }
@@ -121,7 +121,7 @@ export default function LeadsTable() {
                   <tr key={lead.id}>
                     <td>
                       <Link
-                        href={`/dashboard/leads/${encodeURIComponent(lead.id)}`}
+                        href={`/dashboard/opportunities/${encodeURIComponent(lead.id)}`}
                         className="font-semibold text-[var(--anchor-deep)] hover:text-[var(--anchor-green)]"
                       >
                         {lead.customer_company}

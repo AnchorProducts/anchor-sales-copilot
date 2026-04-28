@@ -38,17 +38,14 @@ type LeadRow = {
   assignment_note: string | null;
   roof_type: string | null;
   roof_brand: string | null;
-  needed_month: number | null;
-  needed_year: number | null;
-  meeting_request_type: "none" | "video_call" | "site_visit" | null;
+  project_timeline: string | null;
+  preferred_contact_method: string | null;
+  preferred_contact_value: string | null;
   created_by_email: string | null;
   attachments: Attachment[] | null;
   solution_requests: SolutionRequest[] | null;
   status: string;
   assigned_rep_user_id: string | null;
-  wants_video_call: boolean;
-  preferred_times: any;
-  video_call_phone: string | null;
   meeting_link: string | null;
   hubspot_company_id: string | null;
   hubspot_contact_id: string | null;
@@ -66,17 +63,30 @@ function clean(v: any) {
   return String(v || "").trim();
 }
 
-function formatMeetingType(t: LeadRow["meeting_request_type"], wantsVideo: boolean) {
-  if (t === "video_call") return "Video call";
-  if (t === "site_visit") return "Site visit";
-  if (wantsVideo) return "Video call";
-  return "None";
+const CONTACT_METHOD_LABELS: Record<string, string> = {
+  email: "Email",
+  phone_call: "Phone (call)",
+  phone_text: "Phone (text)",
+};
+
+function formatContactMethod(method: string | null, value: string | null) {
+  if (!method) return "—";
+  const label = CONTACT_METHOD_LABELS[method] || method;
+  return value ? `${label} — ${value}` : label;
 }
 
-function formatNeeded(month: number | null, year: number | null) {
-  if (!month || !year || month < 1 || month > 12) return "—";
-  const monthName = new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" });
-  return `${monthName} ${year}`;
+const PROJECT_TIMELINE_LABELS: Record<string, string> = {
+  immediate: "Immediate",
+  "2_4_weeks": "2-4 weeks",
+  "2_3_months": "2-3 months",
+  "3_6_months": "3-6 months",
+  "6_12_months": "6-12 months",
+  over_1_year: "Over 1 year",
+};
+
+function formatProjectTimeline(value: string | null): string {
+  if (!value) return "—";
+  return PROJECT_TIMELINE_LABELS[value] ?? value;
 }
 
 export default function LeadDetail({ id }: { id: string }) {
@@ -105,7 +115,7 @@ export default function LeadDetail({ id }: { id: string }) {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setError(json?.error || "Failed to load lead.");
+        setError(json?.error || "Failed to load opportunity.");
         setLead(null);
         setLoading(false);
         return;
@@ -135,7 +145,7 @@ export default function LeadDetail({ id }: { id: string }) {
       setAttachments(signed);
       setLoading(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to load lead.");
+      setError(e?.message || "Failed to load opportunity.");
       setLead(null);
       setLoading(false);
     }
@@ -165,7 +175,7 @@ export default function LeadDetail({ id }: { id: string }) {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setError(json?.error || "Failed to update lead.");
+        setError(json?.error || "Failed to update opportunity.");
         setSaving(false);
         return;
       }
@@ -173,7 +183,7 @@ export default function LeadDetail({ id }: { id: string }) {
       setLead(json?.lead || lead);
       setSaving(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to update lead.");
+      setError(e?.message || "Failed to update opportunity.");
       setSaving(false);
     }
   }
@@ -267,8 +277,8 @@ export default function LeadDetail({ id }: { id: string }) {
               <div>{lead.roof_brand || "—"}</div>
             </div>
             <div>
-              <div className="text-[12px] font-semibold text-black/70">{t("neededAround")}</div>
-              <div>{formatNeeded(lead.needed_month, lead.needed_year)}</div>
+              <div className="text-[12px] font-semibold text-black/70">{t("projectTimelineLabel")}</div>
+              <div>{formatProjectTimeline(lead.project_timeline)}</div>
             </div>
           </div>
           <div>
@@ -276,21 +286,9 @@ export default function LeadDetail({ id }: { id: string }) {
             <div className="whitespace-pre-wrap">{lead.details}</div>
           </div>
           <div>
-            <div className="text-[12px] font-semibold text-black/70">{t("schedulingRequest")}</div>
-            <div>{formatMeetingType(lead.meeting_request_type, lead.wants_video_call)}</div>
+            <div className="text-[12px] font-semibold text-black/70">{t("bestContactLabel")}</div>
+            <div className="break-words">{formatContactMethod(lead.preferred_contact_method, lead.preferred_contact_value)}</div>
           </div>
-          {(lead.meeting_request_type === "video_call" || lead.meeting_request_type === "site_visit" || lead.wants_video_call) && lead.preferred_times && (
-            <div>
-              <div className="text-[12px] font-semibold text-black/70">{t("preferredAvailabilityLabel")}</div>
-              <div className="whitespace-pre-wrap">{Array.isArray(lead.preferred_times) ? lead.preferred_times.join("\n") : String(lead.preferred_times)}</div>
-            </div>
-          )}
-          {(lead.meeting_request_type === "video_call" || lead.meeting_request_type === "site_visit" || lead.wants_video_call) && (
-            <div>
-              <div className="text-[12px] font-semibold text-black/70">{t("contactPhone")}</div>
-              <div>{lead.video_call_phone || "—"}</div>
-            </div>
-          )}
           <div>
             <div className="text-[12px] font-semibold text-black/70">{t("createdBy")}</div>
             <div>{lead.created_by_email || t("unknown")}</div>
