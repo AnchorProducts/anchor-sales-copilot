@@ -9,6 +9,13 @@ import { Card } from "@/app/components/ui/Card";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
+type SalesRepLite = {
+  outside_sales_name: string | null;
+  outside_sales_email: string | null;
+  phone: string | null;
+  teams_link: string | null;
+};
+
 export const dynamic = "force-dynamic";
 
 
@@ -19,13 +26,10 @@ export default function DashboardPage() {
   const [booting, setBooting] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
+  const [serviceState, setServiceState] = useState<string>("");
+  const [salesRep, setSalesRep] = useState<SalesRepLite | null>(null);
 
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.replace("/");
-    router.refresh();
-  }
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
@@ -87,7 +91,7 @@ export default function DashboardPage() {
 
       let { data: prof } = await supabase
         .from("profiles")
-        .select("role,user_type,email")
+        .select("role,user_type,email,service_state")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -115,7 +119,7 @@ export default function DashboardPage() {
             },
             { onConflict: "id" }
           )
-          .select("role,user_type,email")
+          .select("role,user_type,email,service_state")
           .single();
 
         prof = created ?? null;
@@ -123,6 +127,7 @@ export default function DashboardPage() {
 
       if (!alive) return;
       setRole(String((prof as any)?.role || ""));
+      setServiceState(String((prof as any)?.service_state || ""));
       setRoleReady(true);
     })();
 
@@ -130,6 +135,23 @@ export default function DashboardPage() {
       alive = false;
     };
   }, [booting, supabase]);
+
+  // Fetch the assigned sales rep when the user's service state is known.
+  useEffect(() => {
+    if (!serviceState) { setSalesRep(null); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/sales-reps/by-state?state=${encodeURIComponent(serviceState)}`, { cache: "no-store" });
+        const json = await res.json().catch(() => null);
+        if (!alive) return;
+        setSalesRep(json?.rep || null);
+      } catch {
+        if (alive) setSalesRep(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [serviceState]);
 
   const isInternal = role === "admin" || role === "anchor_rep";
   const { t } = useTranslation();
@@ -139,7 +161,7 @@ export default function DashboardPage() {
       <AppNavbar
         title="Anchor Sales Co-Pilot"
         subtitle="Dashboard"
-        menuItems={[{ label: t("settings"), href: "/dashboard/settings" }, { label: t("signOut"), onClick: signOut }]}
+        menuItems={[]}
         hero={
           <div className="flex flex-col gap-1 text-left">
             <h1 className="text-2xl text-white! sm:text-3xl">{t("welcomeBack")}</h1>
@@ -160,7 +182,7 @@ export default function DashboardPage() {
         {/* Primary cards */}
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <Link href="/chat" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">Chat Copilot</div>
@@ -177,7 +199,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link href="/assets" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">{t("assetManagement")}</div>
@@ -194,7 +216,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link href="/rooftop" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold">{t("rooftopAudit")}</div>
@@ -210,9 +232,56 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
+          {roleReady && role === "external_rep" && (() => {
+            const repName = salesRep?.outside_sales_name || "";
+            const teamsLink = salesRep?.teams_link || "";
+            const ready = !!serviceState && !!salesRep && !!teamsLink;
+            const assignment = salesRep;
+
+            const subtitle = !serviceState
+              ? t("talkToSalesNoState")
+              : !assignment
+                ? t("talkToSalesNoRep")
+                : !teamsLink
+                  ? t("talkToSalesNoLink")
+                  : `${t("talkToSalesWith")} ${repName}`;
+
+            const Card_ = (
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">{t("talkToSales")}</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{subtitle}</div>
+                  </div>
+                  <span className="ds-badge">Sales</span>
+                </div>
+                <div className="mt-5">
+                  <div className={`text-sm font-semibold ${ready ? "text-[var(--anchor-green)]" : "text-[var(--anchor-gray)]"}`}>
+                    {ready ? t("startTeamsCall") : t("setupRequired")} <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  </div>
+                </div>
+              </Card>
+            );
+
+            return ready ? (
+              <a
+                href={teamsLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group transition-transform duration-200 hover:-translate-y-0.5"
+              >
+                {Card_}
+              </a>
+            ) : (
+              <Link href="/dashboard/settings" className="group transition-transform duration-200 hover:-translate-y-0.5">
+                {Card_}
+              </Link>
+            );
+          })()}
+
           {roleReady && role === "external_rep" && (
             <Link href="/dashboard/opportunities/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">{t("projectIdentifier")}</div>
@@ -231,7 +300,7 @@ export default function DashboardPage() {
 
           {roleReady && role === "external_rep" && (
             <Link href="/dashboard/commission/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-semibold">{t("commissionClaim")}</div>
@@ -249,40 +318,24 @@ export default function DashboardPage() {
           )}
 
           {roleReady && role === "admin" && (
-            <Link href="/dashboard/reports" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
+            <Link href="/admin" className="group transition-transform duration-200 hover:-translate-y-0.5">
+              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-semibold">User Reports</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">External user activity, projects, and rooftop assessments.</div>
+                    <div className="text-lg font-semibold">Admin Console</div>
+                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">Configure sales reps, view user activity, projects, claims, and assessments.</div>
                   </div>
                   <span className="ds-badge">Admin</span>
                 </div>
                 <div className="mt-5">
                   <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    View Reports <span className="inline-block transition group-hover:translate-x-1">→</span>
+                    Open Admin <span className="inline-block transition group-hover:translate-x-1">→</span>
                   </div>
                 </div>
               </Card>
             </Link>
           )}
 
-          <Link href="/dashboard/settings" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-6 transition-shadow duration-200 hover:shadow-lg">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">{t("profileSettings")}</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("profileSettingsDesc")}</div>
-                </div>
-                <span className="ds-badge">Account</span>
-              </div>
-              <div className="mt-5">
-                <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  {t("openSettings")} <span className="inline-block transition group-hover:translate-x-1">→</span>
-                </div>
-              </div>
-            </Card>
-          </Link>
         </div>
 
       </div>
