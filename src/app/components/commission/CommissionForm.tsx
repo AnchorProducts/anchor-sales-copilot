@@ -9,6 +9,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS } from "@/lib/roofing/options";
+import { US_STATES } from "@/lib/sales/regions";
 
 type UserProfile = {
   full_name: string | null;
@@ -81,12 +82,6 @@ const OTHER_ITEMS = [
   "Camera Mount",
   "Electrical Disconnect",
   "Guy Wire Securement",
-];
-
-const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME",
-  "MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA",
-  "RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
 ];
 
 const INITIAL_FORM: FormState = {

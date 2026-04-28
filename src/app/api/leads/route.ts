@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import { resolveRegionalAssignment } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,40 +37,6 @@ function formatProjectTimeline(value: string | null | undefined): string {
   if (!value) return "—";
   return PROJECT_TIMELINE_LABELS[value] ?? value;
 }
-
-type RegionalAssignment = {
-  inside_sales_name: string;
-  inside_sales_email: string;
-  outside_sales_name: string;
-  states: Set<string>;
-};
-
-const REGIONAL_ASSIGNMENTS: RegionalAssignment[] = [
-  {
-    inside_sales_name: "Laure Burrell",
-    inside_sales_email: "laure.burrell@anchorp.com",
-    outside_sales_name: "Test Assignment",
-    states: new Set(["TX"]),
-  },
-  {
-    inside_sales_name: "Katerina Little",
-    inside_sales_email: "katerina.little@anchorp.com",
-    outside_sales_name: "Geroge Varney",
-    states: new Set(["NY", "NJ", "CT", "MA", "RI", "NH", "VT", "ME"]),
-  },
-  {
-    inside_sales_name: "Crystal Serrano",
-    inside_sales_email: "c.serrano@anchorp.com",
-    outside_sales_name: "Brandon Reynolds",
-    states: new Set(["KY", "VA", "WV", "OH", "DC", "MD", "DE", "PA"]),
-  },
-  {
-    inside_sales_name: "Crystal Serrano",
-    inside_sales_email: "c.serrano@anchorp.com",
-    outside_sales_name: "Justin Smith",
-    states: new Set(["HI", "AK", "CA", "NV", "OR", "ID", "WA", "UT", "AZ", "WY", "MT", "ND", "SD", "NE", "IA", "IL", "MN", "WI", "IN", "MI"]),
-  },
-];
 
 function isInternalRole(role: string) {
   return role === "admin" || role === "anchor_rep";
@@ -122,14 +89,6 @@ function isMediaFile(file: File) {
   return type.startsWith("image/") || type.startsWith("video/");
 }
 
-function resolveRegionalAssignment(country: string, state: string) {
-  if (upper(country) !== "US") return null;
-  const normalizedState = upper(state);
-  for (const assignment of REGIONAL_ASSIGNMENTS) {
-    if (assignment.states.has(normalizedState)) return assignment;
-  }
-  return null;
-}
 
 type ParsedSolution = {
   solution_key: string;
@@ -407,13 +366,17 @@ export async function POST(req: Request) {
 
     const region_code = deriveRegionCode(country, state);
     const location_text = buildLocation(project_address, city, state, zip, country);
-    const regionalAssignment = resolveRegionalAssignment(country, state);
+    const regionalAssignment = await resolveRegionalAssignment(country, state);
     const assignment_note = regionalAssignment
       ? `Outside sales assignment: ${regionalAssignment.outside_sales_name}`
       : null;
-    const inside_sales_name = regionalAssignment?.inside_sales_name || null;
-    const inside_sales_email = regionalAssignment?.inside_sales_email || null;
     const outside_sales_name = regionalAssignment?.outside_sales_name || null;
+    const outside_sales_email = regionalAssignment?.outside_sales_email || null;
+    const notification_email = outside_sales_email;
+    const notification_name = outside_sales_name;
+    // Legacy leads-table columns are now mirrored from the outside rep.
+    const inside_sales_name = outside_sales_name;
+    const inside_sales_email = outside_sales_email;
 
     const { data: leadRow, error: insErr } = await supabaseAdmin
       .from("leads")
@@ -528,8 +491,8 @@ export async function POST(req: Request) {
 
     let assigned_rep_user_id: string | null = null;
     try {
-      if (inside_sales_email) {
-        assigned_rep_user_id = await findUserIdByEmail(inside_sales_email);
+      if (notification_email) {
+        assigned_rep_user_id = await findUserIdByEmail(notification_email);
       }
       if (!assigned_rep_user_id) {
         assigned_rep_user_id = await assignRep(region_code);
@@ -577,21 +540,21 @@ export async function POST(req: Request) {
       | { attempted: boolean; sent: boolean; emailId: string | null; error: string | null; to: string | null }
       | null = null;
 
-    if (inside_sales_email) {
+    if (notification_email) {
       emailNotification = {
         attempted: true,
         sent: false,
         emailId: null,
         error: null,
-        to: inside_sales_email,
+        to: notification_email,
       };
 
       try {
         const result = await sendInsideSalesLeadEmail({
           req,
           leadId,
-          toEmail: inside_sales_email,
-          insideSalesName: inside_sales_name,
+          toEmail: notification_email,
+          insideSalesName: notification_name,
           outsideSalesName: outside_sales_name,
           customerCompany: customer_company,
           details,

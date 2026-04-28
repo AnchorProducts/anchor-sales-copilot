@@ -5,22 +5,15 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
-import { Input } from "@/app/components/ui/Field";
+import { Input, Select } from "@/app/components/ui/Field";
+import { US_STATES } from "@/lib/sales/regions";
 import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
-import { useTranslation, setLanguage, type Lang } from "@/lib/i18n/useTranslation";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export const dynamic = "force-dynamic";
 
 type Theme = "light" | "dark" | "system";
-
-const LANGUAGES: { value: Lang; label: string }[] = [
-  { value: "en", label: "English" },
-  { value: "fr", label: "French — Français" },
-  { value: "es", label: "Spanish — Español" },
-  { value: "pt", label: "Portuguese — Português" },
-  { value: "de", label: "German — Deutsch" },
-];
 
 function applyTheme(t: Theme) {
   const resolved =
@@ -34,7 +27,7 @@ function applyTheme(t: Theme) {
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -46,6 +39,7 @@ export default function SettingsPage() {
   const [company, setCompany]   = useState("");
   const [phone, setPhone]       = useState("");
   const [email, setEmail]       = useState("");
+  const [serviceState, setServiceState] = useState("");
 
   // Preferences
   const [theme, setTheme]       = useState<Theme>("light");
@@ -61,7 +55,7 @@ export default function SettingsPage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name,company,phone")
+        .select("full_name,company,phone,service_state")
         .eq("id", ud.user.id)
         .maybeSingle();
 
@@ -70,6 +64,7 @@ export default function SettingsPage() {
         setFullName((prof as any).full_name || "");
         setCompany((prof as any).company   || "");
         setPhone((prof as any).phone       || "");
+        setServiceState((prof as any).service_state || "");
       }
 
       // Load theme preference from localStorage
@@ -97,6 +92,7 @@ export default function SettingsPage() {
         full_name: fullName.trim() || null,
         company:   company.trim()  || null,
         phone:     phone.trim()    || null,
+        service_state: serviceState.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", ud.user.id);
@@ -109,6 +105,12 @@ export default function SettingsPage() {
   function handleThemeChange(t: Theme) {
     setTheme(t);
     applyTheme(t);
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace("/");
+    router.refresh();
   }
 
   if (loading) {
@@ -146,6 +148,15 @@ export default function SettingsPage() {
               <label className="grid gap-1.5 text-sm">
                 <span className="font-semibold">{t("phone")}</span>
                 <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="h-11 px-3 text-sm" placeholder={t("phonePlaceholder")} type="tel" />
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-semibold">{t("serviceArea")}</span>
+                <Select value={serviceState} onChange={(e) => setServiceState(e.target.value)} className="h-11 px-3 text-sm">
+                  <option value="">{t("serviceAreaPlaceholder")}</option>
+                  {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </Select>
+                <span className="text-[11px] text-[var(--anchor-gray)]">{t("serviceAreaHint")}</span>
               </label>
 
               <label className="grid gap-1.5 text-sm">
@@ -193,32 +204,18 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* ── Language ─────────────────────────────────────────── */}
+          {/* ── Sign Out ─────────────────────────────────────────── */}
           <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
-            <div className="text-sm font-semibold text-black">{t("language")}</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("languageDesc")}</div>
-
-            <div className="mt-4 grid gap-2">
-              {LANGUAGES.map(({ value, label }) => {
-                const active = lang === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setLanguage(value)}
-                    className={[
-                      "flex w-full items-center justify-between rounded-2xl border px-4 py-3.5 text-sm font-medium transition",
-                      active
-                        ? "border-[var(--anchor-green)] bg-[#F0FDF4] text-[var(--anchor-green)]"
-                        : "border-black/10 bg-white text-black hover:bg-[var(--surface-soft)]",
-                    ].join(" ")}
-                  >
-                    <span>{label}</span>
-                    {active && <span className="text-[var(--anchor-green)]">✓</span>}
-                  </button>
-                );
-              })}
-            </div>
+            <div className="text-sm font-semibold text-black">{t("signOut")}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("signOutDesc")}</div>
+            <Button
+              type="button"
+              onClick={signOut}
+              variant="secondary"
+              className="mt-4 w-full py-3 text-sm sm:w-auto sm:px-6"
+            >
+              {t("signOut")}
+            </Button>
           </Card>
 
         </div>
