@@ -11,7 +11,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
-import { US_STATES } from "@/lib/sales/regions";
+import { US_STATES } from "@/lib/sales/states";
 
 type FormState = {
   customer_company: string;

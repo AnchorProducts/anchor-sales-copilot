@@ -16,7 +16,6 @@ type Rep = {
   id: string;
   outside_sales_name: string | null;
   outside_sales_email: string | null;
-  phone: string | null;
   teams_link: string | null;
   states: string[];
 };
@@ -25,7 +24,6 @@ type RepDraft = {
   id?: string;
   outside_sales_name: string;
   outside_sales_email: string;
-  phone: string;
   teams_link: string;
   statesText: string;
 };
@@ -33,7 +31,6 @@ type RepDraft = {
 const EMPTY_DRAFT: RepDraft = {
   outside_sales_name: "",
   outside_sales_email: "",
-  phone: "",
   teams_link: "",
   statesText: "",
 };
@@ -43,7 +40,6 @@ function repToDraft(rep: Rep): RepDraft {
     id: rep.id,
     outside_sales_name: rep.outside_sales_name || "",
     outside_sales_email: rep.outside_sales_email || "",
-    phone: rep.phone || "",
     teams_link: rep.teams_link || "",
     statesText: (rep.states || []).join(", "),
   };
@@ -127,7 +123,6 @@ export default function AdminSalesRepsPage() {
       id: draft.id,
       outside_sales_name: draft.outside_sales_name.trim(),
       outside_sales_email: draft.outside_sales_email.trim().toLowerCase(),
-      phone: draft.phone.trim() || null,
       teams_link: draft.teams_link.trim() || null,
       states,
     };
@@ -212,17 +207,6 @@ export default function AdminSalesRepsPage() {
                   </label>
 
                   <label className="grid gap-1.5 text-sm">
-                    <span className="font-semibold">Phone</span>
-                    <Input
-                      value={draft.phone}
-                      onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                      className="h-11 px-3 text-sm"
-                      type="tel"
-                      placeholder="(555) 555-5555"
-                    />
-                  </label>
-
-                  <label className="grid gap-1.5 text-sm">
                     <span className="font-semibold">Teams Link</span>
                     <Input
                       value={draft.teams_link}
@@ -289,9 +273,6 @@ export default function AdminSalesRepsPage() {
                             <div className="break-words font-semibold">{rep.outside_sales_name || "—"}</div>
                             {rep.outside_sales_email && (
                               <div className="truncate text-[12px] text-[var(--anchor-gray)]">{rep.outside_sales_email}</div>
-                            )}
-                            {rep.phone && (
-                              <div className="text-[12px] text-[var(--anchor-gray)]">Phone: {rep.phone}</div>
                             )}
                             {rep.teams_link ? (
                               <div className="truncate text-[12px] text-[var(--anchor-green)]">

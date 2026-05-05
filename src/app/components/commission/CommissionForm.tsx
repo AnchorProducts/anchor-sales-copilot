@@ -9,7 +9,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS } from "@/lib/roofing/options";
-import { US_STATES } from "@/lib/sales/regions";
+import { US_STATES } from "@/lib/sales/states";
 
 type UserProfile = {
   full_name: string | null;
