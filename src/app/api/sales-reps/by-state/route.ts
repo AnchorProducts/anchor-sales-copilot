@@ -21,7 +21,6 @@ export async function GET(req: Request) {
     rep: {
       outside_sales_name: rep.outside_sales_name,
       outside_sales_email: rep.outside_sales_email,
-      phone: rep.phone,
       teams_link: rep.teams_link,
     },
   });

@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { Input, Select } from "@/app/components/ui/Field";
-import { US_STATES } from "@/lib/sales/regions";
+import { US_STATES } from "@/lib/sales/states";
 import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";

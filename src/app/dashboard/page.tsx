@@ -12,7 +12,6 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 type SalesRepLite = {
   outside_sales_name: string | null;
   outside_sales_email: string | null;
-  phone: string | null;
   teams_link: string | null;
 };
 
