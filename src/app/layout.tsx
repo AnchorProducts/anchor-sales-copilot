@@ -2,6 +2,8 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { isInternal, APP_NAME, APP_SHORT } from "@/lib/appMode";
+import { MobileBottomNav } from "@/app/components/ui/MobileBottomNav";
+import { AppSidebar } from "@/app/components/ui/AppSidebar";
 
 export const metadata: Metadata = {
   title: {
@@ -55,7 +57,9 @@ export default function RootLayout({
         `}} />
       </head>
       <body>
+        <AppSidebar />
         {children}
+        <MobileBottomNav />
       </body>
     </html>
   );

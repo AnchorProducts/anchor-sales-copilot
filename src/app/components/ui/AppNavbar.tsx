@@ -33,6 +33,7 @@ export function AppNavbar({ title, subtitle, menuItems, mobileMenuItems, hero }:
   }, [open]);
 
   return (
+    <div className="hidden">
     <Navbar>
       <NavbarInner className={hero ? "flex-col items-start gap-0 py-3 sm:py-4" : undefined}>
         <div className="flex w-full min-w-0 items-center justify-between gap-3">
@@ -132,5 +133,6 @@ export function AppNavbar({ title, subtitle, menuItems, mobileMenuItems, hero }:
         {hero && <div className="mt-3 w-full sm:mt-5">{hero}</div>}
       </NavbarInner>
     </Navbar>
+    </div>
   );
 }
