@@ -266,7 +266,7 @@ export default function ReportsPage() {
                     {/* Expanded: assessment reports */}
                     {expanded === u.id && (
                       <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] px-6 py-4">
-                        <div className="mb-3 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-[var(--anchor-gray)]">
+                        <div className="ds-caption mb-3 flex items-center gap-3">
                           <span>{t("rooftopAssessmentReports")}</span>
                           {u.phone && <span className="font-normal normal-case">· {u.phone}</span>}
                         </div>

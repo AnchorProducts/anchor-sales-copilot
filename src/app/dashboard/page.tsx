@@ -3,11 +3,35 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { Card } from "@/app/components/ui/Card";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+
+type SearchProductRow = {
+  id: string;
+  name: string;
+  sku: string | null;
+  series: string | null;
+  section: "solution" | "anchor" | "internal_assets";
+  internal_kind: "tacklebox" | "docs_list" | "contacts_list" | null;
+};
+
+function searchProductHref(p: SearchProductRow) {
+  if (p.section === "internal_assets") {
+    if (p.internal_kind === "contacts_list") {
+      return `/internal-assets/contacts/${encodeURIComponent(p.id)}`;
+    }
+    return `/internal-assets/docs/${encodeURIComponent(p.id)}`;
+  }
+  return `/assets/${encodeURIComponent(p.id)}`;
+}
+
+const SECTION_LABEL: Record<SearchProductRow["section"], string> = {
+  solution: "Solution",
+  anchor: "Anchor",
+  internal_assets: "Internal",
+};
 
 type SalesRepLite = {
   outside_sales_name: string | null;
@@ -17,37 +41,76 @@ type SalesRepLite = {
 
 export const dynamic = "force-dynamic";
 
+/* ─── Inline SVG icon set ───────────────────────────────────────────────── */
+type IconName =
+  | "search" | "more" | "right" | "grid" | "trendUp" | "trendDown"
+  | "sparkles" | "library" | "phone" | "clipboard" | "wallet" | "shield"
+  | "settings" | "rocket" | "camera" | "logout";
+
+function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName; className?: string; strokeWidth?: number }) {
+  const c = { fill: "none", stroke: "currentColor", strokeWidth, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (name) {
+    case "search":   return (<svg viewBox="0 0 24 24" className={className} {...c}><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>);
+    case "more":     return (<svg viewBox="0 0 24 24" className={className} {...c}><circle cx="12" cy="5"  r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>);
+    case "right":    return (<svg viewBox="0 0 24 24" className={className} {...c}><polyline points="9 18 15 12 9 6"/></svg>);
+    case "grid":     return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>);
+    case "trendUp":  return (<svg viewBox="0 0 24 24" className={className} {...c}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>);
+    case "trendDown":return (<svg viewBox="0 0 24 24" className={className} {...c}><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>);
+    case "sparkles": return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z"/><path d="M19 14l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/></svg>);
+    case "library":  return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>);
+    case "phone":    return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M22 16.92V21a1 1 0 0 1-1.11 1A19.86 19.86 0 0 1 2 4.11 1 1 0 0 1 3 3h4.09a1 1 0 0 1 1 .75l1 4a1 1 0 0 1-.27 1L7.21 10.21a16 16 0 0 0 6.58 6.58l1.46-1.61a1 1 0 0 1 1-.27l4 1a1 1 0 0 1 .75 1z"/></svg>);
+    case "clipboard":return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>);
+    case "wallet":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M20 12V8H4a2 2 0 0 1 0-4h14v4"/><rect x="2" y="6" width="20" height="14" rx="2"/><circle cx="16" cy="13" r="1.5"/></svg>);
+    case "shield":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
+    case "settings": return (<svg viewBox="0 0 24 24" className={className} {...c}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case "rocket":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M5 13l4 4-4 4-2-2 2-6z"/><path d="M14 6l4 4-9 9-4-4 9-9z"/><path d="M19 2l3 3-3 3-3-3 3-3z"/></svg>);
+    case "camera":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>);
+    case "logout":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
+  }
+}
+
+/* ─── Initials helper ───────────────────────────────────────────────────── */
+const initials = (s: string) =>
+  s.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "?";
 
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
 
   const [booting, setBooting] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
   const [serviceState, setServiceState] = useState<string>("");
   const [salesRep, setSalesRep] = useState<SalesRepLite | null>(null);
+  const [fullName, setFullName] = useState<string>("");
+  const [searchQ, setSearchQ] = useState("");
 
+  const [suggestData, setSuggestData] = useState<SearchProductRow[] | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const suggestLoadingRef = useRef(false);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const searchBoxRefDesktop = useRef<HTMLDivElement | null>(null);
 
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace("/");
+    router.refresh();
+  }
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         setBooting(true);
-
         const { data: sdata } = await supabase.auth.getSession();
         if (!alive) return;
-
         const s = sdata.session;
         if (!s) {
           router.replace("/");
           return;
         }
-
-        // Force cookie sync for server routes (doc-open / recent-docs)
         const syncRes = await fetch("/api/auth/sync", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -57,8 +120,6 @@ export default function DashboardPage() {
           }),
           cache: "no-store",
         });
-
-        // Not fatal, but useful when debugging
         if (!syncRes.ok) {
           const j = await syncRes.json().catch(() => null);
           console.warn("auth sync failed", syncRes.status, j);
@@ -68,29 +129,22 @@ export default function DashboardPage() {
         setBooting(false);
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [router, supabase]);
 
-
-  // --- Role check (external vs internal)
+  // --- Role + name check
   useEffect(() => {
     let alive = true;
-
     (async () => {
       if (booting) return;
-
       const { data: userData } = await supabase.auth.getUser();
       if (!alive) return;
-
       const user = userData.user;
       if (!user) return;
 
       let { data: prof } = await supabase
         .from("profiles")
-        .select("role,user_type,email,service_state")
+        .select("role,user_type,email,service_state,full_name")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -101,7 +155,6 @@ export default function DashboardPage() {
         const isInternalEmail = email.endsWith("@anchorp.com");
         const roleToSet = isInternalEmail ? "anchor_rep" : "external_rep";
         const user_type = isInternalEmail ? "internal" : "external";
-
         const meta = user.user_metadata || {};
         const { data: created } = await supabase
           .from("profiles")
@@ -118,21 +171,19 @@ export default function DashboardPage() {
             },
             { onConflict: "id" }
           )
-          .select("role,user_type,email,service_state")
+          .select("role,user_type,email,service_state,full_name")
           .single();
-
         prof = created ?? null;
       }
 
       if (!alive) return;
-      setRole(String((prof as any)?.role || ""));
-      setServiceState(String((prof as any)?.service_state || ""));
+      const p = prof as Record<string, unknown> | null;
+      setRole(String((p?.role as string) || ""));
+      setServiceState(String((p?.service_state as string) || ""));
+      setFullName(String((p?.full_name as string) || (user.user_metadata?.full_name as string) || (user.email as string) || ""));
       setRoleReady(true);
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [booting, supabase]);
 
   // Fetch the assigned sales rep when the user's service state is known.
@@ -152,192 +203,575 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [serviceState]);
 
+  const isExternal = role === "external_rep";
+  const isAdmin = role === "admin";
   const isInternal = role === "admin" || role === "anchor_rep";
-  const { t } = useTranslation();
+
+  const firstName = (fullName || "").trim().split(/\s+/)[0] || "";
+  const greetingName = firstName || "there";
+
+  const todayLabel = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  const heroTitle = isAdmin
+    ? "Admin pulse — view activity & assessments"
+    : isInternal
+    ? "Internal tools ready — copilot & assets"
+    : "Open Copilot to spec your next project"
+  ;
+  const heroLink = isAdmin ? "/admin" : "/chat";
+  const heroLinkLabel = isAdmin ? "See Admin" : "Open Copilot";
+
+  const subtitle = isAdmin
+    ? "Configure reps, review activity, and audit reports."
+    : isInternal
+    ? "Jump into Copilot, manage assets, or check rooftop reports."
+    : "Jump into Copilot, manage assets, or talk to your rep.";
+
+  // Stat cards: contextual to role, always 2 up
+  const stat1 = isAdmin
+    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps" }
+    : isInternal
+    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets" }
+    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings" };
+
+  const stat2 = isAdmin
+    ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports" }
+    : isInternal
+    ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat" }
+    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link };
+
+  const stat3 = isExternal
+    ? { label: t("notableProject"), value: "Submit", trend: "", href: "/dashboard/notable-projects/new" }
+    : null;
+
+  const stats = stat3 ? [stat1, stat2, stat3] : [stat1, stat2];
+
+  // Quick actions list (role-gated)
+  type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
+  const actions: Action[] = [];
+  if (heroLink !== "/chat") {
+    actions.push({ key: "chat", href: "/chat", label: t("openCopilot"), desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
+  }
+  actions.push({ key: "assets", href: "/assets", label: t("assetManagement"),   desc: t("assetManagementDesc"),                       icon: "library",  badge: "Library" });
+
+  if (roleReady && isExternal) {
+    actions.push({ key: "project",    href: "/dashboard/opportunities/new",     label: t("projectIdentifier"), desc: t("projectIdentifierDesc"), icon: "clipboard", badge: "Projects"   });
+    actions.push({ key: "commission", href: "/dashboard/commission/new",        label: t("commissionClaim"),   desc: t("commissionClaimDesc"),   icon: "wallet",    badge: "Commission" });
+  }
+
+  if (roleReady && isAdmin) {
+    actions.push({ key: "admin",    href: "/admin",                  label: "Admin Console",      desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield",  badge: "Admin"   });
+    actions.push({ key: "reports",  href: "/admin/rooftop-reports",  label: "Assessment Reports", desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQ.trim()) return;
+    setSuggestOpen(false);
+    router.push(`/assets?q=${encodeURIComponent(searchQ.trim())}`);
+  };
+
+  async function ensureSuggestData() {
+    if (suggestData !== null || suggestLoadingRef.current) return;
+    suggestLoadingRef.current = true;
+    try {
+      const query = supabase
+        .from("products")
+        .select("id,name,sku,series,section,internal_kind")
+        .eq("active", true)
+        .order("name", { ascending: true });
+      if (!isInternal) query.neq("section", "internal_assets");
+      const { data, error } = await query;
+      if (error) {
+        console.warn("dashboard search suggest fetch failed", error.message);
+        setSuggestData([]);
+        return;
+      }
+      setSuggestData((data as SearchProductRow[]) || []);
+    } finally {
+      suggestLoadingRef.current = false;
+    }
+  }
+
+  const suggestions = useMemo(() => {
+    if (!suggestData) return [];
+    const s = searchQ.trim().toLowerCase();
+    if (!s) return [];
+    return suggestData
+      .filter((p) => {
+        const hay = [p.name, p.sku ?? "", p.series ?? "", p.section ?? ""].join(" ").toLowerCase();
+        return hay.includes(s);
+      })
+      .slice(0, 6);
+  }, [searchQ, suggestData]);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const t = e.target as Node;
+      const inMobile = searchBoxRef.current?.contains(t) ?? false;
+      const inDesktop = searchBoxRefDesktop.current?.contains(t) ?? false;
+      if (!inMobile && !inDesktop) {
+        setSuggestOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // ── Talk-to-Sales accent (used in desktop layout) ──────────────────────
+  const teamsLink = salesRep?.teams_link || "";
+  const repFullName = salesRep?.outside_sales_name || "";
+  const repReady = !!serviceState && !!salesRep && !!teamsLink;
+  const repSub = !serviceState
+    ? t("talkToSalesNoState")
+    : !salesRep
+      ? t("talkToSalesNoRep")
+      : !teamsLink
+        ? t("talkToSalesNoLink")
+        : `${t("talkToSalesWith")} ${repFullName}`;
 
   return (
     <main className="ds-page">
-      <AppNavbar
-        title="Anchor Sales Co-Pilot"
-        subtitle="Dashboard"
-        menuItems={[]}
-        hero={
-          <div className="flex flex-col gap-1 text-left">
-            <h1 className="text-2xl text-white! sm:text-3xl">{t("welcomeBack")}</h1>
-            <p className="max-w-2xl text-sm text-white/80">{t("dashboardSubtitle")}</p>
+      <div className="lg:hidden">
+        <AppNavbar title="Anchor Sales Co-Pilot" subtitle="Dashboard" menuItems={[]} />
+      </div>
+
+      <div className="mx-auto w-full max-w-2xl px-4 py-5 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-8 lg:hidden">
+        {/* ── Greeting ───────────────────────────────────────────────────── */}
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[26px] font-bold leading-[1.1] tracking-tight text-[var(--anchor-deep)] sm:text-[30px]">
+              Hello<br />{greetingName}!
+            </h1>
+            <p className="mt-2 text-sm text-[var(--anchor-gray)]">
+              {subtitle}
+            </p>
           </div>
-        }
-      />
-
-      <div className="ds-container py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-10">
-        {/* Quick actions */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 sm:mb-8">
-          <span className="ds-badge">
-            {isInternal ? "Internal tools" : "External tools"}
-          </span>
-          
+          <div className="mt-1 flex shrink-0 items-center gap-2">
+            <div
+              aria-label="User avatar"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-sm font-bold text-[var(--anchor-deep)]"
+            >
+              {initials(fullName || "")}
+            </div>
+          </div>
         </div>
 
-        {/* Primary cards */}
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          <Link href="/chat" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">Chat Copilot</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">Get solution recommendations and practical next steps.</div>
-                </div>
-                <span className="ds-badge">AI</span>
-              </div>
-              <div className="mt-5">
-                <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  {t("openCopilot")} <span className="inline-block transition group-hover:translate-x-1">→</span>
-                </div>
-              </div>
-            </Card>
-          </Link>
+        {/* ── Search ─────────────────────────────────────────────────────── */}
+        <div ref={searchBoxRef} className="relative mt-5">
+          <form onSubmit={handleSearch} className="flex h-12 items-center gap-3 rounded-full bg-white px-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+            <input
+              value={searchQ}
+              onChange={(e) => {
+                setSearchQ(e.target.value);
+                setSuggestOpen(true);
+                void ensureSuggestData();
+              }}
+              onFocus={() => {
+                if (searchQ.trim()) setSuggestOpen(true);
+                void ensureSuggestData();
+              }}
+              placeholder="Search assets, copilot, projects…"
+              className="flex-1 border-none bg-transparent text-sm text-[var(--anchor-deep)] outline-none placeholder:text-[var(--anchor-gray)]"
+            />
+            <button type="submit" aria-label="Search" className="flex h-8 w-8 items-center justify-center text-[var(--anchor-gray)] transition hover:text-[var(--anchor-deep)]">
+              <Icon name="search" className="h-[18px] w-[18px]" />
+            </button>
+          </form>
 
-          <Link href="/assets" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">{t("assetManagement")}</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("assetManagementDesc")}</div>
-                </div>
-                <span className="ds-badge">Library</span>
-              </div>
-              <div className="mt-5">
-                <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  {t("viewAssets")} <span className="inline-block transition group-hover:translate-x-1">→</span>
-                </div>
-              </div>
-            </Card>
-          </Link>
+          {suggestOpen && searchQ.trim().length > 0 && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
+              <ul className="max-h-80 overflow-auto py-1">
+                {suggestions.map((p) => (
+                  <li key={p.id}>
+                    <Link
+                      href={searchProductHref(p)}
+                      onClick={() => setSuggestOpen(false)}
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition hover:bg-[var(--surface-soft)]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-[var(--anchor-deep)]">{p.name}</div>
+                        {(p.sku || p.series) && (
+                          <div className="truncate text-xs text-[var(--anchor-gray)]">
+                            {[p.sku, p.series].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                      <span className="ds-badge shrink-0">{SECTION_LABEL[p.section]}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
-          <Link href="/rooftop" className="group transition-transform duration-200 hover:-translate-y-0.5">
-            <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold">{t("rooftopAudit")}</div>
-                  <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("rooftopAuditDesc")}</div>
-                </div>
-                <span className="ds-badge">Safety</span>
-              </div>
-              <div className="mt-5">
-                <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                  {t("startAssessment")} <span className="inline-block transition group-hover:translate-x-1">→</span>
-                </div>
-              </div>
-            </Card>
-          </Link>
+        {/* ── Desktop layout: hero + actions on left, stats sidebar on right ── */}
+        <div className="mt-4 space-y-4 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
 
-          {roleReady && role === "external_rep" && (() => {
-            const repName = salesRep?.outside_sales_name || "";
-            const teamsLink = salesRep?.teams_link || "";
-            const ready = !!serviceState && !!salesRep && !!teamsLink;
-            const assignment = salesRep;
+        {/* ── Hero card ──────────────────────────────────────────────────── */}
+        <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] lg:col-span-2 lg:p-7">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[var(--anchor-green)] opacity-20" />
+          <button aria-label="More" className="absolute right-4 top-4 text-white/70 transition hover:text-white">
+            <Icon name="more" className="h-[18px] w-[18px]" />
+          </button>
 
-            const subtitle = !serviceState
-              ? t("talkToSalesNoState")
-              : !assignment
-                ? t("talkToSalesNoRep")
-                : !teamsLink
-                  ? t("talkToSalesNoLink")
-                  : `${t("talkToSalesWith")} ${repName}`;
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
+              <span className="text-[11px] font-semibold tracking-wide">Update</span>
+            </div>
+            <div className="mt-2 text-[11px] text-white/70">{todayLabel}</div>
+            <div className="mt-2 max-w-[80%] text-[19px] font-bold leading-snug tracking-tight sm:text-[20px]">
+              {heroTitle}
+            </div>
+            <Link href={heroLink} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-white/80 transition hover:text-white">
+              {heroLinkLabel}
+              <Icon name="right" className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
 
-            const Card_ = (
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">{t("talkToSales")}</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{subtitle}</div>
+        {/* ── Stat cards (2-up or 3-up on mobile, vertical sidebar on lg) ── */}
+        <div className={`grid lg:col-start-3 lg:row-start-1 lg:row-span-2 lg:grid-cols-1 lg:gap-4 ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
+          {stats.map((s, i) => {
+            const isExt = "external" in s && (s as { external?: boolean }).external;
+            const Wrap = isExt
+              ? ({ children }: { children: React.ReactNode }) => (
+                  <a href={s.href} target="_blank" rel="noopener noreferrer" className="block">
+                    {children}
+                  </a>
+                )
+              : ({ children }: { children: React.ReactNode }) => (
+                  <Link href={s.href} className="block">{children}</Link>
+                );
+            return (
+              <Wrap key={i}>
+                <div className="rounded-3xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.06)]">
+                  <div className="flex items-start justify-between">
+                    <div className="text-xs font-medium text-[var(--anchor-gray)]">{s.label}</div>
+                    <Icon name="more" className="h-4 w-4 text-[var(--anchor-gray)]" />
                   </div>
-                  <span className="ds-badge">Sales</span>
-                </div>
-                <div className="mt-5">
-                  <div className={`text-sm font-semibold ${ready ? "text-[var(--anchor-green)]" : "text-[var(--anchor-gray)]"}`}>
-                    {ready ? t("startTeamsCall") : t("setupRequired")} <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  <div className="mt-2 flex items-baseline gap-1 leading-none text-[var(--anchor-deep)]">
+                    <span className="text-[30px] font-bold tracking-tight">{s.value}</span>
                   </div>
                 </div>
-              </Card>
+              </Wrap>
             );
+          })}
+        </div>
 
-            return ready ? (
-              <a
-                href={teamsLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group transition-transform duration-200 hover:-translate-y-0.5"
-              >
-                {Card_}
-              </a>
-            ) : (
-              <Link href="/dashboard/settings" className="group transition-transform duration-200 hover:-translate-y-0.5">
-                {Card_}
-              </Link>
-            );
-          })()}
+        {/* ── Quick actions list ─────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] lg:col-span-2">
+          <div className="flex items-center justify-between pb-1">
+            <h2 className="text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+          </div>
 
-          {roleReady && role === "external_rep" && (
-            <Link href="/dashboard/opportunities/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">{t("projectIdentifier")}</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("projectIdentifierDesc")}</div>
+          <div className="mt-1 divide-y divide-[var(--surface-soft)]">
+            {actions.map((a) => {
+              const Row = (
+                <div className="flex items-center gap-3 py-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+                    <Icon name={a.icon} className="h-5 w-5" />
                   </div>
-                  <span className="ds-badge">Projects</span>
-                </div>
-                <div className="mt-5">
-                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    {t("submitProject")} <span className="inline-block transition group-hover:translate-x-1">→</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
+                    <div className="truncate text-xs text-[var(--anchor-gray)]">{a.desc}</div>
                   </div>
+                  <Icon name="right" className="h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
                 </div>
-              </Card>
-            </Link>
-          )}
-
-          {roleReady && role === "external_rep" && (
-            <Link href="/dashboard/commission/new" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">{t("commissionClaim")}</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("commissionClaimDesc")}</div>
-                  </div>
-                  <span className="ds-badge">Commission</span>
-                </div>
-                <div className="mt-5">
-                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    {t("submitClaim")} <span className="inline-block transition group-hover:translate-x-1">→</span>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          )}
-
-          {roleReady && role === "admin" && (
-            <Link href="/admin" className="group transition-transform duration-200 hover:-translate-y-0.5">
-              <Card className="h-full border-t-4 border-t-[var(--anchor-green)] p-5 transition-shadow duration-200 hover:shadow-lg sm:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">Admin Console</div>
-                    <div className="mt-1 text-sm text-[var(--anchor-gray)]">Configure sales reps, view user activity, projects, claims, and assessments.</div>
-                  </div>
-                  <span className="ds-badge">Admin</span>
-                </div>
-                <div className="mt-5">
-                  <div className="text-sm font-semibold text-[var(--anchor-green)]">
-                    Open Admin <span className="inline-block transition group-hover:translate-x-1">→</span>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          )}
+              );
+              return a.external ? (
+                <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="-mx-5 block px-5 transition hover:bg-[var(--surface-soft)]/50">
+                  {Row}
+                </a>
+              ) : (
+                <Link key={a.key} href={a.href} className="-mx-5 block px-5 transition hover:bg-[var(--surface-soft)]/50">
+                  {Row}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
 
         </div>
 
+        {/* Loading hint */}
+        {booting && (
+          <p className="mt-6 text-center text-xs text-[var(--anchor-gray)]">Loading your workspace…</p>
+        )}
+      </div>
+
+      {/* ───────────────────────────────────────────────────────────────────
+          Desktop layout (≥ lg)
+         ─────────────────────────────────────────────────────────────────── */}
+      <div className="hidden min-h-dvh w-full bg-[var(--surface-soft)] lg:flex">
+        {/* Sidebar */}
+        <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col bg-[var(--anchor-deep)] px-4 py-6 text-white">
+          <Link href="/dashboard/settings" className="flex items-center gap-3 px-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-sm font-bold text-[var(--anchor-deep)]">
+              {initials(fullName || "")}
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-bold">{fullName || "User"}</div>
+              <div className="text-[11px] text-white/60">
+                {isAdmin ? "Admin" : isInternal ? "Anchor Rep" : isExternal ? "External Rep" : ""}
+              </div>
+            </div>
+          </Link>
+
+          <nav className="mt-8 flex flex-1 flex-col gap-1">
+            <DesktopNavItem href="/dashboard" icon="grid" label={t("dashboard")} active />
+            <DesktopNavItem href="/chat" icon="sparkles" label={t("openCopilot")} />
+            <DesktopNavItem href="/assets" icon="library" label={t("assetManagement")} />
+            {roleReady && isExternal && (
+              <>
+                <DesktopNavItem href="/dashboard/opportunities/new" icon="clipboard" label={t("projectIdentifier")} />
+                <DesktopNavItem href="/dashboard/notable-projects/new" icon="camera" label={t("notableProject")} />
+                <DesktopNavItem href="/dashboard/commission/new" icon="wallet" label={t("commissionClaim")} />
+              </>
+            )}
+            {roleReady && isAdmin && (
+              <>
+                <DesktopNavItem href="/admin" icon="shield" label="Admin" />
+                <DesktopNavItem href="/admin/rooftop-reports" icon="clipboard" label="Reports" />
+              </>
+            )}
+          </nav>
+
+          <div className="space-y-1">
+            <DesktopNavItem href="/dashboard/settings" icon="settings" label={t("settings")} />
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+            >
+              <Icon name="logout" className="h-5 w-5" />
+              {t("signOut")}
+            </button>
+          </div>
+        </aside>
+
+        {/* Main */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Topbar */}
+          <header className="flex items-center justify-between gap-6 px-8 py-6">
+            <h1 className="text-[28px] font-bold tracking-tight text-[var(--anchor-deep)]">{t("dashboard")}</h1>
+
+            <div ref={searchBoxRefDesktop} className="relative max-w-md flex-1">
+              <form onSubmit={handleSearch} className="flex h-12 items-center gap-3 rounded-full bg-white px-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+                <input
+                  value={searchQ}
+                  onChange={(e) => {
+                    setSearchQ(e.target.value);
+                    setSuggestOpen(true);
+                    void ensureSuggestData();
+                  }}
+                  onFocus={() => {
+                    if (searchQ.trim()) setSuggestOpen(true);
+                    void ensureSuggestData();
+                  }}
+                  placeholder="Search assets, copilot, projects…"
+                  className="flex-1 border-none bg-transparent text-sm text-[var(--anchor-deep)] outline-none placeholder:text-[var(--anchor-gray)]"
+                />
+                <button type="submit" aria-label="Search" className="flex h-8 w-8 items-center justify-center text-[var(--anchor-gray)] transition hover:text-[var(--anchor-deep)]">
+                  <Icon name="search" className="h-[18px] w-[18px]" />
+                </button>
+              </form>
+
+              {suggestOpen && searchQ.trim().length > 0 && suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
+                  <ul className="max-h-80 overflow-auto py-1">
+                    {suggestions.map((p) => (
+                      <li key={p.id}>
+                        <Link
+                          href={searchProductHref(p)}
+                          onClick={() => setSuggestOpen(false)}
+                          className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm transition hover:bg-[var(--surface-soft)]"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium text-[var(--anchor-deep)]">{p.name}</div>
+                            {(p.sku || p.series) && (
+                              <div className="truncate text-xs text-[var(--anchor-gray)]">
+                                {[p.sku, p.series].filter(Boolean).join(" · ")}
+                              </div>
+                            )}
+                          </div>
+                          <span className="ds-badge shrink-0">{SECTION_LABEL[p.section]}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+          </header>
+
+          {/* Content */}
+          <div className="flex-1 px-8 pb-12">
+            {/* Stat cards row */}
+            <div className={`grid gap-5 ${stats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+              {stats.map((s, i) => {
+                const isExt = "external" in s && (s as { external?: boolean }).external;
+                const Wrap = isExt
+                  ? ({ children }: { children: React.ReactNode }) => (
+                      <a href={s.href} target="_blank" rel="noopener noreferrer" className="block">{children}</a>
+                    )
+                  : ({ children }: { children: React.ReactNode }) => (
+                      <Link href={s.href} className="block">{children}</Link>
+                    );
+                const statIcon: IconName =
+                  s.label === t("notableProject") ? "camera"
+                  : s.label === "Your Rep" ? "phone"
+                  : s.label === "Service State" ? "shield"
+                  : "grid";
+                return (
+                  <Wrap key={i}>
+                    <div className="relative overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.06)]">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+                          <Icon name={statIcon} className="h-5 w-5" />
+                        </div>
+                        <div className="text-sm font-medium text-[var(--anchor-gray)]">{s.label}</div>
+                      </div>
+                      <div className="mt-4 text-[34px] font-bold leading-none tracking-tight text-[var(--anchor-deep)]">{s.value}</div>
+                      <svg
+                        viewBox="0 0 100 30"
+                        preserveAspectRatio="none"
+                        className="mt-3 h-8 w-full text-[var(--anchor-green)]"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M0 22 L15 14 L30 18 L45 8 L60 12 L75 4 L90 10 L100 6" />
+                      </svg>
+                    </div>
+                  </Wrap>
+                );
+              })}
+            </div>
+
+            {/* Hero + Talk-to-Sales accent */}
+            <div className="mt-5 grid grid-cols-3 gap-5">
+              <div className="relative col-span-2 overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
+                <div className="relative">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
+                    <span className="text-[11px] font-semibold tracking-wide">Update</span>
+                  </div>
+                  <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
+                  <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
+                    {heroTitle}
+                  </div>
+                  <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
+                    {heroLinkLabel}
+                    <Icon name="right" className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+
+              {isExternal ? (
+                <a
+                  href={repReady ? teamsLink : "/dashboard/settings"}
+                  target={repReady ? "_blank" : undefined}
+                  rel={repReady ? "noopener noreferrer" : undefined}
+                  className="group relative block overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--anchor-green)] to-[var(--anchor-deep)] p-6 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]"
+                >
+                  <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10" />
+                  <div className="relative flex h-full flex-col">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/80">{t("talkToSales")}</div>
+                      <Icon name="phone" className="h-5 w-5 text-white/80" />
+                    </div>
+                    <div className="mt-6 text-[26px] font-bold leading-tight">{repFullName || "—"}</div>
+                    <div className="mt-2 text-xs text-white/75">{repSub}</div>
+                    <div className="mt-auto pt-6 text-sm font-medium text-white/90 transition group-hover:text-white">
+                      {repReady ? "Connect via Teams →" : "Set up →"}
+                    </div>
+                  </div>
+                </a>
+              ) : (
+                <Link
+                  href="/admin"
+                  className="group relative block overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--anchor-green)] to-[var(--anchor-deep)] p-6 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]"
+                >
+                  <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10" />
+                  <div className="relative flex h-full flex-col">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/80">Admin</div>
+                      <Icon name="shield" className="h-5 w-5 text-white/80" />
+                    </div>
+                    <div className="mt-6 text-[26px] font-bold leading-tight">Console</div>
+                    <div className="mt-2 text-xs text-white/75">Manage reps, reports, and knowledge.</div>
+                    <div className="mt-auto pt-6 text-sm font-medium text-white/90 transition group-hover:text-white">Open Admin →</div>
+                  </div>
+                </Link>
+              )}
+            </div>
+
+            {/* Quick Actions grid */}
+            <div className="mt-5 rounded-3xl bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+              <h2 className="text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                {actions.map((a) => {
+                  const Inner = (
+                    <div className="flex h-full items-start gap-4 rounded-2xl border border-[var(--surface-soft)] p-4 transition hover:border-[var(--anchor-mint)] hover:bg-[var(--surface-soft)]/40">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+                        <Icon name={a.icon} className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
+                        <div className="mt-1 text-xs text-[var(--anchor-gray)]">{a.desc}</div>
+                      </div>
+                      <Icon name="right" className="mt-1 h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
+                    </div>
+                  );
+                  return a.external ? (
+                    <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="block">{Inner}</a>
+                  ) : (
+                    <Link key={a.key} href={a.href} className="block">{Inner}</Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {booting && (
+              <p className="mt-6 text-center text-xs text-[var(--anchor-gray)]">Loading your workspace…</p>
+            )}
+          </div>
+        </div>
       </div>
     </main>
+  );
+}
+
+function DesktopNavItem({
+  href,
+  icon,
+  label,
+  active = false,
+}: {
+  href: string;
+  icon: IconName;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition " +
+        (active
+          ? "bg-[var(--anchor-green)] text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          : "text-white/75 hover:bg-white/10 hover:text-white")
+      }
+    >
+      <Icon name={icon} className="h-5 w-5" />
+      <span className="truncate">{label}</span>
+    </Link>
   );
 }

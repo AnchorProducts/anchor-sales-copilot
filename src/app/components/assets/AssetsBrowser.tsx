@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Card } from "@/app/components/ui/Card";
@@ -179,6 +180,12 @@ export default function AssetsBrowser() {
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const [isInternalUser, setIsInternalUser] = useState(false);
+
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const initialQ = searchParams.get("q");
+    if (initialQ) setQ(initialQ);
+  }, [searchParams]);
 
   useEffect(() => {
     let alive = true;
