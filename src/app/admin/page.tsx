@@ -50,6 +50,12 @@ const CARDS: AdminCard[] = [
     href: "/admin/rooftop-reports",
   },
   {
+    title: "Notable Projects",
+    description: "Submitted notable installations with photos and brief writeups from external reps.",
+    badge: "Analytics",
+    href: "/admin/notable-projects",
+  },
+  {
     title: "Knowledge",
     description: "Curate Copilot knowledge sources, corrections, and indexed content.",
     badge: "Content",

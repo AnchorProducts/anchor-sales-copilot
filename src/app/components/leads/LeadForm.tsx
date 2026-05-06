@@ -237,7 +237,7 @@ export default function LeadForm() {
 
   function validate() {
     if (!clean(form.customer_company)) return "Customer company is required.";
-    if (!clean(form.details)) return "Opportunity details are required.";
+    if (!clean(form.details)) return "REC details are required.";
     if (!clean(form.project_address)) return "Project address is required.";
     if (!clean(form.city) || !clean(form.state) || !clean(form.zip) || !clean(form.country)) {
       return "Project city, state, zip, and country are required.";
@@ -331,12 +331,12 @@ export default function LeadForm() {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setError(json?.error || "Failed to submit opportunity.");
+        setError(json?.error || "Failed to submit REC.");
         setSubmitting(false);
         return;
       }
 
-      setSuccess("Opportunity submitted. Thanks!");
+      setSuccess("REC submitted. Thanks!");
       setForm({
         customer_company: "",
         details: "",
@@ -355,7 +355,7 @@ export default function LeadForm() {
       setTimelinePos(50);
       setSubmitting(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to submit opportunity.");
+      setError(e?.message || "Failed to submit REC.");
       setSubmitting(false);
     }
   }

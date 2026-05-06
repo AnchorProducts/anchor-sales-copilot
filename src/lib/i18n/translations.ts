@@ -51,8 +51,8 @@ export const translations = {
     rooftopAudit: "Rooftop Equipment Audit",
     rooftopAuditDesc: "OSHA-guided rooftop access & egress safety verification.",
     startAssessment: "Start Assessment",
-    projectIdentifier: "Opportunity Identifier",
-    projectIdentifierDesc: "Send photos and project details directly to inside sales.",
+    projectIdentifier: "Rooftop Equipment Consult",
+    projectIdentifierDesc: "Send photos and REC details directly to inside sales.",
     submitProject: "Submit Project",
     commissionClaim: "Commission Claim",
     commissionClaimDesc: "Submit a commission claim form prior to order shipment.",
@@ -60,6 +60,22 @@ export const translations = {
     profileSettings: "Profile Settings",
     profileSettingsDesc: "Update your info, appearance, and language.",
     openSettings: "Open Settings",
+    notableProject: "Notable Project",
+    notableProjectDesc: "Showcase a finished or notable installation. Snap photos and add a brief writeup.",
+    notableProjectTitle: "Submit Notable Project",
+    notableProjectFormDesc: "Take photos and add details. Inside sales will receive a copy.",
+    projectName: "Project Name *",
+    projectLocation: "Location *",
+    projectDescriptionLabel: "Description *",
+    projectContact: "Contact",
+    projectContactPlaceholder: "Customer or contact info (optional)",
+    takePhotos: "Take Photos",
+    addMorePhotos: "Add More Photos",
+    photosCount: "photos added",
+    removePhoto: "Remove",
+    submitNotableProject: "Submit Project",
+    notableProjectSubmitted: "Project submitted. Thanks!",
+    failedSubmitNotableProject: "Failed to submit project.",
 
     // ── Settings ─────────────────────────────────────────────────────────────
     profileInformation: "Profile Information",
@@ -153,7 +169,7 @@ export const translations = {
     tipStorage: "Tip: Storage listing works without this.",
 
     // ── Lead form ────────────────────────────────────────────────────────────
-    projectIdentifierTitle: "Opportunity Identifier",
+    projectIdentifierTitle: "Rooftop Equipment Consult",
     projectIdentifierFormDesc: "Select solution type(s), add photos/videos for each, and include scheduling availability.",
     submittedBy: "Submitted by",
     yourContactInfo: "Your contact information is pulled from your account. Update it in your profile settings.",
@@ -222,8 +238,8 @@ export const translations = {
     roleExample: "e.g. Roofing contractor, Electrician",
     emailExample: "email@example.com",
     addContractor: "+ Add contractor",
-    submitLead: "Submit opportunity",
-    leadSubmittedThanks: "Opportunity submitted. Thanks!",
+    submitLead: "Submit REC",
+    leadSubmittedThanks: "REC submitted. Thanks!",
 
     // ── Commission form ───────────────────────────────────────────────────────
     commissionClaimFormTitle: "Commission Claim Form",
@@ -271,7 +287,7 @@ export const translations = {
 
     // ── Opportunities new page ────────────────────────────────────────────────
     externalContractors: "External contractors",
-    leadIntake: "Opportunity Intake",
+    leadIntake: "REC",
     shareProjectReqs: "Share project requirements, media, and scheduling details for inside sales review.",
 
     // ── Commission new page ───────────────────────────────────────────────────

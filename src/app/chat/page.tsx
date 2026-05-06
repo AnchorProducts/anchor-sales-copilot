@@ -583,7 +583,7 @@ export default function ChatPage() {
 
                             {m.role === "assistant" && m.docs && m.docs.length > 0 && (
                               <div className="mt-3 border-t border-black/8 pt-3">
-                                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)] sm:text-[11px]">
+                                <div className="ds-caption mb-2">
                                   {t("relatedDocuments")}
                                 </div>
                                 <div className="flex flex-col gap-1.5">
