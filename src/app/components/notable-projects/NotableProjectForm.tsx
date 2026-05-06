@@ -102,38 +102,8 @@ export default function NotableProjectForm() {
         <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("notableProjectFormDesc")}</div>
 
         <div className="mt-5 grid gap-4">
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-black">{t("projectName")}</span>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Northgate Plaza Roof Retrofit" />
-          </label>
-
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-black">{t("projectLocation")}</span>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, state" />
-          </label>
-
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-black">{t("projectDescriptionLabel")}</span>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Scope, products used, anything notable about the install..."
-              rows={5}
-            />
-          </label>
-
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium text-black">{t("projectContact")}</span>
-            <Input
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              placeholder={t("projectContactPlaceholder")}
-            />
-          </label>
-
+          {/* ── Step 1: Photos ─────────────────────────────────────────── */}
           <div className="grid gap-2">
-            <span className="text-sm font-medium text-black">Photos</span>
-
             <input
               ref={fileInputRef}
               type="file"
@@ -150,48 +120,89 @@ export default function NotableProjectForm() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-12 items-center justify-center gap-2 rounded-[14px] border-2 border-dashed border-[var(--anchor-green)] bg-[var(--surface-soft)] text-sm font-semibold text-[var(--anchor-green)] transition hover:bg-white"
+              className="flex h-40 w-full flex-col items-center justify-center gap-3 rounded-[16px] border-2 border-dashed border-[var(--anchor-green)] bg-[var(--surface-soft)] text-base font-semibold text-[var(--anchor-green)] transition hover:bg-white"
             >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                 <circle cx="12" cy="13" r="4" />
               </svg>
-              {photos.length === 0 ? t("takePhotos") : t("addMorePhotos")}
+              <span>{photos.length === 0 ? t("takePhotos") : t("addMorePhotos")}</span>
+              {photos.length > 0 && (
+                <span className="text-xs font-normal text-[var(--anchor-gray)]">
+                  {photos.length} {t("photosCount")}
+                </span>
+              )}
             </button>
 
             {photos.length > 0 && (
-              <>
-                <div className="text-xs text-[var(--anchor-gray)]">
-                  {photos.length} {t("photosCount")}
-                </div>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {photos.map((p) => (
-                    <div key={p.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-black/10">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.previewUrl} alt="" className="h-full w-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(p.id)}
-                        aria-label={t("removePhoto")}
-                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-xs font-bold text-white"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {photos.map((p) => (
+                  <div key={p.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-black/10">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.previewUrl} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(p.id)}
+                      aria-label={t("removePhoto")}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-xs font-bold text-white"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
+
+          {/* ── Step 2: Project details ────────────────────────────────── */}
+          {photos.length > 0 && (
+            <>
+              <div className="mt-2 border-t border-black/5 pt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--anchor-gray)]">Step 2</div>
+                <div className="text-sm font-semibold text-black">Tell us about the project</div>
+              </div>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-black">{t("projectName")}</span>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Northgate Plaza Roof Retrofit" />
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-black">{t("projectLocation")}</span>
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, state" />
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-black">{t("projectDescriptionLabel")}</span>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Scope, products used, anything notable about the install..."
+                  rows={5}
+                />
+              </label>
+
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium text-black">{t("projectContact")}</span>
+                <Input
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  placeholder={t("projectContactPlaceholder")}
+                />
+              </label>
+            </>
+          )}
 
           {error && <Alert tone="error">{error}</Alert>}
           {success && <Alert tone="success">{success}</Alert>}
 
-          <div className="mt-2 flex justify-end">
-            <Button type="submit" disabled={submitting}>
-              {submitting ? t("submitting") : t("submitNotableProject")}
-            </Button>
-          </div>
+          {photos.length > 0 && (
+            <div className="mt-2 flex justify-end">
+              <Button type="submit" disabled={submitting}>
+                {submitting ? t("submitting") : t("submitNotableProject")}
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
     </form>

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type SearchProductRow = {
@@ -91,12 +90,6 @@ export default function DashboardPage() {
   const suggestLoadingRef = useRef(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRefDesktop = useRef<HTMLDivElement | null>(null);
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.replace("/");
-    router.refresh();
-  }
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
@@ -216,7 +209,7 @@ export default function DashboardPage() {
     ? "Admin pulse — view activity & assessments"
     : isInternal
     ? "Internal tools ready — copilot & assets"
-    : "Open Copilot to spec your next project"
+    : "Open Copilot for advice on your next project"
   ;
   const heroLink = isAdmin ? "/admin" : "/chat";
   const heroLinkLabel = isAdmin ? "See Admin" : "Open Copilot";
@@ -229,19 +222,19 @@ export default function DashboardPage() {
 
   // Stat cards: contextual to role, always 2 up
   const stat1 = isAdmin
-    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps" }
+    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "shield" as IconName }
     : isInternal
-    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets" }
-    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings" };
+    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName }
+    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || undefined };
 
   const stat2 = isAdmin
-    ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports" }
+    ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName }
     : isInternal
-    ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat" }
-    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link };
+    ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName }
+    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link, icon: "phone" as IconName };
 
   const stat3 = isExternal
-    ? { label: t("notableProject"), value: "Submit", trend: "", href: "/dashboard/notable-projects/new" }
+    ? { label: t("notableProject"), value: "Submit", trend: "", href: "/dashboard/notable-projects/new", icon: "camera" as IconName }
     : null;
 
   const stats = stat3 ? [stat1, stat2, stat3] : [stat1, stat2];
@@ -331,12 +324,9 @@ export default function DashboardPage() {
         : `${t("talkToSalesWith")} ${repFullName}`;
 
   return (
+    <>
     <main className="ds-page">
-      <div className="lg:hidden">
-        <AppNavbar title="Anchor Sales Co-Pilot" subtitle="Dashboard" menuItems={[]} />
-      </div>
-
-      <div className="mx-auto w-full max-w-2xl px-4 py-5 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-8 lg:hidden">
+      <div className="mx-auto w-full max-w-2xl px-4 py-5 sm:px-6 sm:py-8 lg:hidden">
         {/* ── Greeting ───────────────────────────────────────────────────── */}
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -432,30 +422,30 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Stat cards (2-up or 3-up on mobile, vertical sidebar on lg) ── */}
-        <div className={`grid lg:col-start-3 lg:row-start-1 lg:row-span-2 lg:grid-cols-1 lg:gap-4 ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
+        {/* ── Stat icon buttons ──────────────────────────────────────────── */}
+        <div className={`grid ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
           {stats.map((s, i) => {
             const isExt = "external" in s && (s as { external?: boolean }).external;
             const Wrap = isExt
               ? ({ children }: { children: React.ReactNode }) => (
-                  <a href={s.href} target="_blank" rel="noopener noreferrer" className="block">
+                  <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">
                     {children}
                   </a>
                 )
               : ({ children }: { children: React.ReactNode }) => (
-                  <Link href={s.href} className="block">{children}</Link>
+                  <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
                 );
+            const sText = "text" in s ? (s as { text?: string }).text : undefined;
             return (
               <Wrap key={i}>
-                <div className="rounded-3xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.06)]">
-                  <div className="flex items-start justify-between">
-                    <div className="text-xs font-medium text-[var(--anchor-gray)]">{s.label}</div>
-                    <Icon name="more" className="h-4 w-4 text-[var(--anchor-gray)]" />
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1 leading-none text-[var(--anchor-deep)]">
-                    <span className="text-[30px] font-bold tracking-tight">{s.value}</span>
-                  </div>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)]">
+                  {sText ? (
+                    <span className="text-[20px] font-bold tracking-tight">{sText}</span>
+                  ) : (
+                    <Icon name={s.icon} className="h-7 w-7" />
+                  )}
                 </div>
+                <div className="text-center text-[11px] font-medium text-[var(--anchor-deep)] sm:text-xs">{s.label}</div>
               </Wrap>
             );
           })}
@@ -503,56 +493,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ───────────────────────────────────────────────────────────────────
-          Desktop layout (≥ lg)
+          Desktop layout (≥ lg) — sidebar is rendered globally in root layout
          ─────────────────────────────────────────────────────────────────── */}
-      <div className="hidden min-h-dvh w-full bg-[var(--surface-soft)] lg:flex">
-        {/* Sidebar */}
-        <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col bg-[var(--anchor-deep)] px-4 py-6 text-white">
-          <Link href="/dashboard/settings" className="flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-sm font-bold text-[var(--anchor-deep)]">
-              {initials(fullName || "")}
-            </div>
-            <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-bold">{fullName || "User"}</div>
-              <div className="text-[11px] text-white/60">
-                {isAdmin ? "Admin" : isInternal ? "Anchor Rep" : isExternal ? "External Rep" : ""}
-              </div>
-            </div>
-          </Link>
-
-          <nav className="mt-8 flex flex-1 flex-col gap-1">
-            <DesktopNavItem href="/dashboard" icon="grid" label={t("dashboard")} active />
-            <DesktopNavItem href="/chat" icon="sparkles" label={t("openCopilot")} />
-            <DesktopNavItem href="/assets" icon="library" label={t("assetManagement")} />
-            {roleReady && isExternal && (
-              <>
-                <DesktopNavItem href="/dashboard/opportunities/new" icon="clipboard" label={t("projectIdentifier")} />
-                <DesktopNavItem href="/dashboard/notable-projects/new" icon="camera" label={t("notableProject")} />
-                <DesktopNavItem href="/dashboard/commission/new" icon="wallet" label={t("commissionClaim")} />
-              </>
-            )}
-            {roleReady && isAdmin && (
-              <>
-                <DesktopNavItem href="/admin" icon="shield" label="Admin" />
-                <DesktopNavItem href="/admin/rooftop-reports" icon="clipboard" label="Reports" />
-              </>
-            )}
-          </nav>
-
-          <div className="space-y-1">
-            <DesktopNavItem href="/dashboard/settings" icon="settings" label={t("settings")} />
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              <Icon name="logout" className="h-5 w-5" />
-              {t("signOut")}
-            </button>
-          </div>
-        </aside>
-
-        {/* Main */}
+      <div className="hidden lg:block">
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Topbar */}
           <header className="flex items-center justify-between gap-6 px-8 py-6">
@@ -610,107 +553,50 @@ export default function DashboardPage() {
 
           {/* Content */}
           <div className="flex-1 px-8 pb-12">
-            {/* Stat cards row */}
-            <div className={`grid gap-5 ${stats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+            {/* Stat icon buttons */}
+            <div className="flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
                 const Wrap = isExt
                   ? ({ children }: { children: React.ReactNode }) => (
-                      <a href={s.href} target="_blank" rel="noopener noreferrer" className="block">{children}</a>
+                      <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</a>
                     )
                   : ({ children }: { children: React.ReactNode }) => (
-                      <Link href={s.href} className="block">{children}</Link>
+                      <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
                     );
-                const statIcon: IconName =
-                  s.label === t("notableProject") ? "camera"
-                  : s.label === "Your Rep" ? "phone"
-                  : s.label === "Service State" ? "shield"
-                  : "grid";
+                const sText = "text" in s ? (s as { text?: string }).text : undefined;
                 return (
                   <Wrap key={i}>
-                    <div className="relative overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.06)]">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
-                          <Icon name={statIcon} className="h-5 w-5" />
-                        </div>
-                        <div className="text-sm font-medium text-[var(--anchor-gray)]">{s.label}</div>
-                      </div>
-                      <div className="mt-4 text-[34px] font-bold leading-none tracking-tight text-[var(--anchor-deep)]">{s.value}</div>
-                      <svg
-                        viewBox="0 0 100 30"
-                        preserveAspectRatio="none"
-                        className="mt-3 h-8 w-full text-[var(--anchor-green)]"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M0 22 L15 14 L30 18 L45 8 L60 12 L75 4 L90 10 L100 6" />
-                      </svg>
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]">
+                      {sText ? (
+                        <span className="text-2xl font-bold tracking-tight">{sText}</span>
+                      ) : (
+                        <Icon name={s.icon} className="h-8 w-8" />
+                      )}
                     </div>
+                    <div className="text-sm font-medium text-[var(--anchor-deep)]">{s.label}</div>
                   </Wrap>
                 );
               })}
             </div>
 
-            {/* Hero + Talk-to-Sales accent */}
-            <div className="mt-5 grid grid-cols-3 gap-5">
-              <div className="relative col-span-2 overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
-                <div className="relative">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
-                    <span className="text-[11px] font-semibold tracking-wide">Update</span>
-                  </div>
-                  <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
-                  <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
-                    {heroTitle}
-                  </div>
-                  <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
-                    {heroLinkLabel}
-                    <Icon name="right" className="h-4 w-4" />
-                  </Link>
+            {/* Hero */}
+            <div className="relative mt-5 overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
+                  <span className="text-[11px] font-semibold tracking-wide">Update</span>
                 </div>
-              </div>
-
-              {isExternal ? (
-                <a
-                  href={repReady ? teamsLink : "/dashboard/settings"}
-                  target={repReady ? "_blank" : undefined}
-                  rel={repReady ? "noopener noreferrer" : undefined}
-                  className="group relative block overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--anchor-green)] to-[var(--anchor-deep)] p-6 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]"
-                >
-                  <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10" />
-                  <div className="relative flex h-full flex-col">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/80">{t("talkToSales")}</div>
-                      <Icon name="phone" className="h-5 w-5 text-white/80" />
-                    </div>
-                    <div className="mt-6 text-[26px] font-bold leading-tight">{repFullName || "—"}</div>
-                    <div className="mt-2 text-xs text-white/75">{repSub}</div>
-                    <div className="mt-auto pt-6 text-sm font-medium text-white/90 transition group-hover:text-white">
-                      {repReady ? "Connect via Teams →" : "Set up →"}
-                    </div>
-                  </div>
-                </a>
-              ) : (
-                <Link
-                  href="/admin"
-                  className="group relative block overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--anchor-green)] to-[var(--anchor-deep)] p-6 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]"
-                >
-                  <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10" />
-                  <div className="relative flex h-full flex-col">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/80">Admin</div>
-                      <Icon name="shield" className="h-5 w-5 text-white/80" />
-                    </div>
-                    <div className="mt-6 text-[26px] font-bold leading-tight">Console</div>
-                    <div className="mt-2 text-xs text-white/75">Manage reps, reports, and knowledge.</div>
-                    <div className="mt-auto pt-6 text-sm font-medium text-white/90 transition group-hover:text-white">Open Admin →</div>
-                  </div>
+                <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
+                <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
+                  {heroTitle}
+                </div>
+                <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
+                  {heroLinkLabel}
+                  <Icon name="right" className="h-4 w-4" />
                 </Link>
-              )}
+              </div>
             </div>
 
             {/* Quick Actions grid */}
@@ -745,33 +631,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
     </main>
+    </>
   );
 }
 
-function DesktopNavItem({
-  href,
-  icon,
-  label,
-  active = false,
-}: {
-  href: string;
-  icon: IconName;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition " +
-        (active
-          ? "bg-[var(--anchor-green)] text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-          : "text-white/75 hover:bg-white/10 hover:text-white")
-      }
-    >
-      <Icon name={icon} className="h-5 w-5" />
-      <span className="truncate">{label}</span>
-    </Link>
-  );
-}

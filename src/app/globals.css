@@ -130,6 +130,17 @@ h2,
   min-height: 100dvh;
   background: transparent;
   color: var(--text-primary);
+  /* Clear space on mobile so the floating bottom nav (~80px) doesn't cover content */
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  /* No bottom nav on desktop; fixed sidebar is 16rem wide, so shift content right */
+  .ds-page {
+    padding-bottom: 0;
+    padding-left: 16rem;
+    background: var(--surface-soft);
+  }
 }
 
 .ds-container {
