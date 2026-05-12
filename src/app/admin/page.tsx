@@ -61,6 +61,12 @@ const CARDS: AdminCard[] = [
     badge: "Content",
     href: "/admin/knowledge",
   },
+  {
+    title: "Asset Reviews",
+    description: "Approve or reject photos submitted by internal reps for solution tackle boxes.",
+    badge: "Content",
+    href: "/admin/asset-reviews",
+  },
 ];
 
 export default function AdminHubPage() {

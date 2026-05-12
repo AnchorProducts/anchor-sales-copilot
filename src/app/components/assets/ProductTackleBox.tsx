@@ -755,15 +755,25 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     setUploadingImages(true);
     setImageUploadMsg(null);
 
-    const prefix = storagePrefix || prefixCandidatesForProduct(product)[0] || `solutions/${slugifyName(product.name)}`;
-
     const fd = new FormData();
-    fd.append("prefix", normalizePrefix(prefix));
     for (const file of imageFiles) fd.append("files", file);
 
+    // Admins upload directly to the live folder. Non-admin internal users
+    // (anchor_rep) submit for admin review instead.
+    let endpoint = "";
+    if (isAdmin) {
+      const prefix = storagePrefix || prefixCandidatesForProduct(product)[0] || `solutions/${slugifyName(product.name)}`;
+      fd.append("prefix", normalizePrefix(prefix));
+      endpoint = "/api/assets/upload-images";
+    } else {
+      fd.append("productId", productId);
+      endpoint = "/api/internal/asset-reviews/upload";
+    }
+
     try {
-      const res = await fetch("/api/assets/upload-images", {
+      const res = await fetch(endpoint, {
         method: "POST",
+        credentials: "include",
         body: fd,
       });
       const json = await res.json().catch(() => ({}));
@@ -779,15 +789,16 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         : [];
 
       const successCount = imageFiles.length - failed.length;
+      const noun = isAdmin ? "uploaded" : "submitted for admin review";
 
       if (failed.length) {
         setImageUploadMsg(
-          `${successCount} uploaded. Failed: ${failed.map((f) => `${f.name} (${f.error})`).join("; ")}`
+          `${successCount} ${noun}. Failed: ${failed.map((f) => `${f.name} (${f.error})`).join("; ")}`
         );
       } else {
-        setImageUploadMsg(`${successCount} image${successCount !== 1 ? "s" : ""} uploaded.`);
+        setImageUploadMsg(`${successCount} image${successCount !== 1 ? "s" : ""} ${noun}.`);
         setImageFiles([]);
-        await load();
+        if (isAdmin) await load();
       }
     } catch (e: any) {
       setImageUploadMsg(e?.message || "Upload failed.");
@@ -1100,11 +1111,19 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
             })()}
           </div>{/* end tab content */}
 
-          {/* Image upload — visible to all internal users */}
+          {/* Image upload — visible to all internal users.
+              Admin uploads publish directly; anchor_rep uploads go to the
+              admin review queue. External users see no upload UI. */}
           {isInternalUser && (
             <div className="mt-4 rounded-3xl border border-black/10 bg-white p-5">
-              <div className="text-sm font-semibold text-black">{t("uploadProductImages")}</div>
-              <div className="mt-1 text-[12px] text-[#76777B]">{t("imagesUploadNote")}</div>
+              <div className="text-sm font-semibold text-black">
+                {isAdmin ? t("uploadProductImages") : "Submit photos for review"}
+              </div>
+              <div className="mt-1 text-[12px] text-[#76777B]">
+                {isAdmin
+                  ? t("imagesUploadNote")
+                  : "Photos go to an admin queue for review. Once approved, they appear on this tackle box."}
+              </div>
 
               <label className="mt-4 block cursor-pointer">
                 <input
@@ -1165,8 +1184,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   style={{ backgroundColor: "#047835" }}
                 >
                   {uploadingImages
-                    ? "Uploading…"
-                    : `${t("uploadProductImages")} (${imageFiles.length})`}
+                    ? isAdmin ? "Uploading…" : "Submitting…"
+                    : isAdmin
+                      ? `${t("uploadProductImages")} (${imageFiles.length})`
+                      : `Submit for review (${imageFiles.length})`}
                 </button>
               )}
 
