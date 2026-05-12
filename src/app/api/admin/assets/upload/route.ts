@@ -24,6 +24,16 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   other: "",
 };
 
+// Categories whose filenames should be fully replaced (not prefixed) so each
+// product has exactly one canonical file per sheet type. Combined with the
+// `upsert: true` storage upload below, re-uploading replaces the existing one.
+// Extension is preserved from the source file.
+const CATEGORY_FIXED_BASENAME: Record<string, string> = {
+  sales_sheet: "Sales-Sheet",
+  data_sheet: "Data-Sheet",
+  install_sheet: "Install-Sheet",
+};
+
 function normalizePrefix(p: string) {
   return String(p || "").trim().replace(/^\/+|\/+$/g, "");
 }
@@ -108,12 +118,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing file" }, { status: 400 });
     }
 
-    const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
     const baseName = sanitizeFilename(file.name);
-    const alreadyTagged =
-      categoryPrefix &&
-      baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
-    const finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
+
+    let finalName: string;
+    const fixedBase = CATEGORY_FIXED_BASENAME[category];
+    if (fixedBase) {
+      const dot = baseName.lastIndexOf(".");
+      const ext = dot > 0 ? baseName.slice(dot) : "";
+      finalName = `${fixedBase}${ext}`;
+    } else {
+      const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
+      const alreadyTagged =
+        categoryPrefix &&
+        baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
+      finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
+    }
 
     const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
     const path = `${folder}/${finalName}`;
