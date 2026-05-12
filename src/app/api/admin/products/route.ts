@@ -27,6 +27,13 @@ function clean(v: any) {
 }
 
 export async function POST(req: Request) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — admin inserts cannot bypass RLS." },
+      { status: 500 }
+    );
+  }
+
   const gate = await requireAdmin();
   if ("error" in gate) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
