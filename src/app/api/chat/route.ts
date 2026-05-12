@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { resolveCanonicalSolution } from "@/lib/solutions/resolveCanonicalSolution";
 import { CANONICAL_SOLUTIONS, type CanonicalSolution } from "@/lib/solutions/canonicalSolutions";
+import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 import { maybeExtractKnowledge, maybeSummarizeSession, writeChatMessage } from "@/lib/learning/loops";
@@ -45,6 +46,37 @@ const FALLBACK_MODEL = process.env.OPENAI_FALLBACK_MODEL || "gpt-4.1-mini";
 
 function anchorContact() {
   return "Contact Anchor Products at (888) 575-2131 or visit anchorp.com.";
+}
+
+// Distinctive tokens that signal a user is asking about a coming-soon solution.
+// Derived from the SOLUTION_CATALOG coming-soon labels — kept narrow so we don't
+// accidentally suppress docs for adjacent live solutions.
+const COMING_SOON_TOKENS: string[] = [
+  // Rooftop Solar — all coming soon
+  "panel claw", "unirac", "kb racking", "aerocompact", "pegasus", "sollega",
+  "iron ridge", "ironridge", "skyrack", "sky rack", "slip sheet",
+  // Equipment Screen
+  "u-screen", "u screen",
+  // Safety & Access
+  "travel restraint", "guardrail panel", "fixfast", "fix fast", "crossover",
+  // Snow Retention coming-soon variants
+  "snow cleat", "snow retention system",
+  // Lightning Protection
+  "lightning arrester", "lightning arrestor", "lightning cable",
+  // Security/Monitoring/Communication
+  "radio tower", "antenna guy wire", "non penetrating", "non-penetrating",
+  // H-Frame coming-soon
+  "corridor support", "rigid knee", "knee bracing",
+  // Pipe utility corridor
+  "utility corridor",
+  // Mechanical support coming-soon
+  "mechanical support",
+];
+
+function isComingSoonQuery(text: string): boolean {
+  const t = String(text || "").toLowerCase();
+  if (!t.trim()) return false;
+  return COMING_SOON_TOKENS.some((tok) => t.includes(tok));
 }
 
 // ─── Storage doc fetcher ──────────────────────────────────────────────────────
@@ -584,6 +616,21 @@ Lightning Protection
 - Securing: lightning
 
 --------------------------------------------------
+COMING-SOON SOLUTIONS — HIGH-LEVEL ONLY
+--------------------------------------------------
+
+The following solutions are currently in active development. Materials, specs, install guides, and pricing are NOT yet available. If a user asks about one of these:
+- Acknowledge it warmly and confirm it's part of Anchor Products' offering.
+- Give ONE short, high-level sentence describing what it is or what it secures — nothing more.
+- Do NOT recommend specific anchor series, do NOT describe assemblies, components, or installation, and do NOT pull from documents for it.
+- Always close with: "This solution is coming soon — for early access details, ${anchorContact()}"
+
+COMING-SOON LIST:
+${SOLUTION_CATALOG.filter((s) => s.comingSoon)
+  .map((s) => `- ${s.label}`)
+  .join("\n")}
+
+--------------------------------------------------
 FINAL BEHAVIOR
 --------------------------------------------------
 
@@ -592,6 +639,7 @@ FINAL BEHAVIOR
 - If “pipe” is mentioned without context, ask whether it runs horizontally or vertically before recommending.
 - Recognize multiple names for the same solution.
 - Always keep responses aligned with Anchor Products’ real-world practices and product families.
+- If the user asks about a coming-soon solution (from the list above), follow the "COMING-SOON SOLUTIONS" rule strictly — high-level only, no detail.
 
 `.trim();
 
@@ -843,7 +891,8 @@ export async function POST(req: Request) {
     // AI names a solution the user didn't spell out explicitly.
     const combinedText = `${intentText}\n${answer}`;
     const folderHint = preFolder || resolveCanonicalSolution(combinedText) || undefined;
-    const recommendedDocs = folderHint ? await fetchDocsForFolder(folderHint) : [];
+    const comingSoonHit = isComingSoonQuery(intentText) || isComingSoonQuery(combinedText);
+    const recommendedDocs = folderHint && !comingSoonHit ? await fetchDocsForFolder(folderHint) : [];
 
     return NextResponse.json({
       answer,

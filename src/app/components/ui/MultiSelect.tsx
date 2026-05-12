@@ -3,17 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/app/components/ui/cn";
 
+type Section = { heading: string; options: string[]; comingSoon?: boolean };
+
 type Props = {
   options: string[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
   className?: string;
+  sections?: Section[];
 };
 
-export function MultiSelect({ options, value, onChange, placeholder = "Select…", className }: Props) {
+export function MultiSelect({ options, value, onChange, placeholder = "Select…", className, sections }: Props) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const ref = useRef<HTMLDivElement>(null);
+
+  function toggleSection(heading: string) {
+    setExpanded((prev) => ({ ...prev, [heading]: !prev[heading] }));
+  }
 
   // Close on outside click (desktop)
   useEffect(() => {
@@ -92,20 +100,65 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
 
             {/* Options list */}
             <div className="max-h-[55vh] overflow-y-auto sm:max-h-64">
-              {options.map((opt) => (
-                <label
-                  key={opt}
-                  className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--surface-soft)] sm:px-3 sm:py-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={value.includes(opt)}
-                    onChange={() => toggle(opt)}
-                    className="h-4 w-4 shrink-0"
-                  />
-                  <span>{opt}</span>
-                </label>
-              ))}
+              {sections && sections.length > 0
+                ? sections.map((section) => {
+                    const selectedCount = section.options.filter((o) => value.includes(o)).length;
+                    const isOpen = expanded[section.heading] ?? false;
+                    return (
+                      <div key={section.heading} className="border-b border-black/5 last:border-b-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(section.heading)}
+                          className="flex w-full items-center justify-between gap-2 bg-[var(--surface-soft)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)] hover:bg-[var(--surface-soft)]/80 sm:px-3 sm:py-2"
+                          aria-expanded={isOpen}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <span className="truncate">{section.heading}</span>
+                            {section.comingSoon && (
+                              <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-black/50">
+                                Coming soon
+                              </span>
+                            )}
+                            {selectedCount > 0 && (
+                              <span className="inline-flex items-center rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
+                                {selectedCount}
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-black/40">{isOpen ? "▴" : "▾"}</span>
+                        </button>
+                        {isOpen &&
+                          section.options.map((opt) => (
+                            <label
+                              key={opt}
+                              className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--surface-soft)] sm:px-3 sm:py-2"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={value.includes(opt)}
+                                onChange={() => toggle(opt)}
+                                className="h-4 w-4 shrink-0"
+                              />
+                              <span>{opt}</span>
+                            </label>
+                          ))}
+                      </div>
+                    );
+                  })
+                : options.map((opt) => (
+                    <label
+                      key={opt}
+                      className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--surface-soft)] sm:px-3 sm:py-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={value.includes(opt)}
+                        onChange={() => toggle(opt)}
+                        className="h-4 w-4 shrink-0"
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  ))}
             </div>
           </div>
         </>
