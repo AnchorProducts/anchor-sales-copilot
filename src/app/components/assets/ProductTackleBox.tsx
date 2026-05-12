@@ -608,11 +608,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  // Storage first, then DB extras
+  // Storage first; DB rows override so admin-edited titles win.
   const assets = useMemo(() => {
     const byPath = new Map<string, AssetRow>();
     for (const s of storageAssets) byPath.set(s.path, s);
-    for (const d of dbAssets) if (!byPath.has(d.path)) byPath.set(d.path, d);
+    for (const d of dbAssets) byPath.set(d.path, d);
     return Array.from(byPath.values());
   }, [storageAssets, dbAssets]);
 
@@ -713,6 +713,37 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     } catch {
       setFormMsg("Couldn’t share or copy link.");
       setTimeout(() => setFormMsg(null), 1500);
+    }
+  }
+
+  async function renameAsset(a: AssetRow) {
+    const current = a.title || basename(a.path);
+    const next = window.prompt("Rename asset", current);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === current) return;
+    try {
+      const res = await fetch("/api/admin/assets/rename", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: a.id,
+          path: a.path,
+          productId,
+          title: trimmed,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFormMsg(json?.error || "Rename failed.");
+        setTimeout(() => setFormMsg(null), 2500);
+        return;
+      }
+      await load();
+    } catch (err: any) {
+      setFormMsg(err?.message || "Rename failed.");
+      setTimeout(() => setFormMsg(null), 2500);
     }
   }
 
@@ -977,6 +1008,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 {t("save")}
                               </button>
                             </div>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => renameAsset(a)}
+                                className="mt-1.5 w-full rounded-lg border border-dashed border-black/15 py-1 text-[11px] font-semibold text-black/60 hover:bg-black/[0.03]"
+                              >
+                                Rename
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1034,6 +1074,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 >
                                   Download
                                 </button>
+                                {isAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => renameAsset(a)}
+                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-[12px] font-semibold text-black/60 whitespace-nowrap hover:bg-black/[0.03]"
+                                  >
+                                    Rename
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
