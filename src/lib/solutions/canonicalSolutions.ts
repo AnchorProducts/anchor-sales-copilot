@@ -255,7 +255,7 @@ export function formatSheetRecommendations(sol: CanonicalSolution, state: Intake
         }
       })
       .join("\n"),
-    `Grab these in **Asset Management** (folder: ${sol.storageFolder || sol.securing}).`,
+    `Grab these in the **Resource Library** (folder: ${sol.storageFolder || sol.securing}).`,
   ].join("\n");
 }
 
