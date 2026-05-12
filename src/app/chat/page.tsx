@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
@@ -678,8 +679,9 @@ export default function ChatPage() {
               </div>
 
               {/* ── Composer ─────────────────────────────────────────────── */}
-              <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)]"
-                style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}>
+              {/* Desktop keeps the safe-area inset; on mobile the bottom nav
+                  below handles the home-indicator padding instead. */}
+              <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)] sm:[padding-bottom:max(env(safe-area-inset-bottom),0px)]">
                 <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
                   <Input
                     className="min-w-0 flex-1 px-3 py-2.5 text-[15px] sm:py-3 sm:text-sm disabled:opacity-60"
@@ -711,6 +713,52 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Mobile-only bottom menu ─────────────────────────────────────────
+          Small, fixed to the very bottom of the viewport so it doesn't
+          take vertical space from the chat content above. Icon-only. */}
+      <nav
+        className="sm:hidden shrink-0 border-t border-black/10 bg-white"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
+        aria-label="Chat menu"
+      >
+        <div className="flex h-11 items-stretch justify-around">
+          <button
+            type="button"
+            onClick={newChat}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
+            aria-label={t("newChat")}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+            <span>New</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
+            aria-label={t("chatHistory")}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6h18M3 18h12" /></svg>
+            <span>History</span>
+          </button>
+          <Link
+            href="/dashboard"
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
+            aria-label={t("dashboard")}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /></svg>
+            <span>Home</span>
+          </Link>
+          <Link
+            href="/dashboard/settings"
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
+            aria-label="Settings"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            <span>Settings</span>
+          </Link>
+        </div>
+      </nav>
     </main>
   );
 }
