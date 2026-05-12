@@ -36,6 +36,13 @@ function sanitizeFilename(name: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — admin uploads cannot bypass RLS." },
+        { status: 500 }
+      );
+    }
+
     const supabase = await supabaseRoute();
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) {
