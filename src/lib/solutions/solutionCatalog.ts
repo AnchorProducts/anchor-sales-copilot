@@ -162,3 +162,144 @@ export function groupSolutionsByCategory(
     items: solutions.filter((s) => s.category === category.key),
   })).filter((g) => g.items.length > 0);
 }
+
+// ─── Chatbot helpers ──────────────────────────────────────────────────────────
+
+const STOP_TOKENS = new Set([
+  "the", "a", "an", "and", "or", "for", "with", "of", "in", "on",
+  "to", "from", "by", "at", "is", "as", "be", "u-anchor", "u", "anchor",
+  "series", "system", "kit", "frame", "support", "supports", "securement",
+  "mount", "assembly", "base", "panel", "rail", "set", "kits", "products",
+  "products.",
+]);
+
+const TOKEN_RE = /[a-z0-9]+/g;
+
+function tokens(s: string): string[] {
+  return (s.toLowerCase().match(TOKEN_RE) || []).filter(
+    (t) => t.length > 2 && !STOP_TOKENS.has(t)
+  );
+}
+
+// Distinctive multi-word phrases (in priority order) that uniquely identify
+// a catalog item — kept here so both the resolver and the chatbot can reuse
+// them without duplicating heuristics.
+function distinctivePhrases(item: CatalogSolution): string[] {
+  const phrases: string[] = [];
+  const label = item.label.toLowerCase();
+
+  // 1) PSS product codes (e.g. "pss 0320") are unambiguous.
+  const pss = label.match(/pss\s*\d{3,4}/);
+  if (pss) phrases.push(pss[0].replace(/\s+/g, " ").trim());
+
+  // 2) Standard H-Frame size + series ("24" x 24"", "36 x 48", etc.)
+  const dim = label.match(/(\d{1,3})\s*["']?\s*x\s*(\d{1,3})\s*["']?/);
+  if (dim) phrases.push(`${dim[1]} x ${dim[2]}`);
+
+  // 3) "8' Snow Retention Kit" → "8 snow retention" or distinctive prefix
+  if (/8['′]\s*snow\s*retention/i.test(item.label)) phrases.push("8 snow retention");
+  if (/snow\s*cleat/i.test(item.label)) phrases.push("snow cleat");
+
+  // 4) Solar brand mounts — brand alone is distinctive enough
+  const solarBrands = [
+    "panel claw", "kb racking", "aerocompact", "pegasus", "sollega",
+    "iron ridge", "ironridge", "skyrack", "sky rack", "slip sheet",
+  ];
+  for (const b of solarBrands) {
+    if (label.includes(b)) phrases.push(b);
+  }
+  if (/\bunirac\b/.test(label)) phrases.push("unirac");
+
+  // 5) Categories with distinctive shapes
+  if (/\bcamera\b.*mounting\s*plate/i.test(item.label)) phrases.push("camera mounting plate");
+  if (/satellite\s*dish/i.test(item.label)) phrases.push("satellite dish");
+  if (/radio\s*tower/i.test(item.label)) phrases.push("radio tower");
+  if (/weather\s*station/i.test(item.label)) phrases.push("weather station");
+  if (/lightning\s*(arrester|arrestor)/i.test(item.label)) phrases.push("lightning arrester");
+  if (/lightning\s*cable/i.test(item.label)) phrases.push("lightning cable");
+  if (/travel\s*restraint/i.test(item.label)) phrases.push("travel restraint");
+  if (/guardrail\s*panel/i.test(item.label)) phrases.push("guardrail panel");
+  if (/fixfast/i.test(item.label)) phrases.push("fixfast");
+  if (/utility\s*corridor/i.test(item.label)) phrases.push("utility corridor");
+  if (/corridor\s*support/i.test(item.label)) phrases.push("corridor support");
+  if (/rigid\s*knee/i.test(item.label)) phrases.push("rigid knee");
+  if (/pipe\s*hanger/i.test(item.label)) phrases.push("pipe hanger");
+  if (/duct\s*frame/i.test(item.label)) phrases.push("duct frame");
+  if (/electrical\s*box\s*frame/i.test(item.label)) {
+    // small/medium/large
+    const m = item.label.match(/^(small|medium|large)/i);
+    if (m) phrases.push(`${m[1].toLowerCase()} electrical box`);
+  }
+  if (/mechanical\s*tie\s*down/i.test(item.label)) phrases.push("mechanical tie down");
+  if (/mechanical\s*support/i.test(item.label)) phrases.push("mechanical support");
+  if (/u-screen/i.test(item.label)) phrases.push("u-screen");
+  if (/wall\s*mounted\s*guardrail/i.test(item.label)) phrases.push("wall mounted guardrail");
+  if (/tower.*non\s*penetrating/i.test(item.label)) phrases.push("non penetrating");
+  if (/tower\/stack|tower\s*\/\s*stack/i.test(item.label)) phrases.push("tower stack");
+  if (/weather\/?stand/i.test(item.label)) phrases.push("weather stand");
+
+  return Array.from(new Set(phrases.map((p) => p.toLowerCase())));
+}
+
+// Returns the catalog item that best matches the given user text, or undefined.
+// Uses distinctive multi-word phrases first; falls back to scoring overlap of
+// remaining tokens against item labels for ambiguous queries.
+export function findCatalogMatch(text: string): CatalogSolution | undefined {
+  const raw = String(text || "").toLowerCase();
+  if (!raw.trim()) return undefined;
+
+  // Phase 1: distinctive-phrase match (highest signal).
+  for (const item of SOLUTION_CATALOG) {
+    const phrases = distinctivePhrases(item);
+    for (const p of phrases) {
+      if (raw.includes(p)) return item;
+    }
+  }
+
+  // Phase 2: token overlap scoring. Only consider items that share >= 2
+  // non-stop tokens with the query. Picks the highest-overlap item.
+  const queryTokens = new Set(tokens(raw));
+  if (queryTokens.size < 2) return undefined;
+
+  let best: { item: CatalogSolution; score: number } | undefined;
+  for (const item of SOLUTION_CATALOG) {
+    const labelTokens = tokens(item.label);
+    if (!labelTokens.length) continue;
+    let score = 0;
+    for (const t of labelTokens) if (queryTokens.has(t)) score++;
+    if (score >= 2 && (!best || score > best.score)) {
+      best = { item, score };
+    }
+  }
+  return best?.item;
+}
+
+// Produce a slug compatible with the storage layout used by AssetsBrowser:
+// solutions/<slugify(product.name)>/ — so the chatbot looks in the same place
+// admin uploads land.
+function catalogSlug(label: string): string {
+  return String(label || "")
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Returns folder candidates (in priority order) the chatbot can scan for docs
+// when it identifies the given catalog item: the matching new-style storage
+// folder first, then the legacyFolder if one is mapped. Empty array for
+// coming-soon items.
+export function folderCandidatesForCatalog(item: CatalogSolution): string[] {
+  if (item.comingSoon) return [];
+  const out: string[] = [];
+  out.push(`solutions/${catalogSlug(item.label)}`);
+  if (item.legacyName) {
+    const legacyNameFolder = `solutions/${catalogSlug(item.legacyName)}`;
+    if (!out.includes(legacyNameFolder)) out.push(legacyNameFolder);
+  }
+  if (item.legacyFolder && !out.includes(item.legacyFolder)) {
+    out.push(item.legacyFolder);
+  }
+  return out;
+}
