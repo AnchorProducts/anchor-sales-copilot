@@ -454,6 +454,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
   const [adding, setAdding] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     category_key: "data_sheet",
@@ -716,62 +717,36 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
   }
 
-  async function renameAsset(a: AssetRow) {
-    const current = a.title || basename(a.path);
-    const next = window.prompt("Rename asset", current);
-    if (next === null) return;
-    const trimmed = next.trim();
-    if (!trimmed || trimmed === current) return;
+  async function deleteAsset(a: AssetRow) {
+    if (!isAdmin) return;
+    const label = a.title || basename(a.path);
+    const ok = window.confirm(`Delete "${label}"? This removes it from storage permanently.`);
+    if (!ok) return;
+    setDeletingPath(a.path);
     try {
-      const res = await fetch("/api/admin/assets/rename", {
+      const res = await fetch("/api/admin/assets/delete", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: a.id,
-          path: a.path,
-          productId,
-          title: trimmed,
-        }),
+        body: JSON.stringify({ id: a.id, path: a.path, productId }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setFormMsg(json?.error || "Rename failed.");
-        setTimeout(() => setFormMsg(null), 2500);
+        setFormMsg(json?.error || "Delete failed.");
+        setTimeout(() => setFormMsg(null), 3000);
+        setDeletingPath(null);
         return;
       }
-      // Optimistically update local state so the new title shows immediately,
-      // even if assets-table RLS blocks the browser session from reading the
-      // service-role-inserted row back.
-      setStorageAssets((prev) =>
-        prev.map((row) => (row.path === a.path ? { ...row, title: trimmed } : row))
-      );
-      setDbAssets((prev) => {
-        const existingIdx = prev.findIndex((row) => row.path === a.path);
-        if (existingIdx >= 0) {
-          const copy = prev.slice();
-          copy[existingIdx] = { ...copy[existingIdx], title: trimmed };
-          return copy;
-        }
-        return [
-          ...prev,
-          {
-            id: a.id.startsWith("storage:") ? `optimistic:${a.path}` : a.id,
-            product_id: productId,
-            title: trimmed,
-            type: a.type,
-            category_key: a.category_key,
-            path: a.path,
-            visibility: a.visibility,
-            created_at: new Date().toISOString(),
-          },
-        ];
-      });
-      setFormMsg("Renamed.");
+      // Drop the row from local state immediately so the card disappears.
+      setStorageAssets((prev) => prev.filter((row) => row.path !== a.path));
+      setDbAssets((prev) => prev.filter((row) => row.path !== a.path));
+      setFormMsg("Deleted.");
       setTimeout(() => setFormMsg(null), 1500);
     } catch (err: any) {
-      setFormMsg(err?.message || "Rename failed.");
-      setTimeout(() => setFormMsg(null), 2500);
+      setFormMsg(err?.message || "Delete failed.");
+      setTimeout(() => setFormMsg(null), 3000);
+    } finally {
+      setDeletingPath(null);
     }
   }
 
@@ -1039,10 +1014,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                             {isAdmin && (
                               <button
                                 type="button"
-                                onClick={() => renameAsset(a)}
-                                className="mt-1.5 w-full rounded-lg border border-dashed border-black/15 py-1 text-[11px] font-semibold text-black/60 hover:bg-black/[0.03]"
+                                onClick={() => deleteAsset(a)}
+                                disabled={deletingPath === a.path}
+                                className="mt-1.5 w-full rounded-lg border border-red-200 bg-red-50 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
                               >
-                                Rename
+                                {deletingPath === a.path ? "Deleting…" : "Delete"}
                               </button>
                             )}
                           </div>
@@ -1105,10 +1081,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 {isAdmin && (
                                   <button
                                     type="button"
-                                    onClick={() => renameAsset(a)}
-                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-[12px] font-semibold text-black/60 whitespace-nowrap hover:bg-black/[0.03]"
+                                    onClick={() => deleteAsset(a)}
+                                    disabled={deletingPath === a.path}
+                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 whitespace-nowrap hover:bg-red-100 disabled:opacity-60"
                                   >
-                                    Rename
+                                    {deletingPath === a.path ? "Deleting…" : "Delete"}
                                   </button>
                                 )}
                               </div>
