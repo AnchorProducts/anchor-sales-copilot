@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const role = String((prof as any)?.role || "");
-    if (role !== "admin" && role !== "anchor_rep") {
+    // Direct (immediate) image publish is admin-only; anchor_reps must go
+    // through /api/internal/asset-reviews/upload so an admin can review.
+    if (role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
