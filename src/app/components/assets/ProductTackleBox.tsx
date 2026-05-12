@@ -5,6 +5,26 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
+
+function catalogDisplayName(rawName: string | undefined | null): string {
+  if (!rawName) return "";
+  const n = String(rawName).toLowerCase().trim();
+  const slug = n.replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  // Prefer a catalog item whose label or legacyName matches this DB row,
+  // so the tackle box title shows the new CEO-approved name.
+  for (const item of SOLUTION_CATALOG) {
+    if (item.label.toLowerCase().trim() === n) return item.label;
+    if (item.legacyName && item.legacyName.toLowerCase().trim() === n) return item.label;
+    const labelSlug = item.label.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    if (labelSlug === slug) return item.label;
+    if (item.legacyName) {
+      const legacySlug = item.legacyName.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      if (legacySlug === slug) return item.label;
+    }
+  }
+  return rawName;
+}
 
 const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
 
@@ -792,7 +812,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="text-[12px] font-semibold text-[#047835]">{t("tackleBox")}</div>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-black truncate">{product?.name}</h1>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-black break-words">{catalogDisplayName(product?.name)}</h1>
 
                 <div className="mt-2 text-sm text-[#76777B]">
                   {product?.sku ? `SKU: ${product.sku}` : t("noSku")}

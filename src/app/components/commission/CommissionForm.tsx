@@ -10,6 +10,7 @@ import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
+import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 
 type UserProfile = {
   full_name: string | null;
@@ -61,28 +62,16 @@ const U_ANCHOR_OPTIONS = [
   "U3800 Coatings",
 ];
 
-const OTHER_ITEMS = [
-  "Solar / PV Racking",
-  "Snow Retention",
-  "Attached Pipe-Frame (Roof-Mounted H-Frame)",
-  "Duct Securement",
-  "HVAC / RTU Securement",
-  "Elevated Stack (Roof-Mounted)",
-  "Elevated Stack (Wall / Parapet)",
-  "Roof Box",
-  "Wall / Parapet Box",
-  "Roof Pipe Support",
-  "Roof Stairs / Walkways",
-  "Roof Guardrail",
-  "Roof Ladder",
-  "Equipment Screen",
-  "Signage",
-  "Weather Station",
-  "Light Mount",
-  "Camera Mount",
-  "Electrical Disconnect",
-  "Guy Wire Securement",
-];
+const OTHER_ITEMS = SOLUTION_CATALOG.map((s) => s.label);
+
+const OTHER_ITEMS_SECTIONS = SOLUTION_CATEGORIES.map((category) => {
+  const items = SOLUTION_CATALOG.filter((s) => s.category === category.key);
+  return {
+    heading: category.label,
+    options: items.map((s) => s.label),
+    comingSoon: items.length > 0 && items.every((s) => s.comingSoon),
+  };
+}).filter((sec) => sec.options.length > 0);
 
 const INITIAL_FORM: FormState = {
   certified: false,
@@ -304,7 +293,7 @@ export default function CommissionForm() {
 
           <label className="grid gap-1 text-sm">
             <span className="font-semibold">{t("otherItemsOrdered")}</span>
-            <MultiSelect options={OTHER_ITEMS} value={form.other_items} onChange={(v) => update("other_items", v)} placeholder={t("selectSolutions")} />
+            <MultiSelect options={OTHER_ITEMS} sections={OTHER_ITEMS_SECTIONS} value={form.other_items} onChange={(v) => update("other_items", v)} placeholder={t("selectSolutions")} />
           </label>
 
           <label className="grid gap-1 text-sm">
