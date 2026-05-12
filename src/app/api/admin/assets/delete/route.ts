@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { removeKnowledgeForPath } from "@/lib/knowledge/ingestStorageFile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,10 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  // 1b) Drop chatbot RAG knowledge that was ingested from this file so it
+  // stops being quoted in answers. Non-fatal; logs but doesn't fail the call.
+  await removeKnowledgeForPath(path);
 
   // 2) Remove any matching rows from the assets table so they don't reappear.
   const isRealId = id && typeof id === "string" && !id.startsWith("storage:") && !id.startsWith("optimistic:");

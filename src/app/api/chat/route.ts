@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { resolveCanonicalSolution } from "@/lib/solutions/resolveCanonicalSolution";
 import { CANONICAL_SOLUTIONS, type CanonicalSolution } from "@/lib/solutions/canonicalSolutions";
-import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
+import {
+  SOLUTION_CATALOG,
+  findCatalogMatch,
+  folderCandidatesForCatalog,
+} from "@/lib/solutions/solutionCatalog";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 import { maybeExtractKnowledge, maybeSummarizeSession, writeChatMessage } from "@/lib/learning/loops";
@@ -631,6 +635,53 @@ ${SOLUTION_CATALOG.filter((s) => s.comingSoon)
   .join("\n")}
 
 --------------------------------------------------
+CURRENT SOLUTION CATALOG (CEO-APPROVED NAMING)
+--------------------------------------------------
+
+These are the *user-facing* names for every solution Anchor Products sells. The Resource Library, lead intake forms, and commission claim forms all use this naming. Recognize them when reps mention them, and refer back to them in your answers. Items marked (coming soon) follow the coming-soon rule above.
+
+${(() => {
+  // Build a category-grouped list at module load. Stays in sync with the
+  // single source of truth in src/lib/solutions/solutionCatalog.ts.
+  const groups = new Map<string, string[]>();
+  for (const item of SOLUTION_CATALOG) {
+    const line = `  - ${item.label}${item.comingSoon ? " (coming soon)" : ""}`;
+    const arr = groups.get(item.category) ?? [];
+    arr.push(line);
+    groups.set(item.category, arr);
+  }
+  const titles: Record<string, string> = {
+    "mechanical": "Mechanical",
+    "box-frames": "Box Frames",
+    "pipe-conduit-supports": "Pipe & Conduit Supports",
+    "snow-retention": "Snow Retention",
+    "elevated-structure-securement": "Elevated Structure Securement",
+    "h-frame-supports": "H-Frame Supports",
+    "rooftop-solar": "Rooftop Solar",
+    "equipment-screen": "Equipment Screen",
+    "safety-access": "Safety & Access",
+    "lightning-protection": "Lightning Protection",
+    "security-monitoring-communication": "Security, Monitoring, & Communication",
+  };
+  return Array.from(groups.entries())
+    .map(([key, lines]) => `${titles[key] || key}:\n${lines.join("\n")}`)
+    .join("\n\n");
+})()}
+
+NOTES ON CATALOG NAMING:
+- "PSS 0300 / 0305 / 0310 / 0320" are the new product codes for the horizontal Pipe Support family (single base, double base, strut assembly, roller assembly).
+- "Existing Mechanical Tie Down - 2000 Series U-Anchor" is the new name for what reps may still call the HVAC / RTU tie-down.
+- "Tower/Stack Securement - 2000 Series U-Anchor" is the new name for the previous roof-mounted elevated stack offering.
+- "Existing H-Frame Securement - Exterior/Interior Bracing" is the new naming for the existing pipe-frame re-secure category.
+- "Pipe Hanger Frame", "Strut Frame Securement", and the "24"/36"/36x48 Standard H-Frame" entries are all variants of the attached pipe-frame (roof-mounted H-frame) family.
+- "Duct Frame", "Existing Duct Frame Securement", and "Existing Duct Securement" are the duct-securement variants.
+- "Medium Electrical Box Frame" is the new name for the previous Roof Mounted Box; "Small" and "Large" Electrical Box Frames are new offerings being built out.
+- "Wall Mounted Guardrail" is the previous Wall Guardrail.
+- All Rooftop Solar entries (Solar Mount + brand: Panel Claw, Unirac, KB Racking, AeroCompact, Pegasus, Sollega, Iron Ridge, SkyRack, Slip Sheets) are currently coming soon — handle them with the high-level rule above.
+- All Security/Monitoring/Communication entries (Camera w/ Mounting Plate, Roof/Wall Mount Light, Satellite Dish Mount, Radio Tower, Weather Station, Antenna w/ Base, Antenna Guy Wire) are coming soon.
+- All Lightning Protection entries (Lightning Arrester Securement, Lightning Cable Securement) are coming soon.
+
+--------------------------------------------------
 FINAL BEHAVIOR
 --------------------------------------------------
 
@@ -890,13 +941,46 @@ export async function POST(req: Request) {
     // Fall back to combined text (user + AI answer) to pick up cases where the
     // AI names a solution the user didn't spell out explicitly.
     const combinedText = `${intentText}\n${answer}`;
+
+    // Catalog matcher: lets the chatbot recognize new CEO catalog labels
+    // (PSS 0320, Pipe Hanger Frame, Pegasus, etc.) and route to the right
+    // folder, including the new "solutions/<slug>/" layout the admin upload
+    // form uses. Skip doc lookup entirely for coming-soon items.
+    const catalogMatch =
+      findCatalogMatch(intentText) || findCatalogMatch(combinedText);
+    const comingSoonHit =
+      (catalogMatch?.comingSoon ?? false) ||
+      isComingSoonQuery(intentText) ||
+      isComingSoonQuery(combinedText);
+
+    const foldersUsed: string[] = [U_ANCHORS_FOLDER];
+    let recommendedDocs: RecommendedDoc[] = [];
+
+    if (catalogMatch && !catalogMatch.comingSoon) {
+      const candidates = folderCandidatesForCatalog(catalogMatch);
+      for (const folder of candidates) {
+        const docs = await fetchDocsForFolder(folder);
+        if (docs.length) {
+          recommendedDocs = docs;
+          foldersUsed.push(folder);
+          break;
+        }
+      }
+      // Even if no docs surfaced from catalog folders, fall through to the
+      // canonical resolver below to give the chatbot something useful.
+    }
+
     const folderHint = preFolder || resolveCanonicalSolution(combinedText) || undefined;
-    const comingSoonHit = isComingSoonQuery(intentText) || isComingSoonQuery(combinedText);
-    const recommendedDocs = folderHint && !comingSoonHit ? await fetchDocsForFolder(folderHint) : [];
+    if (!recommendedDocs.length && folderHint && !comingSoonHit) {
+      recommendedDocs = await fetchDocsForFolder(folderHint);
+      if (folderHint && !foldersUsed.includes(folderHint)) foldersUsed.push(folderHint);
+    } else if (folderHint && !foldersUsed.includes(folderHint)) {
+      foldersUsed.push(folderHint);
+    }
 
     return NextResponse.json({
       answer,
-      foldersUsed: [U_ANCHORS_FOLDER, ...(folderHint ? [folderHint] : [])],
+      foldersUsed,
       recommendedDocs,
       sessionId: body?.sessionId || undefined,
       conversationId: body?.conversationId || undefined,

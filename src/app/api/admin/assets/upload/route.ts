@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { ingestStorageFile } from "@/lib/knowledge/ingestStorageFile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +96,18 @@ export async function POST(req: NextRequest) {
     if (uploadErr) {
       return NextResponse.json({ error: uploadErr.message }, { status: 500 });
     }
+
+    // Fire-and-forget RAG ingestion: extract text, chunk, embed, and persist
+    // to knowledge_documents/knowledge_chunks so the chatbot can quote from
+    // newly uploaded docs. Non-text files (images, CAD, etc.) short-circuit
+    // inside the helper — they don't get embedded.
+    ingestStorageFile({
+      path,
+      title: finalName,
+      category,
+      productTags: [],
+      createdBy: user.id,
+    }).catch((err) => console.warn("[admin/assets/upload] ingestion failed:", err));
 
     return NextResponse.json({ path, name: finalName });
   } catch (e: any) {
