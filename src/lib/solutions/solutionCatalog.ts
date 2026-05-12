@@ -53,10 +53,12 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "existing-mechanical-tie-down-2000", label: "Existing Mechanical Tie Down - 2000 Series U-Anchor", category: "mechanical", legacyName: "Existing Mechanical Tie Down", legacyFolder: "solutions/hvac" },
   { key: "mechanical-support-u-anchor", label: "Mechanical Support - U-Anchor", category: "mechanical", comingSoon: true },
 
-  // Box Frames — empty placeholders, content to be refilled by Anchor team
+  // Box Frames
   { key: "small-electrical-box-frame-3000", label: "Small Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
-  { key: "medium-electrical-box-frame-3000", label: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
-  { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
+  // Medium ← old "Electrical Disconnect" tackle box (assets live there)
+  { key: "medium-electrical-box-frame-3000", label: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Electrical Disconnect", legacyFolder: "solutions/electrical-disconnect" },
+  // Large ← old "Roof Mounted Box" tackle box
+  { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Roof Mounted Box", legacyFolder: "solutions/roof-box" },
 
   // Pipe & Conduit Supports (legacy: Roof Pipe Support family)
   { key: "pss-0320-roller-assembly", label: "PSS 0320 - Pipe Support Securement - Roller Assembly", category: "pipe-conduit-supports", legacyName: "Roller Pipe Support", legacyFolder: "solutions/roof-pipe/roller" },

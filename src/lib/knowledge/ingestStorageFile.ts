@@ -7,9 +7,26 @@ import JSZip from "jszip";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { embedText } from "@/lib/learning/embeddings";
 
-// pdf-parse is CJS; require avoids default export issues in Next build
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require("pdf-parse");
+// pdf-parse pulls in pdf.js which expects browser globals (DOMMatrix, Path2D)
+// at import time. Loading it at module scope crashes the whole upload route on
+// the Node runtime. Lazy-load and polyfill the minimum globals only when we
+// actually need to parse a PDF, so non-PDF uploads keep working even if PDF
+// extraction can't run.
+async function parsePdfBuffer(buf: Buffer): Promise<string> {
+  try {
+    const g = globalThis as any;
+    if (typeof g.DOMMatrix === "undefined") g.DOMMatrix = class {};
+    if (typeof g.Path2D === "undefined") g.Path2D = class {};
+    if (typeof g.ImageData === "undefined") g.ImageData = class {};
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require("pdf-parse");
+    const parsed = await pdfParse(buf);
+    return String(parsed?.text || "");
+  } catch (err) {
+    console.warn("[ingestStorageFile] pdf-parse failed:", err);
+    return "";
+  }
+}
 
 const TEXT_BEARING_EXTS = new Set(["txt", "md", "pdf", "docx", "odt", "ods", "odp"]);
 const STORAGE_BUCKET = "knowledge";
@@ -55,8 +72,8 @@ async function extractText(path: string): Promise<string> {
   try {
     if (e === "txt" || e === "md") return cleanText(buf.toString("utf8"));
     if (e === "pdf") {
-      const parsed = await pdfParse(buf);
-      return cleanText(parsed?.text || "");
+      const text = await parsePdfBuffer(buf);
+      return cleanText(text);
     }
     if (e === "docx") {
       const result = await mammoth.extractRawText({ buffer: buf });
@@ -152,6 +169,9 @@ export async function ingestStorageFile(opts: {
       source_type: "upload",
       source_path: path,
       status: "approved",
+      // Library docs are automatically available to the chatbot — admins
+      // can revoke per-row through other tooling if needed.
+      allowed: true,
       updated_at: new Date().toISOString(),
     })
     .select("id")
