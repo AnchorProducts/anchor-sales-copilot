@@ -722,9 +722,10 @@ export default function ChatPage() {
               </div>
 
               {/* ── Composer ─────────────────────────────────────────────── */}
-              {/* Desktop keeps the safe-area inset; on mobile the bottom nav
-                  below handles the home-indicator padding instead. */}
-              <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)] sm:[padding-bottom:max(env(safe-area-inset-bottom),0px)]">
+              {/* Extra mobile bottom padding makes the green strip taller
+                  while keeping the input + send button anchored at the top
+                  of it. Desktop retains the safe-area inset. */}
+              <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)] pb-10 sm:[padding-bottom:max(env(safe-area-inset-bottom),0px)]">
                 <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
                   <Input
                     className="min-w-0 flex-1 px-3 py-2.5 text-[15px] sm:py-3 sm:text-sm disabled:opacity-60"
