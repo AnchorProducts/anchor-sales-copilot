@@ -182,7 +182,7 @@ function LoginInner() {
               <div className="ds-caption">Sales • Assets • Consult</div>
             </div>
           </div>
-          <h1 className="text-3xl">Sign in</h1>
+          <h1 className="text-3xl">Sign in to Anchor</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">We’ll email you a secure 8-digit code.</p>
 
           <label className="mt-5 block text-xs font-semibold text-[var(--anchor-gray)]">Email</label>
