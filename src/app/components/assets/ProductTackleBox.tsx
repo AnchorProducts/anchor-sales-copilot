@@ -740,7 +740,35 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setTimeout(() => setFormMsg(null), 2500);
         return;
       }
-      await load();
+      // Optimistically update local state so the new title shows immediately,
+      // even if assets-table RLS blocks the browser session from reading the
+      // service-role-inserted row back.
+      setStorageAssets((prev) =>
+        prev.map((row) => (row.path === a.path ? { ...row, title: trimmed } : row))
+      );
+      setDbAssets((prev) => {
+        const existingIdx = prev.findIndex((row) => row.path === a.path);
+        if (existingIdx >= 0) {
+          const copy = prev.slice();
+          copy[existingIdx] = { ...copy[existingIdx], title: trimmed };
+          return copy;
+        }
+        return [
+          ...prev,
+          {
+            id: a.id.startsWith("storage:") ? `optimistic:${a.path}` : a.id,
+            product_id: productId,
+            title: trimmed,
+            type: a.type,
+            category_key: a.category_key,
+            path: a.path,
+            visibility: a.visibility,
+            created_at: new Date().toISOString(),
+          },
+        ];
+      });
+      setFormMsg("Renamed.");
+      setTimeout(() => setFormMsg(null), 1500);
     } catch (err: any) {
       setFormMsg(err?.message || "Rename failed.");
       setTimeout(() => setFormMsg(null), 2500);
