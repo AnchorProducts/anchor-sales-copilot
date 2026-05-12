@@ -52,7 +52,7 @@ export const translations = {
     rooftopAuditDesc: "OSHA-guided rooftop access & egress safety verification.",
     startAssessment: "Start Assessment",
     projectIdentifier: "Rooftop Equipment Consult",
-    projectIdentifierDesc: "Send photos and REC details directly to inside sales.",
+    projectIdentifierDesc: "Send photos and consult details directly to inside sales.",
     submitProject: "Submit Project",
     commissionClaim: "Commission Claim",
     commissionClaimDesc: "Submit a commission claim form prior to order shipment.",
@@ -100,7 +100,7 @@ export const translations = {
 
     // ── Chat ─────────────────────────────────────────────────────────────────
     anchorSalesCoPilot: "Anchor Sales Co-Pilot",
-    salesAssetsLeads: "Sales · Assets · Opportunities",
+    salesAssetsLeads: "Sales · Assets · Consults",
     newChat: "New Chat",
     chatHistory: "Chat History",
     loadingYourChat: "Loading your chat…",
@@ -238,8 +238,8 @@ export const translations = {
     roleExample: "e.g. Roofing contractor, Electrician",
     emailExample: "email@example.com",
     addContractor: "+ Add contractor",
-    submitLead: "Submit REC",
-    leadSubmittedThanks: "REC submitted. Thanks!",
+    submitLead: "Submit Consult",
+    leadSubmittedThanks: "Consult submitted. Thanks!",
 
     // ── Commission form ───────────────────────────────────────────────────────
     commissionClaimFormTitle: "Commission Claim Form",
@@ -278,16 +278,16 @@ export const translations = {
     downloadAgain: "Download again",
 
     // ── Leads list ────────────────────────────────────────────────────────────
-    leads: "Opportunities",
+    leads: "Consults",
     internalManagement: "Internal management",
     operations: "Operations",
-    leadQueue: "Opportunity Queue",
-    leadQueueDesc: "Track assignment, status, and follow-up progress across incoming opportunities.",
+    leadQueue: "Consult Queue",
+    leadQueueDesc: "Track assignment, status, and follow-up progress across incoming consults.",
     internalAccessOnly: "Internal access only.",
 
     // ── Opportunities new page ────────────────────────────────────────────────
     externalContractors: "External contractors",
-    leadIntake: "REC",
+    leadIntake: "Consult",
     shareProjectReqs: "Share project requirements, media, and scheduling details for inside sales review.",
 
     // ── Commission new page ───────────────────────────────────────────────────
@@ -298,7 +298,7 @@ export const translations = {
     externalUserReports: "External User Reports",
     externalUsers: "External Users",
     copilotSessions: "Copilot Sessions",
-    projectLeads: "Project Opportunities",
+    projectLeads: "Project Consults",
     dtAssessments: "DT Assessments",
     noExternalUsers: "No external users yet.",
     sessions: "Sessions",
@@ -310,7 +310,7 @@ export const translations = {
     viewPdf: "View PDF",
 
     // ── Opportunity detail ────────────────────────────────────────────────────
-    leadDetails: "Opportunity details",
+    leadDetails: "Consult details",
     location: "Location",
     insideSales: "Inside sales",
     unassigned: "Unassigned",
@@ -326,14 +326,14 @@ export const translations = {
     solutionUploads: "Solution uploads",
     noSolutionUploads: "No solution-specific uploads.",
     noFiles: "No files.",
-    leadActions: "Opportunity actions",
+    leadActions: "Consult actions",
     status: "Status",
     assignRep: "Assign rep",
     meetingLink: "Meeting link",
     syncToHubSpot: "Sync to HubSpot",
     syncing: "Syncing…",
     syncStatus: "Sync status",
-    leadNotFound: "Opportunity not found.",
+    leadNotFound: "Consult not found.",
     saveChangesCta: "Save changes",
   },
 

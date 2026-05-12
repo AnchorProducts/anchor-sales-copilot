@@ -69,8 +69,8 @@ export default function LeadsTable() {
     <Card className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-semibold text-black">Leads</div>
-          <div className="mt-1 text-sm text-[var(--anchor-gray)]">Internal lead management</div>
+          <div className="text-sm font-semibold text-black">Consults</div>
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">Internal consult management</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
