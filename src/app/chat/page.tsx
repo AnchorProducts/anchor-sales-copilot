@@ -497,7 +497,17 @@ export default function ChatPage() {
   const MUTED      = "text-[var(--anchor-gray)]";
 
   return (
-    <main className="ds-page flex h-dvh flex-col overflow-hidden bg-white sm:bg-[var(--surface-page)] text-black">
+    // Chat is edge-to-edge on mobile: no ds-page padding, no floating bottom
+    // nav (it's hidden on /chat — see src/app/components/ui/MobileBottomNav.tsx).
+    // Desktop (lg+) restores zero padding so the sidebar layout works as before.
+    // Note: deliberately NOT using .ds-page — that global class adds
+    // top/bottom padding (status bar buffer + room for the floating pill nav)
+    // which would push the chat away from the viewport edges. Chat needs full
+    // bleed, so we set just the layout primitives directly. On desktop the
+    // AppSidebar (16rem fixed) sits to the left; lg:pl-64 keeps room for it.
+    <main
+      className="flex h-dvh flex-col overflow-hidden bg-white text-black sm:bg-[var(--surface-page)] lg:pl-64"
+    >
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <AppNavbar
@@ -555,11 +565,44 @@ export default function ChatPage() {
             <section
               className={[
                 PANEL,
-                "flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden",
+                "relative flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden",
                 "rounded-none border-0 shadow-none",
                 "sm:rounded-3xl sm:border sm:border-black/10 sm:bg-white sm:shadow-md",
               ].join(" ")}
             >
+              {/* ── Mobile-only top menu ───────────────────────────────── */}
+              <div
+                className="sm:hidden shrink-0 flex items-center justify-between gap-2 px-3 border-b border-black/10 bg-white"
+                style={{
+                  paddingTop: "calc(env(safe-area-inset-top) + 6px)",
+                  paddingBottom: "6px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Menu"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-black/70 active:bg-black/[0.05]"
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M3 12h18M3 18h18" />
+                  </svg>
+                </button>
+                <Link
+                  href="/dashboard"
+                  aria-label={t("dashboard")}
+                  className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-semibold text-[var(--anchor-deep)] active:bg-[var(--anchor-mint)]"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  </svg>
+                  <span>{t("dashboard")}</span>
+                </Link>
+              </div>
+
               {/* ── Messages ─────────────────────────────────────────────── */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} overscroll-contain px-3 py-3 sm:px-5 sm:py-4 bg-transparent`}>
                 <div className="space-y-2.5 sm:space-y-3">
@@ -714,51 +757,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* ── Mobile-only bottom menu ─────────────────────────────────────────
-          Small, fixed to the very bottom of the viewport so it doesn't
-          take vertical space from the chat content above. Icon-only. */}
-      <nav
-        className="sm:hidden shrink-0 border-t border-black/10 bg-white"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
-        aria-label="Chat menu"
-      >
-        <div className="flex h-11 items-stretch justify-around">
-          <button
-            type="button"
-            onClick={newChat}
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
-            aria-label={t("newChat")}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            <span>New</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
-            aria-label={t("chatHistory")}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18M3 6h18M3 18h12" /></svg>
-            <span>History</span>
-          </button>
-          <Link
-            href="/dashboard"
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
-            aria-label={t("dashboard")}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /></svg>
-            <span>Home</span>
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-black/70 active:bg-black/[0.04]"
-            aria-label="Settings"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-            <span>Settings</span>
-          </Link>
-        </div>
-      </nav>
     </main>
   );
 }

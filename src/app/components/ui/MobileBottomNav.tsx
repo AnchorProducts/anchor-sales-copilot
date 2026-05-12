@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth"];
+const HIDE_PREFIXES = ["/auth", "/chat"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;
