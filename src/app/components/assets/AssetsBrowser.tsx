@@ -202,22 +202,19 @@ export default function AssetsBrowser() {
         router.push(`/assets/${encodeURIComponent(existing.id)}`);
         return;
       }
-      const { data, error: insertErr } = await supabase
-        .from("products")
-        .insert({
-          name: item.label,
-          section: "solution",
-          active: true,
-        })
-        .select("id")
-        .single();
-
-      if (insertErr || !data?.id) {
-        setError(insertErr?.message || "Could not create product row.");
+      const res = await fetch("/api/admin/products", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: item.label, section: "solution" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.id) {
+        setError(json?.error || "Could not create product row.");
         setCreatingKey(null);
         return;
       }
-      router.push(`/assets/${encodeURIComponent(data.id)}`);
+      router.push(`/assets/${encodeURIComponent(json.id)}`);
     } catch (e: any) {
       setError(e?.message || "Could not create product row.");
       setCreatingKey(null);
