@@ -214,6 +214,8 @@ const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "Existing Mechanical Tie-Down": ["solutions/hvac"],
   "Roof-Mounted Elevated Stack Securement": ["solutions/elevated-stack/roof-stack"],
   "Wall-Mounted Elevated Stack Securement": ["solutions/elevated-stack/wall-stack"],
+  "Tower/Stack Securement - 2000 Series U-Anchor": ["solutions/elevated-stack/Tower"],
+  "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor": ["solutions/elevated-stack/wall-stack"],
   "Roof Mounted Box": ["solutions/roof-box"],
   "Attached Pipe Frame": ["pipe-frame/attached", "solutions/pipe-frame/attached", "attached"],
   "Existing Pipe Frame": ["solutions/pipe-frame/exisiting"],
