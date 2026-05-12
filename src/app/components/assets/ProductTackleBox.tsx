@@ -453,6 +453,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [accessToken, setAccessToken] = useState("");
 
   const [adding, setAdding] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     title: "",
     category_key: "data_sheet",
@@ -765,34 +766,83 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     e.preventDefault();
     setFormMsg(null);
 
-    const title = form.title.trim();
     const category_key = form.category_key.trim();
     const type = form.type.trim();
-    const path = form.path.trim();
     const visibility = form.visibility;
+    const manualPath = form.path.trim();
 
-    if (!title || !category_key || !path) {
-      setFormMsg("Please fill out title, category, and path.");
+    if (!category_key) {
+      setFormMsg("Please choose a category.");
+      return;
+    }
+    if (!uploadFile && !manualPath) {
+      setFormMsg("Choose a file to upload, or paste an existing storage path.");
       return;
     }
 
     setAdding(true);
+
+    let finalPath = manualPath;
+
+    if (uploadFile) {
+      const prefix =
+        storagePrefix ||
+        (product ? prefixCandidatesForProduct(product)[0] : "") ||
+        (product ? `solutions/${slugifyName(product.name)}` : "");
+      if (!prefix) {
+        setFormMsg("Could not determine a storage prefix for this product.");
+        setAdding(false);
+        return;
+      }
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("prefix", prefix);
+      fd.append("category", category_key);
+      fd.append("visibility", visibility);
+      try {
+        const res = await fetch("/api/admin/assets/upload", {
+          method: "POST",
+          credentials: "include",
+          body: fd,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.path) {
+          setFormMsg(json?.error || "Upload failed.");
+          setAdding(false);
+          return;
+        }
+        finalPath = json.path;
+      } catch (err: any) {
+        setFormMsg(err?.message || "Upload failed.");
+        setAdding(false);
+        return;
+      }
+    }
+
+    const title = form.title.trim() || (uploadFile?.name ?? finalPath.split("/").pop() ?? "Asset");
 
     const { error: insErr } = await supabase.from("assets").insert({
       product_id: productId,
       title,
       type,
       category_key,
-      path,
+      path: finalPath,
       visibility,
     });
 
     if (insErr) {
-      setFormMsg(insErr.message);
+      // Storage upload succeeded but the assets table insert was blocked
+      // (e.g., RLS). The file is still discoverable via the storage listing,
+      // so surface the warning but keep the upload in place.
+      setFormMsg(`Uploaded, but row insert failed: ${insErr.message}`);
+      setUploadFile(null);
+      setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
+      await load();
       setAdding(false);
       return;
     }
 
+    setUploadFile(null);
     setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
     setFormMsg("Added!");
     await load();
@@ -1079,57 +1129,86 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
               <div className="mt-1 text-sm text-[#76777B]">{t("adminOnlyNote")}</div>
 
               <form onSubmit={submitAddAsset} className="mt-4 grid gap-3 sm:grid-cols-4">
-                <input
-                  value={form.title}
-                  onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
-                  placeholder="Title"
-                  className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
-                />
+                <label className="sm:col-span-4 grid gap-1 text-sm">
+                  <span className="font-semibold text-black">File</span>
+                  <input
+                    type="file"
+                    onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                    className="block w-full rounded-2xl border border-dashed border-black/15 bg-[#F6F7F8] px-4 py-2 text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-[#047835] file:px-3 file:py-1.5 file:text-white file:text-xs file:font-semibold"
+                  />
+                  {uploadFile && (
+                    <span className="truncate text-[12px] text-black/60">
+                      {uploadFile.name} · {(uploadFile.size / 1024).toFixed(1)} KB
+                    </span>
+                  )}
+                </label>
 
-                <select
-                  value={form.category_key}
-                  onChange={(e) => setForm((s) => ({ ...s, category_key: e.target.value }))}
-                  className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
-                >
-                  <option value="spec_document">spec_document</option>
-                  <option value="data_sheet">data_sheet</option>
-                  <option value="install_sheet">install_sheet</option>
-                  <option value="sales_sheet">sales_sheet</option>
-                  <option value="intake_forms">intake_forms</option>
-                  <option value="test_reports">test_reports</option>
-                  <option value="pricebook">pricebook</option>
-                  <option value="approval_letters">approval_letters</option>
-                  <option value="presentation">presentation</option>
-                  <option value="case_studies">case_studies</option>
-                  <option value="other">other</option>
-                </select>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold text-black">Category</span>
+                  <select
+                    value={form.category_key}
+                    onChange={(e) => setForm((s) => ({ ...s, category_key: e.target.value }))}
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                  >
+                    <option value="sales_sheet">Sales Sheet</option>
+                    <option value="data_sheet">Data Sheet</option>
+                    <option value="install_sheet">Install Sheet</option>
+                    <option value="spec_document">Spec Document</option>
+                    <option value="intake_forms">Intake Form</option>
+                    <option value="test_reports">Test Report</option>
+                    <option value="pricebook">Pricebook</option>
+                    <option value="approval_letters">Approval Letter</option>
+                    <option value="presentation">Presentation</option>
+                    <option value="case_studies">Case Study</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
 
-                <select
-                  value={form.type}
-                  onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))}
-                  className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
-                >
-                  <option value="document">document</option>
-                  <option value="image">image</option>
-                  <option value="video">video</option>
-                  <option value="link">link</option>
-                </select>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold text-black">Type</span>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))}
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                  >
+                    <option value="document">Document</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                    <option value="link">Link</option>
+                  </select>
+                </label>
 
-                <select
-                  value={form.visibility}
-                  onChange={(e) => setForm((s) => ({ ...s, visibility: e.target.value as any }))}
-                  className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
-                >
-                  <option value="public">public</option>
-                  <option value="internal">internal</option>
-                </select>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold text-black">Visibility</span>
+                  <select
+                    value={form.visibility}
+                    onChange={(e) => setForm((s) => ({ ...s, visibility: e.target.value as any }))}
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                  >
+                    <option value="public">Public</option>
+                    <option value="internal">Internal</option>
+                  </select>
+                </label>
 
-                <input
-                  value={form.path}
-                  onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
-                  placeholder={t("knowledgePathPlaceholder")}
-                  className="h-10 sm:col-span-4 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
-                />
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold text-black">Title (optional)</span>
+                  <input
+                    value={form.title}
+                    onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
+                    placeholder="Defaults to filename"
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                  />
+                </label>
+
+                <label className="sm:col-span-4 grid gap-1 text-sm">
+                  <span className="font-semibold text-black">Storage path (only if not uploading a file)</span>
+                  <input
+                    value={form.path}
+                    onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
+                    placeholder={t("knowledgePathPlaceholder")}
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                  />
+                </label>
 
                 <div className="sm:col-span-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
