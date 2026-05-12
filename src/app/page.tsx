@@ -179,7 +179,7 @@ function LoginInner() {
               <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
                 Anchor Sales Co-Pilot
               </div>
-              <div className="ds-caption">Sales • Assets • Leads</div>
+              <div className="ds-caption">Sales • Assets • Consult</div>
             </div>
           </div>
           <h1 className="text-3xl">Sign in</h1>
