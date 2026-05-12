@@ -546,7 +546,10 @@ export default function ChatPage() {
                   className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
                   onClick={() => setSidebarOpen(false)}
                 />
-                <div className="absolute left-0 top-0 bottom-0 w-[76vw] max-w-[300px] flex flex-col overflow-hidden bg-white shadow-xl">
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-[76vw] max-w-[300px] flex flex-col overflow-hidden bg-white shadow-xl"
+                  style={{ paddingTop: "env(safe-area-inset-top)" }}
+                >
                   <ChatSidebar
                     conversations={conversations}
                     activeId={conversationId}
