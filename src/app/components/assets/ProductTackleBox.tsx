@@ -839,11 +839,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setAdding(false);
         return;
       }
+      const title = form.title.trim();
       const fd = new FormData();
       fd.append("file", uploadFile);
       fd.append("prefix", prefix);
       fd.append("category", category_key);
       fd.append("visibility", visibility);
+      fd.append("productId", productId);
+      fd.append("type", type);
+      if (title) fd.append("title", title);
       try {
         const res = await fetch("/api/admin/assets/upload", {
           method: "POST",
@@ -862,6 +866,16 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           return;
         }
         finalPath = json.path;
+        if (json?.row && json.row.ok === false && json.row.error) {
+          // Storage succeeded, server-side row insert had a known issue
+          // (e.g. category_key FK). Surface it but keep the upload.
+          setFormMsg(`Uploaded, but row insert failed: ${json.row.error}`);
+          setUploadFile(null);
+          setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
+          await load();
+          setAdding(false);
+          return;
+        }
       } catch (err: any) {
         // eslint-disable-next-line no-console
         console.error("[Add asset] upload threw", err);
@@ -869,29 +883,23 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setAdding(false);
         return;
       }
-    }
-
-    const title = form.title.trim() || (uploadFile?.name ?? finalPath.split("/").pop() ?? "Asset");
-
-    const { error: insErr } = await supabase.from("assets").insert({
-      product_id: productId,
-      title,
-      type,
-      category_key,
-      path: finalPath,
-      visibility,
-    });
-
-    if (insErr) {
-      // Storage upload succeeded but the assets table insert was blocked
-      // (e.g., RLS). The file is still discoverable via the storage listing,
-      // so surface the warning but keep the upload in place.
-      setFormMsg(`Uploaded, but row insert failed: ${insErr.message}`);
-      setUploadFile(null);
-      setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
-      await load();
-      setAdding(false);
-      return;
+    } else if (manualPath) {
+      // Manual storage path was provided (no file uploaded). Fall back to a
+      // client-side insert for that legacy "point at an existing object" path.
+      const title = form.title.trim() || manualPath.split("/").pop() || "Asset";
+      const { error: insErr } = await supabase.from("assets").insert({
+        product_id: productId,
+        title,
+        type,
+        category_key,
+        path: finalPath,
+        visibility,
+      });
+      if (insErr) {
+        setFormMsg(`Row insert failed: ${insErr.message}`);
+        setAdding(false);
+        return;
+      }
     }
 
     setUploadFile(null);
