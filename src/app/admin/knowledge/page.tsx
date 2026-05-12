@@ -75,7 +75,7 @@ export default function AdminKnowledgePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen anchor-app-bg p-6 text-white">
+      <main className="min-h-screen anchor-app-bg p-6 text-white lg:pl-64">
         <Alert className="mx-auto max-w-6xl border-white/20 bg-white/10 text-white" tone="neutral">
           Loading admin knowledge…
         </Alert>
@@ -85,7 +85,7 @@ export default function AdminKnowledgePage() {
 
   if (error) {
     return (
-      <main className="min-h-screen anchor-app-bg text-white p-6">
+      <main className="min-h-screen anchor-app-bg text-white p-6 lg:pl-64">
         <Alert className="mx-auto max-w-6xl border-white/20 bg-white/10 text-white" tone="error">
           {error}
         </Alert>
@@ -96,7 +96,7 @@ export default function AdminKnowledgePage() {
   if (!profile) return null;
 
   return (
-    <main className="min-h-screen anchor-app-bg text-white">
+    <main className="min-h-screen anchor-app-bg text-white lg:pl-64">
       <AppNavbar
         title="Knowledge Admin"
         subtitle="Review feedback · Promote fixes"
