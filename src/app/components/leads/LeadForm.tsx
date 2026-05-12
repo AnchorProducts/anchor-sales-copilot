@@ -12,6 +12,10 @@ import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
+import {
+  SOLUTION_CATALOG,
+  SOLUTION_CATEGORIES,
+} from "@/lib/solutions/solutionCatalog";
 
 type FormState = {
   customer_company: string;
@@ -59,27 +63,22 @@ const TIMELINE_OPTIONS = [
 
 
 const SOLUTION_OPTIONS: SolutionOption[] = [
-  { key: "solar", label: "Solar / PV Racking" },
-  { key: "snow-retention", label: "Snow Retention" },
-  { key: "pipe-frame-attached", label: "Attached Pipe-Frame (Roof-Mounted H-Frame)" },
-  { key: "duct-securement", label: "Duct Securement" },
-  { key: "hvac-securement", label: "HVAC / RTU Securement" },
-  { key: "elevated-stack-roof", label: "Elevated Stack (Roof-Mounted)" },
-  { key: "elevated-stack-wall", label: "Elevated Stack (Wall / Parapet)" },
-  { key: "roof-box", label: "Roof Box" },
-  { key: "wall-box", label: "Wall / Parapet Box" },
-  { key: "roof-pipe", label: "Roof Pipe Support" },
-  { key: "roof-stairs-walkways", label: "Roof Stairs / Walkways" },
-  { key: "roof-guardrail", label: "Roof Guardrail" },
-  { key: "roof-ladder", label: "Roof Ladder" },
-  { key: "equipment-screen", label: "Equipment Screen" },
-  { key: "signage", label: "Signage" },
-  { key: "weather-station", label: "Weather Station" },
-  { key: "light-mount", label: "Light Mount" },
-  { key: "camera-mount", label: "Camera Mount" },
-  { key: "electrical-disconnect", label: "Electrical Disconnect" },
-  { key: "guy-wire", label: "Guy Wire Securement" },
+  ...SOLUTION_CATALOG.map((s) => ({ key: s.key, label: s.label })),
   { key: "other", label: "Other" },
+];
+
+const SOLUTION_SECTIONS = SOLUTION_CATEGORIES.map((category) => {
+  const items = SOLUTION_CATALOG.filter((s) => s.category === category.key);
+  return {
+    heading: category.label,
+    options: items.map((s) => s.label),
+    comingSoon: items.length > 0 && items.every((s) => s.comingSoon),
+  };
+}).filter((sec) => sec.options.length > 0);
+
+const SOLUTION_SECTIONS_WITH_OTHER = [
+  ...SOLUTION_SECTIONS,
+  { heading: "Other", options: ["Other"] },
 ];
 
 function clean(v: string) {
@@ -481,6 +480,7 @@ export default function LeadForm() {
             <div className="mt-3">
               <MultiSelect
                 options={SOLUTION_OPTIONS.map((o) => o.label)}
+                sections={SOLUTION_SECTIONS_WITH_OTHER}
                 value={SOLUTION_OPTIONS.filter((o) => solutions[o.key]?.selected).map((o) => o.label)}
                 onChange={(labels) => setSolutions((prev) => { const next = { ...prev }; for (const opt of SOLUTION_OPTIONS) { next[opt.key] = { ...next[opt.key], selected: labels.includes(opt.label) }; } return next; })}
                 placeholder={t("selectSolutionTypes")}

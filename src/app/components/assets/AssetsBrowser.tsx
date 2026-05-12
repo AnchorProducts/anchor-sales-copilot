@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import {
+  SOLUTION_CATALOG,
+  SOLUTION_CATEGORIES,
+  type CatalogSolution,
+  type SolutionCategory,
+} from "@/lib/solutions/solutionCatalog";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -36,6 +42,12 @@ function matchesSearch(p: ProductRow, q: string) {
   return hay.includes(s);
 }
 
+function catalogMatchesSearch(item: CatalogSolution, q: string) {
+  const s = norm(q);
+  if (!s) return true;
+  return item.label.toLowerCase().includes(s);
+}
+
 function isInternalRole(role: string) {
   return role === "admin" || role === "anchor_rep";
 }
@@ -50,9 +62,6 @@ function productHref(p: ProductRow) {
   return `/assets/${encodeURIComponent(p.id)}`;
 }
 
-/**
- * ✅ Keep filter buttons EXACTLY like before (do not compact them for mobile)
- */
 function btnClass(on: boolean) {
   return [
     "rounded-full border px-4 py-2 text-[12px] font-semibold transition whitespace-nowrap duration-200",
@@ -79,23 +88,17 @@ function ensureTrailingSlash(prefix: string) {
 
 function storagePrefixForProduct(p: ProductRow) {
   const slug = slugify(p.name);
-
-  // folders in bucket: solutions/<slug>/..., anchor/<slug>/..., internal/<slug>/...
   if (p.section === "solution") return ensureTrailingSlash(`solutions/${slug}`);
   if (p.section === "anchor") return ensureTrailingSlash(`anchor/${slug}`);
   return ensureTrailingSlash(`internal/${slug}`);
 }
 
 function specPrefixForSection(section: ProductSection) {
-  // folders in bucket: spec/solutions/, spec/anchor/, spec/internal/
   if (section === "solution") return ensureTrailingSlash("spec/solutions");
   if (section === "anchor") return ensureTrailingSlash("spec/anchor");
   return ensureTrailingSlash("spec/internal");
 }
 
-/**
- * Parse /api/knowledge-counts response safely (supports a few shapes).
- */
 function parseCounts(payload: any): { public: number; internal: number } {
   const p = payload ?? {};
   const pub =
@@ -146,9 +149,6 @@ async function fetchKnowledgeCounts(prefix: string) {
   return parseCounts(json);
 }
 
-/**
- * Small concurrency limiter so we don't spam the API with 100+ calls at once.
- */
 async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let i = 0;
@@ -176,10 +176,53 @@ export default function AssetsBrowser() {
   const [counts, setCounts] = useState<Record<string, { public: number; internal: number }>>({});
 
   const [q, setQ] = useState("");
-  const [activeOnly, setActiveOnly] = useState(true);
+  const [activeOnly] = useState(true);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const [isInternalUser, setIsInternalUser] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [creatingKey, setCreatingKey] = useState<string | null>(null);
+
+  const router = useRouter();
+
+  function toggleCategory(key: string) {
+    // Categories start collapsed; treat undefined as collapsed when toggling
+    // so the first click expands.
+    setCollapsed((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  }
+
+  async function adminOpenComingSoon(item: CatalogSolution) {
+    if (!isAdmin || creatingKey) return;
+    setCreatingKey(item.key);
+    try {
+      // If a DB row already exists (race / repeat click), navigate to it.
+      const existing = findProductForCatalog(item);
+      if (existing) {
+        router.push(`/assets/${encodeURIComponent(existing.id)}`);
+        return;
+      }
+      const { data, error: insertErr } = await supabase
+        .from("products")
+        .insert({
+          name: item.label,
+          section: "solution",
+          active: true,
+        })
+        .select("id")
+        .single();
+
+      if (insertErr || !data?.id) {
+        setError(insertErr?.message || "Could not create product row.");
+        setCreatingKey(null);
+        return;
+      }
+      router.push(`/assets/${encodeURIComponent(data.id)}`);
+    } catch (e: any) {
+      setError(e?.message || "Could not create product row.");
+      setCreatingKey(null);
+    }
+  }
 
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -204,12 +247,13 @@ export default function AssetsBrowser() {
           setProducts([]);
           setCounts({});
           setIsInternalUser(false);
+          setIsAdmin(false);
           setLoading(false);
           return;
         }
 
-        // Determine internal via profiles.role
         let internal = false;
+        let admin = false;
         try {
           const { data: prof } = await supabase
             .from("profiles")
@@ -217,20 +261,22 @@ export default function AssetsBrowser() {
             .eq("id", user.id)
             .maybeSingle();
 
-          internal = isInternalRole((prof as ProfileRow | null)?.role || "");
+          const role = (prof as ProfileRow | null)?.role || "";
+          internal = isInternalRole(role);
+          admin = role === "admin";
         } catch {
           internal = false;
+          admin = false;
         }
 
         if (!alive) return;
         setIsInternalUser(internal);
+        setIsAdmin(admin);
 
-        // If user is NOT internal and they land on internal_assets, bump to All
         if (!internal && filter === "internal_assets") {
           setFilter("all");
         }
 
-        // PRODUCTS LIST
         const prodQuery = supabase
           .from("products")
           .select("id,name,sku,series,section,internal_kind,active")
@@ -238,11 +284,10 @@ export default function AssetsBrowser() {
 
         if (activeOnly) prodQuery.eq("active", true);
 
-        if (filter !== "all") {
+        if (filter === "anchor" || filter === "internal_assets") {
           prodQuery.eq("section", filter);
         }
 
-        // External users should never see internal_assets products (extra safety)
         if (!internal) {
           prodQuery.neq("section", "internal_assets");
         }
@@ -262,14 +307,8 @@ export default function AssetsBrowser() {
         const list = (prodRows || []) as ProductRow[];
         setProducts(list);
 
-        /**
-         * ✅ COUNTS FROM STORAGE (same idea as ProductTackleBox)
-         * - folder counts per product
-         * - PLUS spec counts per section (spec everywhere)
-         */
         const sectionsInList = Array.from(new Set(list.map((p) => p.section)));
 
-        // spec counts once per section
         const specBySection: Record<string, { public: number; internal: number }> = {};
         await Promise.all(
           sectionsInList.map(async (sec) => {
@@ -277,7 +316,6 @@ export default function AssetsBrowser() {
           })
         );
 
-        // per-product folder counts (limit concurrency)
         const perProduct = await mapWithLimit(
           list,
           6,
@@ -308,6 +346,7 @@ export default function AssetsBrowser() {
         setProducts([]);
         setCounts({});
         setIsInternalUser(false);
+        setIsAdmin(false);
         setLoading(false);
       }
     })();
@@ -317,15 +356,69 @@ export default function AssetsBrowser() {
     };
   }, [supabase, activeOnly, filter]);
 
-  const filtered = useMemo(() => products.filter((p) => matchesSearch(p, q)), [products, q]);
+  // Lookup: catalog label (lowercased) → product row (for live catalog items)
+  const productByLabel = useMemo(() => {
+    const m = new Map<string, ProductRow>();
+    for (const p of products) {
+      if (p.section === "solution") {
+        m.set(norm(p.name), p);
+      }
+    }
+    return m;
+  }, [products]);
 
-  function countFor(id: string) {
-    const c = counts[id] || { public: 0, internal: 0 };
-    return {
-      publicCount: c.public,
-      internalCount: isInternalUser ? c.internal : 0,
-    };
+  // Slug-based lookup so spelling variants (hyphens, extra spaces, & vs and)
+  // resolve to the same product row.
+  const productBySlug = useMemo(() => {
+    const m = new Map<string, ProductRow>();
+    for (const p of products) {
+      if (p.section === "solution") {
+        m.set(slugify(p.name), p);
+      }
+    }
+    return m;
+  }, [products]);
+
+  function findProductForCatalog(item: CatalogSolution): ProductRow | undefined {
+    return (
+      productByLabel.get(norm(item.label)) ||
+      productBySlug.get(slugify(item.label)) ||
+      (item.legacyName
+        ? productByLabel.get(norm(item.legacyName)) ||
+          productBySlug.get(slugify(item.legacyName))
+        : undefined)
+    );
   }
+
+  const nonSolutionProducts = useMemo(
+    () => products.filter((p) => p.section !== "solution" && matchesSearch(p, q)),
+    [products, q]
+  );
+
+  const showSolutions = filter === "all" || filter === "solution";
+  const showAnchors = filter === "all" || filter === "anchor";
+  const showInternal = isInternalUser && (filter === "all" || filter === "internal_assets");
+
+  const catalogGroups: Array<{ category: SolutionCategory; items: CatalogSolution[] }> = useMemo(() => {
+    return SOLUTION_CATEGORIES.map((category) => ({
+      category,
+      items: SOLUTION_CATALOG.filter((s) => s.category === category.key && catalogMatchesSearch(s, q)),
+    })).filter((g) => g.items.length > 0);
+  }, [q]);
+
+  const anchorRows = useMemo(
+    () => nonSolutionProducts.filter((p) => p.section === "anchor"),
+    [nonSolutionProducts]
+  );
+  const internalRows = useMemo(
+    () => nonSolutionProducts.filter((p) => p.section === "internal_assets"),
+    [nonSolutionProducts]
+  );
+
+  const hasAnyResult =
+    (showSolutions && catalogGroups.length > 0) ||
+    (showAnchors && anchorRows.length > 0) ||
+    (showInternal && internalRows.length > 0);
 
   return (
     <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
@@ -368,45 +461,219 @@ export default function AssetsBrowser() {
           <Alert tone="error">{error}</Alert>
         ) : loading ? (
           <Alert tone="neutral">{t("loading")}</Alert>
-        ) : filtered.length === 0 ? (
+        ) : !hasAnyResult ? (
           <Alert tone="neutral">{t("noProductsFound")}</Alert>
         ) : (
-          <div className="grid gap-3">
-            {filtered.map((p) => {
-              const c = countFor(p.id);
-
-              return (
-                <Link
-                  key={p.id}
-                  href={productHref(p)}
-                  title={t("openTackleBox")}
-                  className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-white p-4 transition duration-200 hover:bg-[var(--surface-soft)]"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-black truncate">{p.name}</div>
-
-                      <div className="mt-1 truncate text-[12px] text-[var(--anchor-gray)]">
-                        
-                        {p.series ? ` Series: ${p.series}` : ""}
-                        {p.section ? ` • ${p.section}` : ""}
+          <div className="grid gap-6">
+            {showSolutions &&
+              catalogGroups.map(({ category, items }) => {
+                // Auto-expand when searching so matches aren't hidden behind collapsed sections.
+                const isCollapsed = q.trim() ? false : collapsed[category.key] ?? true;
+                // "Coming soon" badge applies only when every item in the
+                // category is flagged comingSoon — independent of DB state.
+                const activeCount = items.filter((it) => !it.comingSoon).length;
+                return (
+                  <section key={category.key} className="grid gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(category.key)}
+                      className="flex w-full items-center justify-between gap-3 rounded-[12px] border border-black/10 bg-[var(--surface-soft)] px-4 py-3 text-left hover:bg-[var(--surface-soft)]/80"
+                      aria-expanded={!isCollapsed}
+                    >
+                      <span className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                        {category.label}
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-black/60">
+                          {items.length}
+                        </span>
+                        {activeCount === 0 && (
+                          <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-black/50">
+                            Coming soon
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-black/40">{isCollapsed ? "▾" : "▴"}</span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="grid gap-2">
+                        {items.map((item) => {
+                          if (item.comingSoon) {
+                            return (
+                              <ComingSoonCard
+                                key={item.key}
+                                label={item.label}
+                                isAdmin={isAdmin}
+                                pending={creatingKey === item.key}
+                                onAdminOpen={() => adminOpenComingSoon(item)}
+                              />
+                            );
+                          }
+                          // Prefer a direct DB row with the new label; fall back to
+                          // the legacy DB row so existing tackle box / docs surface
+                          // until the new row is seeded. Slug-based matching
+                          // tolerates hyphen / spacing variants between catalog
+                          // names and stored DB names.
+                          const product = findProductForCatalog(item);
+                          if (!product) {
+                            return (
+                              <ComingSoonCard
+                                key={item.key}
+                                label={item.label}
+                                isAdmin={isAdmin}
+                                pending={creatingKey === item.key}
+                                onAdminOpen={() => adminOpenComingSoon(item)}
+                              />
+                            );
+                          }
+                          return (
+                            <SolutionCard
+                              key={item.key}
+                              product={product}
+                              displayName={item.label}
+                              openLabel={t("open")}
+                              title={t("openTackleBox")}
+                            />
+                          );
+                        })}
                       </div>
+                    )}
+                  </section>
+                );
+              })}
 
-                      
-                    </div>
+            {showAnchors && anchorRows.length > 0 && (
+              <section className="grid gap-2">
+                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                  {t("anchors")}
+                </h3>
+                <div className="grid gap-2">
+                  {anchorRows.map((p) => (
+                    <SolutionCard
+                      key={p.id}
+                      product={p}
+                      openLabel={t("open")}
+                      title={t("openTackleBox")}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
 
-                    <div className="w-full sm:w-auto sm:shrink-0">
-                      <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-                        {t("open")}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+            {showInternal && internalRows.length > 0 && (
+              <section className="grid gap-2">
+                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                  {t("internalAssets")}
+                </h3>
+                <div className="grid gap-2">
+                  {internalRows.map((p) => (
+                    <SolutionCard
+                      key={p.id}
+                      product={p}
+                      openLabel={t("open")}
+                      title={t("openTackleBox")}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>
     </Card>
+  );
+}
+
+function SolutionCard({
+  product,
+  openLabel,
+  title,
+  displayName,
+}: {
+  product: ProductRow;
+  openLabel: string;
+  title: string;
+  displayName?: string;
+}) {
+  return (
+    <Link
+      href={productHref(product)}
+      title={title}
+      className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-white p-4 transition duration-200 hover:bg-[var(--surface-soft)]"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-black break-words">{displayName || product.name}</div>
+          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            {product.series ? ` Series: ${product.series}` : ""}
+            {product.section ? ` • ${product.section}` : ""}
+          </div>
+        </div>
+
+        <div className="w-full sm:w-auto sm:shrink-0">
+          <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+            {openLabel}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function ComingSoonCard({
+  label,
+  isAdmin,
+  pending,
+  onAdminOpen,
+}: {
+  label: string;
+  isAdmin?: boolean;
+  pending?: boolean;
+  onAdminOpen?: () => void;
+}) {
+  if (isAdmin && onAdminOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onAdminOpen}
+        disabled={pending}
+        className="block w-full overflow-hidden rounded-[14px] border border-dashed border-[var(--anchor-green)]/60 bg-[var(--surface-soft)] p-4 text-left transition duration-200 hover:bg-white disabled:opacity-60"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-black break-words">{label}</div>
+            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+              Coming soon — click to add content
+            </div>
+          </div>
+
+          <div className="w-full sm:w-auto sm:shrink-0">
+            <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+              {pending ? "Opening…" : "Add content"}
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      aria-disabled="true"
+      className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 opacity-60 cursor-not-allowed select-none"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-black/60 break-words">{label}</div>
+          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            Solution materials in development
+          </div>
+        </div>
+
+        <div className="w-full sm:w-auto sm:shrink-0">
+          <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-black/10 px-3 py-2 text-[12px] font-semibold text-black/50 whitespace-nowrap sm:w-auto">
+            Coming soon
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
