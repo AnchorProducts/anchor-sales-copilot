@@ -1167,6 +1167,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     <span className="text-sm text-black/40"> or drag & drop</span>
                   </div>
                   <div className="text-[11px] text-black/35">{t("pngJpgAccepted")}</div>
+                  <div className="text-[11px] text-black/35">Max ~4 MB per upload — resize large desktop photos first.</div>
                 </div>
               </label>
 
