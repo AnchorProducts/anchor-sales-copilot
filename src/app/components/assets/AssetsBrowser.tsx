@@ -165,7 +165,14 @@ async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Pr
   return results;
 }
 
-export default function AssetsBrowser() {
+type AssetsBrowserProps = {
+  // When true: hide the filter buttons, force the view to Solutions only,
+  // and skip the anchors + internal assets sections entirely. Used by the
+  // Knowledge admin tab so it mirrors the Resource Library catalog 1:1.
+  solutionsOnly?: boolean;
+};
+
+export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserProps = {}) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
 
@@ -177,7 +184,7 @@ export default function AssetsBrowser() {
 
   const [q, setQ] = useState("");
   const [activeOnly] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useState<FilterKey>(solutionsOnly ? "solution" : "all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const [isInternalUser, setIsInternalUser] = useState(false);
@@ -393,8 +400,8 @@ export default function AssetsBrowser() {
   );
 
   const showSolutions = filter === "all" || filter === "solution";
-  const showAnchors = filter === "all" || filter === "anchor";
-  const showInternal = isInternalUser && (filter === "all" || filter === "internal_assets");
+  const showAnchors = !solutionsOnly && (filter === "all" || filter === "anchor");
+  const showInternal = !solutionsOnly && isInternalUser && (filter === "all" || filter === "internal_assets");
 
   const catalogGroups: Array<{ category: SolutionCategory; items: CatalogSolution[] }> = useMemo(() => {
     return SOLUTION_CATEGORIES.map((category) => ({
@@ -435,23 +442,25 @@ export default function AssetsBrowser() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [-webkit-overflow-scrolling:touch]">
-          <button type="button" onClick={() => setFilter("all")} className={btnClass(filter === "all")}>{t("all")}</button>
-          <button type="button" onClick={() => setFilter("solution")} className={btnClass(filter === "solution")}>{t("solutions")}</button>
-          <button type="button" onClick={() => setFilter("anchor")} className={btnClass(filter === "anchor")}>{t("anchors")}</button>
-          {isInternalUser && (
-            <button type="button" onClick={() => setFilter("internal_assets")} className={btnClass(filter === "internal_assets")}>{t("internalAssets")}</button>
-          )}
-        </div>
+      {!solutionsOnly && (
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [-webkit-overflow-scrolling:touch]">
+            <button type="button" onClick={() => setFilter("all")} className={btnClass(filter === "all")}>{t("all")}</button>
+            <button type="button" onClick={() => setFilter("solution")} className={btnClass(filter === "solution")}>{t("solutions")}</button>
+            <button type="button" onClick={() => setFilter("anchor")} className={btnClass(filter === "anchor")}>{t("anchors")}</button>
+            {isInternalUser && (
+              <button type="button" onClick={() => setFilter("internal_assets")} className={btnClass(filter === "internal_assets")}>{t("internalAssets")}</button>
+            )}
+          </div>
 
-        <div className="flex justify-end">
-          <span className="inline-flex items-center rounded-full bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
-            <span className="sm:hidden">{isInternalUser ? t("showingPubInt") : t("showingPub")}</span>
-            <span className="hidden sm:inline">{isInternalUser ? t("showingPublicInternal") : t("showingPublic")}</span>
-          </span>
+          <div className="flex justify-end">
+            <span className="inline-flex items-center rounded-full bg-[var(--surface-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--anchor-deep)]">
+              <span className="sm:hidden">{isInternalUser ? t("showingPubInt") : t("showingPub")}</span>
+              <span className="hidden sm:inline">{isInternalUser ? t("showingPublicInternal") : t("showingPublic")}</span>
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-4">
         {error ? (

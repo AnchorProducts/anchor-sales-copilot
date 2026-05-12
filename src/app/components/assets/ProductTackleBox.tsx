@@ -850,15 +850,22 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           credentials: "include",
           body: fd,
         });
-        const json = await res.json().catch(() => ({}));
+        const text = await res.text();
+        let json: any = {};
+        try { json = text ? JSON.parse(text) : {}; } catch { /* keep text */ }
         if (!res.ok || !json?.path) {
-          setFormMsg(json?.error || "Upload failed.");
+          const detail = json?.error || (text && text.slice(0, 200)) || `HTTP ${res.status}`;
+          // eslint-disable-next-line no-console
+          console.error("[Add asset] upload failed", { status: res.status, body: text });
+          setFormMsg(`Upload failed: ${detail}`);
           setAdding(false);
           return;
         }
         finalPath = json.path;
       } catch (err: any) {
-        setFormMsg(err?.message || "Upload failed.");
+        // eslint-disable-next-line no-console
+        console.error("[Add asset] upload threw", err);
+        setFormMsg(`Upload failed: ${err?.message || "network error"}`);
         setAdding(false);
         return;
       }
