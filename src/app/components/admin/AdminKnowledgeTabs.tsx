@@ -7,6 +7,12 @@ import Button from "@/app/components/ui/Button";
 import { Alert } from "@/app/components/ui/Alert";
 import { Select } from "@/app/components/ui/Field";
 import { Tabs, TabButton } from "@/app/components/ui/Tabs";
+import {
+  SOLUTION_CATALOG,
+  SOLUTION_CATEGORIES,
+  type CatalogSolution,
+  type SolutionCategoryKey,
+} from "@/lib/solutions/solutionCatalog";
 
 type Role = "admin" | "anchor_rep" | "external_rep";
 
@@ -44,8 +50,54 @@ type KnowledgeDocRow = {
   status: string | null;
   allowed: boolean | null;
   audience: string | null;
+  source_path: string | null;
+  category: string | null;
   updated_at: string | null;
   created_at: string | null;
+};
+
+function slugify(input: string) {
+  return String(input || "")
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Extract the storage-folder slug after "solutions/" so we can match a doc
+// back to the Resource Library catalog item it was uploaded against.
+function solutionSlugFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const m = path.match(/^solutions\/([^/]+)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function catalogForSlug(slug: string | null): CatalogSolution | null {
+  if (!slug) return null;
+  for (const item of SOLUTION_CATALOG) {
+    if (slugify(item.label) === slug) return item;
+    if (item.legacyName && slugify(item.legacyName) === slug) return item;
+    if (item.legacyFolder) {
+      const legacyEnd = item.legacyFolder.split("/").pop();
+      if (legacyEnd && legacyEnd === slug) return item;
+    }
+  }
+  return null;
+}
+
+const CATEGORY_TITLES: Record<SolutionCategoryKey, string> = {
+  "mechanical": "Mechanical",
+  "box-frames": "Box Frames",
+  "pipe-conduit-supports": "Pipe & Conduit Supports",
+  "snow-retention": "Snow Retention",
+  "elevated-structure-securement": "Elevated Structure Securement",
+  "h-frame-supports": "H-Frame Supports",
+  "rooftop-solar": "Rooftop Solar",
+  "equipment-screen": "Equipment Screen",
+  "safety-access": "Safety & Access",
+  "lightning-protection": "Lightning Protection",
+  "security-monitoring-communication": "Security, Monitoring, & Communication",
 };
 
 type TabKey = "feedback" | "corrections" | "docs";
@@ -77,6 +129,59 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
+
+  function toggleCat(key: string) {
+    setCollapsedCats((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  }
+
+  // Group knowledge docs by Resource Library solution category (mirror of
+  // AssetsBrowser) so admin can scan/manage them the same way.
+  type DocGroup = {
+    catKey: SolutionCategoryKey | "uncategorized";
+    catLabel: string;
+    bySolution: { item: CatalogSolution | null; label: string; docs: KnowledgeDocRow[] }[];
+  };
+
+  const docGroups = useMemo<DocGroup[]>(() => {
+    const buckets = new Map<string, Map<string, { item: CatalogSolution | null; label: string; docs: KnowledgeDocRow[] }>>();
+
+    function ensureBucket(catKey: string) {
+      if (!buckets.has(catKey)) buckets.set(catKey, new Map());
+      return buckets.get(catKey)!;
+    }
+
+    for (const d of docs) {
+      const slug = solutionSlugFromPath(d.source_path);
+      const item = catalogForSlug(slug);
+      const catKey = item ? item.category : "uncategorized";
+      const solKey = item ? item.key : slug ?? "uncategorized";
+      const solLabel = item ? item.label : slug ?? "Uncategorized";
+      const bucket = ensureBucket(catKey);
+      if (!bucket.has(solKey)) bucket.set(solKey, { item, label: solLabel, docs: [] });
+      bucket.get(solKey)!.docs.push(d);
+    }
+
+    const order: (SolutionCategoryKey | "uncategorized")[] = [
+      ...SOLUTION_CATEGORIES.map((c) => c.key),
+      "uncategorized",
+    ];
+    return order
+      .map((catKey) => {
+        const bucket = buckets.get(catKey);
+        if (!bucket || bucket.size === 0) return null;
+        const catLabel =
+          catKey === "uncategorized"
+            ? "Uncategorized"
+            : CATEGORY_TITLES[catKey as SolutionCategoryKey];
+        return {
+          catKey,
+          catLabel,
+          bySolution: Array.from(bucket.values()).sort((a, b) => a.label.localeCompare(b.label)),
+        } as DocGroup;
+      })
+      .filter((g): g is DocGroup => g !== null);
+  }, [docs]);
 
   async function loadFeedback() {
     setLoading(true);
@@ -131,9 +236,9 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
     try {
       const { data, error } = await supabase
         .from("knowledge_documents")
-        .select("id,title,status,allowed,audience,updated_at,created_at")
+        .select("id,title,status,allowed,audience,source_path,category,updated_at,created_at")
         .order("updated_at", { ascending: false })
-        .limit(200);
+        .limit(500);
 
       if (error) throw error;
       setDocs((data || []) as KnowledgeDocRow[]);
@@ -503,53 +608,100 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
         {tab === "docs" ? (
           <>
             <div className="mb-3 text-[12px] text-white/60">
-              {loading ? "Loading…" : `${docs.length} docs`}
+              {loading ? "Loading…" : `${docs.length} docs across ${docGroups.length} categories`}
             </div>
 
-            <div className="space-y-2">
-              {docs.map((d) => (
-                <div key={d.id} className="rounded-lg border border-white/10 bg-black/30 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white/90">
-                        {d.title ?? "(untitled)"}
+            <div className="space-y-3">
+              {docGroups.map((group) => {
+                const isCollapsed = collapsedCats[group.catKey] ?? true;
+                const totalDocs = group.bySolution.reduce((sum, s) => sum + s.docs.length, 0);
+                return (
+                  <section key={group.catKey} className="rounded-xl border border-white/10 bg-black/20">
+                    <button
+                      type="button"
+                      onClick={() => toggleCat(group.catKey)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+                      aria-expanded={!isCollapsed}
+                    >
+                      <span className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-white/90">
+                        {group.catLabel}
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/80">
+                          {totalDocs}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-white/50">{isCollapsed ? "▾" : "▴"}</span>
+                    </button>
+
+                    {!isCollapsed && (
+                      <div className="border-t border-white/10 px-3 py-2 space-y-3">
+                        {group.bySolution.map((sol) => (
+                          <div key={`${group.catKey}-${sol.label}`} className="grid gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <div className="text-[12px] font-semibold text-white/90 break-words">
+                                {sol.label}
+                              </div>
+                              {sol.item?.comingSoon && (
+                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-white/60">
+                                  Coming soon
+                                </span>
+                              )}
+                              <span className="ml-auto text-[10px] text-white/40">
+                                {sol.docs.length} doc{sol.docs.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+
+                            <div className="grid gap-1.5">
+                              {sol.docs.map((d) => (
+                                <div key={d.id} className="rounded-lg border border-white/10 bg-black/30 p-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="break-words text-sm font-semibold text-white/90">
+                                        {d.title ?? "(untitled)"}
+                                      </div>
+                                      <div className="text-[11px] text-white/55">
+                                        {d.category ? `${d.category} · ` : ""}updated {fmt(d.updated_at || d.created_at)}
+                                      </div>
+                                      {d.source_path && (
+                                        <div className="mt-0.5 truncate text-[10px] text-white/40">
+                                          {d.source_path}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {role === "admin" ? (
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Select
+                                          className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
+                                          value={d.status ?? "draft"}
+                                          onChange={(e) => setDocStatus(d.id, e.target.value)}
+                                        >
+                                          <option value="draft">draft</option>
+                                          <option value="approved">approved</option>
+                                          <option value="archived">archived</option>
+                                        </Select>
+
+                                        <Button
+                                          className="px-3 py-2 text-[12px]"
+                                          onClick={() => toggleDocAllowed(d.id, !(d.allowed ?? false))}
+                                          variant="ghost"
+                                        >
+                                          {d.allowed ? "Allowed ✅" : "Blocked 🚫"}
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="text-[11px] text-white/55">
-                        id: {d.id} • updated: {fmt(d.updated_at || d.created_at)}
-                      </div>
-                    </div>
+                    )}
+                  </section>
+                );
+              })}
 
-                    {role === "admin" ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select
-                          className="w-auto border-white/15 bg-black/20 px-2 py-2 text-[12px] text-white"
-                          value={d.status ?? "draft"}
-                          onChange={(e) => setDocStatus(d.id, e.target.value)}
-                        >
-                          <option value="draft">draft</option>
-                          <option value="approved">approved</option>
-                          <option value="archived">archived</option>
-                        </Select>
-
-                        <Button
-                          className="px-3 py-2 text-[12px]"
-                          onClick={() => toggleDocAllowed(d.id, !(d.allowed ?? false))}
-                          variant="ghost"
-                        >
-                          {d.allowed ? "Allowed ✅" : "Blocked 🚫"}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-2 text-[11px] text-white/60">
-                    audience: {d.audience ?? "—"} • status: {d.status ?? "—"} • allowed:{" "}
-                    {String(!!d.allowed)}
-                  </div>
-                </div>
-              ))}
-
-              {docs.length === 0 && !loading ? (
+              {docGroups.length === 0 && !loading ? (
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-[12px] text-white/70">
                   No docs found.
                 </div>
