@@ -9,6 +9,7 @@ import Button from "@/app/components/ui/Button";
 import { Card } from "@/app/components/ui/Card";
 import { Input } from "@/app/components/ui/Field";
 import { Alert } from "@/app/components/ui/Alert";
+import { trackEvent } from "@/lib/analytics/track";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +159,8 @@ function LoginInner() {
         // Don’t block login; but warn so you can debug.
         setMsg("Signed in, but server cookies failed to sync. Try refreshing once.");
       }
+
+      trackEvent("login", { method: "otp" });
 
       router.replace(nextUrl);
       router.refresh();
