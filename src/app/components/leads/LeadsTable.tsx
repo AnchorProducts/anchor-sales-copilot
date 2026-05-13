@@ -30,11 +30,12 @@ export default function LeadsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leads, setLeads] = useState<LeadRow[]>([]);
-  // Set by the server when the logged-in rep is auto-scoped to specific
-  // states. Empty when the user is admin (sees everything) or when an
-  // internal rep hasn't been assigned any states yet.
-  const [scopedStates, setScopedStates] = useState<string[]>([]);
-  const isScoped = scopedStates.length > 0;
+  // null  = admin (sees everything)
+  // []    = anchor_rep with no states assigned yet
+  // ["…"] = anchor_rep scoped to those states
+  const [scopedStates, setScopedStates] = useState<string[] | null>(null);
+  const isScoped = scopedStates !== null;
+  const isUnassigned = isScoped && scopedStates!.length === 0;
 
   async function load() {
     setLoading(true);
@@ -59,7 +60,9 @@ export default function LeadsTable() {
       }
 
       setLeads((json?.leads || []) as LeadRow[]);
-      setScopedStates((json?.scopedStates || []) as string[]);
+      setScopedStates(
+        Array.isArray(json?.scopedStates) ? (json.scopedStates as string[]) : null
+      );
       setLoading(false);
     } catch (e: any) {
       setError(e?.message || "Failed to load opportunities.");
@@ -79,9 +82,11 @@ export default function LeadsTable() {
         <div>
           <div className="text-sm font-semibold text-black">Consults</div>
           <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-            {isScoped
-              ? `Triage for your region: ${scopedStates.join(", ")}`
-              : "Internal consult management"}
+            {isUnassigned
+              ? "No states assigned to you yet"
+              : isScoped
+                ? `Triage for your region: ${scopedStates!.join(", ")}`
+                : "Internal consult management"}
           </div>
         </div>
 
@@ -117,10 +122,24 @@ export default function LeadsTable() {
         ) : loading ? (
           <Alert tone="neutral">Loading…</Alert>
         ) : leads.length === 0 ? (
-          <Alert tone="neutral">
-            {isScoped
-              ? `No consults in ${scopedStates.join(", ")} yet.`
-              : "No leads found."}
+          <Alert tone={isUnassigned ? "error" : "neutral"}>
+            {isUnassigned ? (
+              <>
+                Your account isn&apos;t assigned to any states yet, so no
+                consults are showing. An admin needs to add you on the{" "}
+                <Link
+                  href="/admin/sales-reps"
+                  className="font-semibold underline"
+                >
+                  Sales Reps
+                </Link>{" "}
+                page with your email and the states you cover.
+              </>
+            ) : isScoped ? (
+              `No consults in ${scopedStates!.join(", ")} yet.`
+            ) : (
+              "No leads found."
+            )}
           </Alert>
         ) : (
           <TableWrapper>
