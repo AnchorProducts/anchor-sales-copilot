@@ -125,6 +125,7 @@ export default function LeadDetail({ id }: { id: string }) {
       }
 
       const row = json?.lead as LeadRow;
+      const urlMap = (json?.attachmentUrls ?? {}) as Record<string, string>;
       setLead(row);
       setStatus(row.status || "new");
       setAssignedRep(row.assigned_rep_user_id || "");
@@ -137,12 +138,19 @@ export default function LeadDetail({ id }: { id: string }) {
 
       setReps((repRows || []) as RepRow[]);
 
+      // Server pre-signs URLs (browser client can't, storage RLS blocks it).
       const atts = Array.isArray(row.attachments) ? row.attachments : [];
-      const signed: SignedAttachment[] = [];
-
-      for (const att of atts) {
-        const { data } = await supabase.storage.from("lead-uploads").createSignedUrl(att.path, 60 * 30);
-        signed.push({ ...att, url: data?.signedUrl || null });
+      const signed: SignedAttachment[] = atts.map((att) => ({
+        ...att,
+        url: urlMap[att.path] ?? null,
+      }));
+      // Build a global path→url map so per-solution attachments resolve too.
+      for (const s of row.solution_requests ?? []) {
+        for (const att of s.attachments ?? []) {
+          if (urlMap[att.path] && !signed.find((x) => x.path === att.path)) {
+            signed.push({ ...att, url: urlMap[att.path] });
+          }
+        }
       }
 
       setAttachments(signed);
@@ -371,7 +379,13 @@ export default function LeadDetail({ id }: { id: string }) {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {attachments.map((att) => (
-                <AttachmentLink key={att.path} filename={att.filename} path={att.path} url={att.url} />
+                <AttachmentLink
+                  key={att.path}
+                  filename={att.filename}
+                  path={att.path}
+                  url={att.url}
+                  contentType={att.contentType}
+                />
               ))}
             </div>
           )
@@ -404,6 +418,7 @@ export default function LeadDetail({ id }: { id: string }) {
                           filename={att.filename}
                           path={att.path}
                           url={signed?.url ?? null}
+                          contentType={att.contentType}
                         />
                       );
                     })
@@ -475,24 +490,56 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "svg"]);
+
+function isImage(filename: string, contentType?: string) {
+  if (contentType && contentType.startsWith("image/")) return true;
+  const ext = filename.toLowerCase().split(".").pop() || "";
+  return IMAGE_EXTS.has(ext);
+}
+
 function AttachmentLink({
   filename,
   path,
   url,
+  contentType,
 }: {
   filename: string;
   path: string;
   url: string | null;
+  contentType?: string;
 }) {
+  const showThumb = !!url && isImage(filename, contentType);
+  const isDisabled = !url;
+
   return (
     <a
       href={url || "#"}
       target="_blank"
       rel="noopener noreferrer"
-      className="block rounded-xl border border-[var(--border-default)] bg-white p-3 transition-colors hover:bg-[var(--surface-soft)]"
+      aria-disabled={isDisabled || undefined}
+      onClick={(e) => {
+        if (isDisabled) e.preventDefault();
+      }}
+      className={`block overflow-hidden rounded-xl border border-[var(--border-default)] bg-white transition-colors hover:bg-[var(--surface-soft)] ${
+        isDisabled ? "cursor-not-allowed opacity-60" : ""
+      }`}
     >
-      <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{filename}</div>
-      <div className="mt-1 truncate text-[11px] text-[var(--anchor-gray)]">{path}</div>
+      {showThumb && (
+        <div className="aspect-[16/10] w-full overflow-hidden bg-[var(--surface-soft)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url!}
+            alt={filename}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      )}
+      <div className="p-3">
+        <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{filename}</div>
+        <div className="mt-1 truncate text-[11px] text-[var(--anchor-gray)]">{path}</div>
+      </div>
     </a>
   );
 }
