@@ -29,9 +29,6 @@ type AssessmentReport = {
   user_id?: string;
 };
 
-type ConversationCount = { user_id: string; count: number };
-type LeadCount = { user_id: string; count: number };
-
 type UserRow = ExternalUser & {
   conversationCount: number;
   leadCount: number;
@@ -72,96 +69,27 @@ export default function ReportsPage() {
 
     (async () => {
       try {
-        // Auth + admin gate
         const { data: userData } = await supabase.auth.getUser();
         if (!alive) return;
-        const user = userData.user;
-        if (!user) { router.replace("/"); return; }
+        if (!userData.user) { router.replace("/"); return; }
 
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (!alive) return;
-        if (prof?.role !== "admin") { router.replace("/dashboard"); return; }
-
-        // Fetch all external users
-        const { data: extUsers, error: usersErr } = await supabase
-          .from("profiles")
-          .select("id,email,full_name,company,phone,created_at")
-          .eq("user_type", "external")
-          .order("created_at", { ascending: false });
-
-        if (usersErr) throw usersErr;
+        const res = await fetch("/api/admin/user-activity", {
+          credentials: "include",
+          cache: "no-store",
+        });
         if (!alive) return;
 
-        const userIds = (extUsers ?? []).map((u: any) => u.id);
+        if (res.status === 401) { router.replace("/"); return; }
+        if (res.status === 403) { router.replace("/dashboard"); return; }
 
-        // Conversation counts
-        let convCounts: ConversationCount[] = [];
-        if (userIds.length > 0) {
-          const { data: convData } = await supabase
-            .from("conversations")
-            .select("user_id")
-            .in("user_id", userIds)
-            .is("deleted_at", null);
-          if (!alive) return;
-          const counts: Record<string, number> = {};
-          for (const row of convData ?? []) {
-            counts[row.user_id] = (counts[row.user_id] ?? 0) + 1;
-          }
-          convCounts = Object.entries(counts).map(([user_id, count]) => ({ user_id, count }));
-        }
-
-        // Lead counts (by user_id column if it exists, else 0)
-        let leadCounts: LeadCount[] = [];
-        if (userIds.length > 0) {
-          const { data: leadData } = await supabase
-            .from("leads")
-            .select("user_id")
-            .in("user_id", userIds);
-          if (!alive) return;
-          if (leadData) {
-            const counts: Record<string, number> = {};
-            for (const row of leadData) {
-              if (row.user_id) counts[row.user_id] = (counts[row.user_id] ?? 0) + 1;
-            }
-            leadCounts = Object.entries(counts).map(([user_id, count]) => ({ user_id, count }));
-          }
-        }
-
-        // Assessment reports
-        let reports: AssessmentReport[] = [];
-        if (userIds.length > 0) {
-          const { data: reportData } = await supabase
-            .from("assessment_reports")
-            .select("id,contractor_name,company_name,access_type,created_at,file_url,flags_count,user_id")
-            .order("created_at", { ascending: false });
-          if (!alive) return;
-          reports = reportData ?? [];
-        }
-
-        // Merge
-        const convMap = Object.fromEntries(convCounts.map((c) => [c.user_id, c.count]));
-        const leadMap = Object.fromEntries(leadCounts.map((c) => [c.user_id, c.count]));
-
-        const rows: UserRow[] = (extUsers ?? []).map((u: any) => ({
-          ...u,
-          conversationCount: convMap[u.id] ?? 0,
-          leadCount: leadMap[u.id] ?? 0,
-          // Match reports by user_id if present, else by company name as fallback
-          reports: reports.filter(
-            (r) => r.user_id === u.id || (!r.user_id && r.company_name === u.company)
-          ),
-        }));
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error || "Failed to load reports.");
 
         if (!alive) return;
-        setUsers(rows);
-      } catch (e: any) {
+        setUsers((body?.users ?? []) as UserRow[]);
+      } catch (e: unknown) {
         if (!alive) return;
-        setError(e?.message || "Failed to load reports.");
+        setError(e instanceof Error ? e.message : "Failed to load reports.");
       } finally {
         if (!alive) return;
         setLoading(false);
