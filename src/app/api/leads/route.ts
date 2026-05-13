@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { sendSmtpEmail } from "@/lib/email/sendSmtp";
+import { Resend } from "resend";
 import { resolveRegionalAssignment, resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
@@ -205,13 +205,14 @@ async function sendInsideSalesLeadEmail(params: {
   assignmentNote: string | null;
   selectedSolutions: Array<{ label: string; filesCount: number; comment: string | null }>;
 }) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) throw new Error("RESEND_API_KEY is missing");
+
+  const resend = new Resend(resendKey);
   const to = clean(params.toEmail);
   if (!to) return;
 
-  const from =
-    clean(process.env.LEAD_NOTIFICATIONS_FROM) ||
-    clean(process.env.SMTP_FROM) ||
-    "Anchor Co-Pilot <reports@anchorp.com>";
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
   const contactMethodLabel = CONTACT_METHOD_LABELS[params.preferredContactMethod] || params.preferredContactMethod;
 
   const dashboardUrl = buildLeadDashboardUrl(params.req, params.leadId);
@@ -244,14 +245,19 @@ async function sendInsideSalesLeadEmail(params: {
   lines.push("");
   lines.push(`Review Opportunity: ${dashboardUrl}`);
 
-  const result = await sendSmtpEmail({
+  const result = await resend.emails.send({
     from,
-    to,
+    to: [to],
     subject,
     text: lines.join("\n"),
   });
 
-  return { emailId: result.messageId || null };
+  const maybeError = (result as any)?.error;
+  if (maybeError) {
+    throw new Error(clean(maybeError?.message) || "Resend returned an error");
+  }
+
+  return { emailId: clean((result as any)?.data?.id) || null };
 }
 
 export async function POST(req: Request) {
