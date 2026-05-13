@@ -634,21 +634,22 @@ export default function ChatPage() {
                                   {t("relatedDocuments")}
                                 </div>
                                 <div className="flex flex-col gap-1.5">
-                                  {m.docs.map((doc) => (
-                                    <a
-                                      key={doc.path}
-                                      href={`/api/doc-open?path=${encodeURIComponent(doc.path)}&download=0`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center justify-between gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-xs transition active:bg-[var(--surface-soft)] hover:bg-[var(--surface-soft)]"
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate font-semibold text-black">{doc.title}</div>
-                                        <div className="text-[11px] text-[var(--anchor-gray)]">{doc.doc_type}</div>
-                                      </div>
-                                      <span className="shrink-0 text-[var(--anchor-green)] font-medium">{t("open")}</span>
-                                    </a>
-                                  ))}
+                                  {m.docs.map((doc) => {
+                                    const viewerHref = `/docs/view?path=${encodeURIComponent(doc.path)}&from=${encodeURIComponent("/chat")}&title=${encodeURIComponent(doc.title)}`;
+                                    return (
+                                      <a
+                                        key={doc.path}
+                                        href={viewerHref}
+                                        className="flex items-center justify-between gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-xs transition active:bg-[var(--surface-soft)] hover:bg-[var(--surface-soft)]"
+                                      >
+                                        <div className="min-w-0">
+                                          <div className="truncate font-semibold text-black">{doc.title}</div>
+                                          <div className="text-[11px] text-[var(--anchor-gray)]">{doc.doc_type}</div>
+                                        </div>
+                                        <span className="shrink-0 text-[var(--anchor-green)] font-medium">{t("open")}</span>
+                                      </a>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}

@@ -685,9 +685,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return accessToken ? `${base}&token=${encodeURIComponent(accessToken)}` : base;
   }
 
-  // "Open" should be inline (good for iOS Quick Look / in-app viewer)
+  // "Open" routes through the in-app viewer so the user always has a
+  // "Back to Solution" button instead of being stranded on a signed URL.
   function openInline(path: string) {
-    window.location.href = docOpenHref(path, false);
+    const qs = new URLSearchParams({
+      path,
+      from: window.location.pathname,
+      title: titleFromPath(path),
+    });
+    window.location.href = `/docs/view?${qs.toString()}`;
   }
 
   function forceDownload(path: string) {
