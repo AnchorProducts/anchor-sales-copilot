@@ -16,6 +16,7 @@ import {
   SOLUTION_CATALOG,
   SOLUTION_CATEGORIES,
 } from "@/lib/solutions/solutionCatalog";
+import { trackEvent } from "@/lib/analytics/track";
 
 type FormState = {
   customer_company: string;
@@ -335,6 +336,7 @@ export default function LeadForm() {
         return;
       }
 
+      trackEvent("lead_submitted", { leadId: json?.id ?? null });
       setSuccess("REC submitted. Thanks!");
       setForm({
         customer_company: "",
