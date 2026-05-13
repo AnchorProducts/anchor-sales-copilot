@@ -52,12 +52,11 @@ export function trackEvent(
   metadata?: Record<string, unknown>
 ) {
   if (typeof window === "undefined") return;
-  const pagePath = window.location.pathname;
-  if (isPublicPath(pagePath)) return;
-
+  // Explicit events (login, form submits, etc.) fire from any path.
+  // The endpoint is auth-gated, so unauthenticated calls fail silently.
   postEvents({
     event_type: eventType,
-    page_path: pagePath,
+    page_path: window.location.pathname,
     metadata: metadata ?? {},
   });
 }

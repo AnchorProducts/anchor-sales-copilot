@@ -141,6 +141,23 @@ export async function GET() {
       .slice(0, 5);
   }
 
+  // Aggregate daily series and overall event-type mix for the dashboard charts.
+  const daysBack = 30;
+  const dailyCounts: Record<string, number> = {};
+  const todayUTC = new Date();
+  todayUTC.setUTCHours(0, 0, 0, 0);
+  for (let i = daysBack - 1; i >= 0; i--) {
+    const d = new Date(todayUTC.getTime() - i * 24 * 60 * 60 * 1000);
+    dailyCounts[d.toISOString().slice(0, 10)] = 0;
+  }
+  const overallByType: Record<string, number> = {};
+  for (const e of events) {
+    const day = e.created_at.slice(0, 10);
+    if (day in dailyCounts) dailyCounts[day] += 1;
+    overallByType[e.event_type] = (overallByType[e.event_type] ?? 0) + 1;
+  }
+  const dailyEvents = Object.entries(dailyCounts).map(([date, count]) => ({ date, count }));
+
   const rows = (users ?? []).map((u: ProfileRow) => ({
     ...u,
     conversationCount: convCounts[u.id] ?? 0,
@@ -157,5 +174,8 @@ export async function GET() {
     },
   }));
 
-  return NextResponse.json({ users: rows });
+  return NextResponse.json({
+    users: rows,
+    charts: { dailyEvents, eventsByType: overallByType },
+  });
 }
