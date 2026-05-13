@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
-import { resolveRegionalAssignment } from "@/lib/sales/regions";
+import { resolveRegionalAssignment, resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -610,18 +610,33 @@ export async function GET(req: Request) {
     const status = clean(searchParams.get("status"));
     const region = clean(searchParams.get("region"));
 
+    // anchor_rep is auto-scoped to their assigned states. admin sees all.
+    let repStates: string[] = [];
+    if (role === "anchor_rep") {
+      repStates = await resolveStatesForUser(auth.user.id);
+      if (repStates.length === 0) {
+        // Rep is internal but not assigned any states yet — return empty so
+        // they see a clear "ask admin to assign states" empty state.
+        return NextResponse.json({ leads: [], scopedStates: [] });
+      }
+    }
+
     let query = supabaseAdmin
       .from("leads")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (status && STATUS_SET.has(status)) query = query.eq("status", status);
-    if (region) query = query.eq("region_code", upper(region));
+    if (region) {
+      query = query.eq("region_code", upper(region));
+    } else if (repStates.length > 0) {
+      query = query.in("region_code", repStates);
+    }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ leads: data || [] });
+    return NextResponse.json({ leads: data || [], scopedStates: repStates });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load opportunities." }, { status: 500 });
   }
