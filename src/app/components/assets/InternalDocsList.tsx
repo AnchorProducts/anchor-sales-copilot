@@ -26,6 +26,15 @@ function docOpenHref(path: string, download = true) {
   const p = String(path || "").trim();
   return `/api/doc-open?path=${encodeURIComponent(p)}${download ? "&download=1" : ""}`;
 }
+
+function docViewerHref(path: string, title: string | null) {
+  const qs = new URLSearchParams({
+    path,
+    from: typeof window !== "undefined" ? window.location.pathname : "/internal-assets",
+    ...(title ? { title } : {}),
+  });
+  return `/docs/view?${qs.toString()}`;
+}
 function isDocxPath(path: string) {
   const p = String(path || "").toLowerCase().split("?")[0];
   return p.endsWith(".docx");
@@ -262,16 +271,18 @@ export default function InternalDocsList({ productId }: { productId: string }) {
             ) : (
               <div className="grid gap-3">
                 {assets.map((a) => {
-  const download = shouldDownload(a);
-  const href = docOpenHref(a.path, download);
   const isPdf = (p: string) => p.toLowerCase().endsWith(".pdf");
+
+  const isPreviewable = isPdf(a.path);
+  // PDFs route through the in-app viewer (with a Back button); DOCX
+  // and other formats just download in the same tab.
+  const href = isPreviewable ? docViewerHref(a.path, a.title) : docOpenHref(a.path, true);
 
   return (
     <a
   key={a.id}
-  href={docOpenHref(a.path, !isPdf(a.path))} // ✅ pdf => download=false (inline), doc/docx => download=true
-  target="_blank"
-  rel="noopener noreferrer"
+  href={href}
+  {...(isPreviewable ? {} : { target: "_blank", rel: "noopener noreferrer" })}
   className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 text-left transition hover:bg-black/[0.03]"
 >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -284,7 +295,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
 
         <div className="w-full sm:w-auto sm:shrink-0">
           <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-            {download ? "Download →" : "Open →"}
+            {isPreviewable ? "Open →" : "Download →"}
           </div>
         </div>
       </div>
