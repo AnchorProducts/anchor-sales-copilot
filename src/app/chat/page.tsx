@@ -10,6 +10,7 @@ import { Input } from "@/app/components/ui/Field";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import ChatSidebar from "@/app/components/ChatSidebar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { trackEvent } from "@/lib/analytics/track";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -448,6 +449,8 @@ export default function ChatPage() {
       });
 
       if (res.status === 401) { router.replace("/"); router.refresh(); return; }
+
+      trackEvent("chat_message_sent", { conversationId });
 
       const data = await readJsonSafely<ChatResponse>(res);
 

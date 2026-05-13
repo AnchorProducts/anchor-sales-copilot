@@ -6,6 +6,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { trackEvent } from "@/lib/analytics/track";
 
 type Photo = { id: string; file: File; previewUrl: string };
 
@@ -81,6 +82,7 @@ export default function NotableProjectForm() {
         return;
       }
 
+      trackEvent("notable_project_submitted", { projectId: json?.id ?? null });
       setSuccess(t("notableProjectSubmitted"));
       photos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
       setPhotos([]);
