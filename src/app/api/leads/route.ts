@@ -212,7 +212,11 @@ async function sendInsideSalesLeadEmail(params: {
   const to = clean(params.toEmail);
   if (!to) return;
 
-  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  // Default to Resend's onboarding sender so the flow works end-to-end
+  // before anchorp.com is verified in Resend. Override with
+  // LEAD_NOTIFICATIONS_FROM once you've added the DNS records and
+  // verified the domain in Resend (then use a real @anchorp.com from).
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <onboarding@resend.dev>";
   const contactMethodLabel = CONTACT_METHOD_LABELS[params.preferredContactMethod] || params.preferredContactMethod;
 
   const dashboardUrl = buildLeadDashboardUrl(params.req, params.leadId);
