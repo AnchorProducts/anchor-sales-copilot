@@ -94,7 +94,7 @@ export function MobileBottomNav() {
   // Dashboard is "active" for /dashboard and any /dashboard/* that isn't settings, plus /admin (so admins see a sensible active tab)
   const isDashboard =
     !isSettings && !isCopilot && !isAssets &&
-    (pathname === "/dashboard" || pathname.startsWith("/dashboard") || pathname.startsWith("/admin") || pathname.startsWith("/rooftop"));
+    (pathname === "/dashboard" || pathname.startsWith("/dashboard") || pathname.startsWith("/admin"));
 
   return (
     <nav
