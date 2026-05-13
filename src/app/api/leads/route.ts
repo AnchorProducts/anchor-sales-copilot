@@ -206,17 +206,16 @@ async function sendInsideSalesLeadEmail(params: {
   selectedSolutions: Array<{ label: string; filesCount: number; comment: string | null }>;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
-  if (!resendKey) throw new Error("RESEND_API_KEY is missing");
+  // Silently skip sending if no key is configured. Lets us turn off
+  // notifications globally (e.g. while waiting on domain verification)
+  // by clearing RESEND_API_KEY in Vercel without breaking submissions.
+  if (!resendKey) return;
 
   const resend = new Resend(resendKey);
   const to = clean(params.toEmail);
   if (!to) return;
 
-  // Default to Resend's onboarding sender so the flow works end-to-end
-  // before anchorp.com is verified in Resend. Override with
-  // LEAD_NOTIFICATIONS_FROM once you've added the DNS records and
-  // verified the domain in Resend (then use a real @anchorp.com from).
-  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <onboarding@resend.dev>";
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
   const contactMethodLabel = CONTACT_METHOD_LABELS[params.preferredContactMethod] || params.preferredContactMethod;
 
   const dashboardUrl = buildLeadDashboardUrl(params.req, params.leadId);

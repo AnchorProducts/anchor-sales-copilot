@@ -42,8 +42,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const resend = new Resend(mustGetEnv("RESEND_API_KEY"));
-    const to = parseRecipients(mustGetEnv("WEEKLY_REPORT_TO"));
+    // Tolerate emails-disabled mode: if either env is missing, do the
+    // analytics aggregation + retention cleanup but skip the email.
+    const resendKey = (process.env.RESEND_API_KEY || "").trim();
+    const recipients = parseRecipients(process.env.WEEKLY_REPORT_TO || "");
+    const emailsEnabled = !!resendKey && recipients.length > 0;
+    const resend = emailsEnabled ? new Resend(resendKey) : null;
+    const to = recipients;
 
     // Report window: previous full week (Mon->Mon UTC)
     const now = new Date();
@@ -164,15 +169,24 @@ export async function GET(req: Request) {
 
     const text = lines.join("\n");
 
-    await resend.emails.send({
-      from: "Anchor Co-Pilot <reports@anchorp.com>", // can be any verified sender in Resend
-      to,
-      subject,
-      text,
-    });
+    if (resend && to.length > 0) {
+      await resend.emails.send({
+        from: "Anchor Co-Pilot <reports@anchorp.com>",
+        to,
+        subject,
+        text,
+      });
+    }
 
     return NextResponse.json(
-      { ok: true, start, end, sentTo: to, totals: { msgs: msgs.length, docOpens } },
+      {
+        ok: true,
+        start,
+        end,
+        sentTo: emailsEnabled ? to : [],
+        emailSent: emailsEnabled,
+        totals: { msgs: msgs.length, docOpens },
+      },
       { status: 200 }
     );
   } catch (e: any) {
