@@ -11,6 +11,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
+import { trackEvent } from "@/lib/analytics/track";
 
 type UserProfile = {
   full_name: string | null;
@@ -182,6 +183,7 @@ export default function CommissionForm() {
         return;
       }
 
+      trackEvent("commission_submitted", { claimId: json?.id ?? null });
       setSuccess("Commission claim submitted successfully.");
       setForm(INITIAL_FORM);
     } catch (err: any) {

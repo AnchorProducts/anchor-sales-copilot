@@ -257,6 +257,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Fire-and-forget analytics: record that an authenticated user opened a doc.
+  if (user) {
+    supabaseAdmin
+      .from("user_events")
+      .insert({
+        user_id: user.id,
+        event_type: "doc_opened",
+        page_path: "/api/doc-open",
+        metadata: { doc_path: path, download },
+      })
+      .then(
+        () => {},
+        () => {}
+      );
+  }
+
   /* ------------------------------------------------
      ✅ INLINE VIEW: redirect to signed URL
   ------------------------------------------------- */

@@ -54,6 +54,10 @@ export async function GET(req: Request) {
     const start = fmtISO(lastWeekStart);
     const end = fmtISO(thisWeekStart);
 
+    // Retention: keep user_events for 90 days, prune older rows.
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    await supabaseAdmin.from("user_events").delete().lt("created_at", ninetyDaysAgo);
+
     // -----------------------------
     // Messages (your existing table)
     // -----------------------------
