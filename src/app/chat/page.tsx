@@ -95,7 +95,6 @@ async function readJsonSafely<T = any>(res: Response): Promise<T | null> {
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const router = useRouter();
-  const goAdmin = useCallback(() => { router.push("/admin/knowledge"); }, [router]);
 
   const supabase = useMemo(() => supabaseBrowser(), []);
 
