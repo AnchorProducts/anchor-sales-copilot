@@ -46,7 +46,14 @@ type UserRow = ExternalUser & {
 
 type SortKey = "active" | "newest" | "leads" | "sessions";
 
+type DailyEvent = { date: string; count: number };
+type ChartsPayload = {
+  dailyEvents: DailyEvent[];
+  eventsByType: Record<string, number>;
+};
+
 const EVENT_TYPE_LABELS: Record<string, string> = {
+  login: "Logins",
   page_view: "Page views",
   chat_message_sent: "Chat messages",
   lead_submitted: "Leads submitted",
@@ -76,6 +83,15 @@ function fmtDateTime(iso: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  });
+}
+
+function fmtShortDate(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -119,6 +135,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [charts, setCharts] = useState<ChartsPayload>({ dailyEvents: [], eventsByType: {} });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("active");
@@ -146,6 +163,10 @@ export default function ReportsPage() {
 
         if (!alive) return;
         setUsers((body?.users ?? []) as UserRow[]);
+        setCharts({
+          dailyEvents: (body?.charts?.dailyEvents ?? []) as DailyEvent[],
+          eventsByType: (body?.charts?.eventsByType ?? {}) as Record<string, number>,
+        });
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load reports.");
@@ -164,6 +185,12 @@ export default function ReportsPage() {
   const total7Events = users.reduce((s, u) => s + u.events.total7, 0);
   const activeUsers  = users.filter((u) => u.events.total7 > 0).length;
   const maxActivity  = Math.max(1, ...users.map((u) => u.events.total7));
+
+  const total30Events = charts.dailyEvents.reduce((s, d) => s + d.count, 0);
+  const peakDay = charts.dailyEvents.reduce(
+    (acc, d) => (d.count > acc.count ? d : acc),
+    { date: "", count: 0 }
+  );
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -258,28 +285,52 @@ export default function ReportsPage() {
               />
             </section>
 
+            {/* Charts */}
+            <section className="mb-6 grid gap-3 sm:gap-4 md:grid-cols-3">
+              <Card className="p-4 sm:p-5 md:col-span-2">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <div>
+                    <div className="ds-caption">Activity · last 30 days</div>
+                    <div className="text-xs text-[var(--anchor-gray)]">
+                      {total30Events.toLocaleString()} events total
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-[var(--anchor-gray)]">
+                    Peak {peakDay.count.toLocaleString()} on {fmtShortDate(peakDay.date)}
+                  </div>
+                </div>
+                <DailyEventsChart data={charts.dailyEvents} />
+              </Card>
+              <Card className="p-4 sm:p-5">
+                <div className="ds-caption mb-3">Event mix · last 30 days</div>
+                <EventMixChart data={charts.eventsByType} />
+              </Card>
+            </section>
+
             {/* Controls */}
             <section className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative flex-1 sm:max-w-md">
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name, email, or company"
-                  className="ds-input w-full pl-9"
-                />
                 <svg
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--anchor-gray)]"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[var(--anchor-gray)]"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden
                 >
                   <circle cx="11" cy="11" r="7" />
-                  <path d="M21 21l-3.5-3.5" />
+                  <path d="M21 21l-4-4" />
                 </svg>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, email, or company"
+                  aria-label="Search users"
+                  className="ds-input w-full !pl-11"
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
@@ -635,6 +686,160 @@ function Avatar({ name, email }: { name: string | null; email: string }) {
       style={{ backgroundColor: bg }}
     >
       {text}
+    </div>
+  );
+}
+
+function DailyEventsChart({ data }: { data: DailyEvent[] }) {
+  if (data.length === 0) {
+    return <div className="text-sm text-[var(--anchor-gray)]">No data yet.</div>;
+  }
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const W = 600;
+  const H = 140;
+  const padLeft = 28;
+  const padRight = 8;
+  const padTop = 8;
+  const padBottom = 22;
+  const innerW = W - padLeft - padRight;
+  const innerH = H - padTop - padBottom;
+  const barW = innerW / data.length;
+  const gap = Math.max(1, barW * 0.18);
+
+  const gridYs = [0, 0.25, 0.5, 0.75, 1].map((p) => padTop + innerH * (1 - p));
+  const labelXs = data
+    .map((d, i) => ({ i, d }))
+    .filter(({ i }) => i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2));
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label="Daily events over the last 30 days"
+      className="h-36 w-full"
+      preserveAspectRatio="none"
+    >
+      {/* gridlines */}
+      {gridYs.map((y, idx) => (
+        <line
+          key={idx}
+          x1={padLeft}
+          x2={W - padRight}
+          y1={y}
+          y2={y}
+          stroke="var(--border-default)"
+          strokeWidth={1}
+          strokeDasharray={idx === gridYs.length - 1 ? "0" : "2 4"}
+        />
+      ))}
+      {/* y-axis labels */}
+      {[0, 0.5, 1].map((p) => {
+        const v = Math.round(max * p);
+        const y = padTop + innerH * (1 - p);
+        return (
+          <text
+            key={p}
+            x={padLeft - 6}
+            y={y + 3}
+            textAnchor="end"
+            fontSize={10}
+            fill="var(--anchor-gray)"
+          >
+            {v}
+          </text>
+        );
+      })}
+      {/* bars */}
+      {data.map((d, i) => {
+        const x = padLeft + barW * i + gap / 2;
+        const w = Math.max(1, barW - gap);
+        const h = (d.count / max) * innerH;
+        const y = padTop + innerH - h;
+        const isPeak = d.count === max && d.count > 0;
+        return (
+          <rect
+            key={d.date}
+            x={x}
+            y={y}
+            width={w}
+            height={h}
+            rx={1.5}
+            fill={isPeak ? "var(--anchor-deep)" : "var(--anchor-green)"}
+          >
+            <title>{`${fmtShortDate(d.date)}: ${d.count}`}</title>
+          </rect>
+        );
+      })}
+      {/* x-axis labels */}
+      {labelXs.map(({ i, d }) => {
+        const x = padLeft + barW * i + barW / 2;
+        return (
+          <text
+            key={d.date}
+            x={x}
+            y={H - 6}
+            textAnchor="middle"
+            fontSize={10}
+            fill="var(--anchor-gray)"
+          >
+            {fmtShortDate(d.date)}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function EventMixChart({ data }: { data: Record<string, number> }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, c]) => s + c, 0);
+
+  if (total === 0) {
+    return <div className="text-sm text-[var(--anchor-gray)]">No events yet.</div>;
+  }
+
+  const palette = [
+    "#11500F",
+    "#047835",
+    "#4A8F3E",
+    "#7BB87B",
+    "#9CE2BB",
+    "#1D6B4A",
+    "#2F7F5C",
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-[var(--surface-strong)]">
+        {entries.map(([type, count], i) => (
+          <div
+            key={type}
+            style={{
+              width: `${(count / total) * 100}%`,
+              backgroundColor: palette[i % palette.length],
+            }}
+            title={`${eventTypeLabel(type)}: ${count}`}
+          />
+        ))}
+      </div>
+      <ul className="space-y-1.5 text-xs">
+        {entries.map(([type, count], i) => (
+          <li key={type} className="flex items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: palette[i % palette.length] }}
+              aria-hidden
+            />
+            <span className="flex-1 truncate text-[var(--text-primary)]">
+              {eventTypeLabel(type)}
+            </span>
+            <span className="tabular-nums text-[var(--anchor-gray)]">
+              {Math.round((count / total) * 100)}%
+            </span>
+            <span className="ds-badge !rounded-full">{count}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
