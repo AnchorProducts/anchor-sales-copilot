@@ -29,11 +29,33 @@ type AssessmentReport = {
   user_id?: string;
 };
 
+type UserEvents = {
+  total7: number;
+  total30: number;
+  lastSeen: string | null;
+  byType: Record<string, number>;
+  topPages: Array<{ path: string; count: number }>;
+};
+
 type UserRow = ExternalUser & {
   conversationCount: number;
   leadCount: number;
   reports: AssessmentReport[];
+  events: UserEvents;
 };
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  page_view: "Page views",
+  chat_message_sent: "Chat messages",
+  lead_submitted: "Leads submitted",
+  commission_submitted: "Commission claims",
+  notable_project_submitted: "Notable projects",
+  doc_opened: "Docs opened",
+};
+
+function eventTypeLabel(t: string) {
+  return EVENT_TYPE_LABELS[t] ?? t.replace(/_/g, " ");
+}
 
 function fmt(iso: string | null) {
   if (!iso) return "—";
@@ -171,6 +193,10 @@ export default function ReportsPage() {
                       </div>
                       <div className="hidden shrink-0 items-center gap-6 text-center sm:flex">
                         <div>
+                          <div className="text-sm font-semibold text-[var(--anchor-deep)]">{u.events.total7}</div>
+                          <div className="text-[11px] text-[var(--anchor-gray)]">7-day events</div>
+                        </div>
+                        <div>
                           <div className="text-sm font-semibold text-[var(--anchor-deep)]">{u.conversationCount}</div>
                           <div className="text-[11px] text-[var(--anchor-gray)]">{t("sessions")}</div>
                         </div>
@@ -183,7 +209,7 @@ export default function ReportsPage() {
                           <div className="text-[11px] text-[var(--anchor-gray)]">{t("reportsTab")}</div>
                         </div>
                         <div className="text-xs text-[var(--anchor-gray)]">
-                          {t("joined")} {fmt(u.created_at)}
+                          {u.events.lastSeen ? `Last seen ${fmt(u.events.lastSeen)}` : `${t("joined")} ${fmt(u.created_at)}`}
                         </div>
                       </div>
                       <span className="ml-2 shrink-0 text-[var(--anchor-gray)]">
@@ -191,9 +217,56 @@ export default function ReportsPage() {
                       </span>
                     </button>
 
-                    {/* Expanded: assessment reports */}
+                    {/* Expanded: events + assessment reports */}
                     {expanded === u.id && (
                       <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] px-6 py-4">
+                        <div className="ds-caption mb-3 flex items-center gap-3">
+                          <span>Activity (last 30 days)</span>
+                          <span className="font-normal normal-case">
+                            · {u.events.total30} events · {u.events.total7} in past 7d
+                          </span>
+                          {u.events.lastSeen && (
+                            <span className="font-normal normal-case">
+                              · last seen {fmtDateTime(u.events.lastSeen)}
+                            </span>
+                          )}
+                        </div>
+
+                        {u.events.total30 === 0 ? (
+                          <p className="mb-4 text-sm text-[var(--anchor-gray)]">No activity recorded.</p>
+                        ) : (
+                          <div className="mb-5 grid gap-4 sm:grid-cols-2">
+                            <div className="rounded-xl border border-[var(--border)] bg-white p-4">
+                              <div className="ds-caption mb-2">Event breakdown</div>
+                              <ul className="space-y-1 text-sm">
+                                {Object.entries(u.events.byType)
+                                  .sort((a, b) => b[1] - a[1])
+                                  .map(([type, count]) => (
+                                    <li key={type} className="flex justify-between gap-3">
+                                      <span className="text-[var(--anchor-deep)]">{eventTypeLabel(type)}</span>
+                                      <span className="font-semibold text-[var(--anchor-deep)]">{count}</span>
+                                    </li>
+                                  ))}
+                              </ul>
+                            </div>
+                            <div className="rounded-xl border border-[var(--border)] bg-white p-4">
+                              <div className="ds-caption mb-2">Top pages</div>
+                              {u.events.topPages.length === 0 ? (
+                                <div className="text-sm text-[var(--anchor-gray)]">—</div>
+                              ) : (
+                                <ul className="space-y-1 text-sm">
+                                  {u.events.topPages.map((p) => (
+                                    <li key={p.path} className="flex justify-between gap-3">
+                                      <span className="truncate text-[var(--anchor-deep)]" title={p.path}>{p.path}</span>
+                                      <span className="font-semibold text-[var(--anchor-deep)]">{p.count}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="ds-caption mb-3 flex items-center gap-3">
                           <span>{t("rooftopAssessmentReports")}</span>
                           {u.phone && <span className="font-normal normal-case">· {u.phone}</span>}
