@@ -40,3 +40,29 @@ export async function resolveRegionalAssignment(
   }
   return null;
 }
+
+// Resolve the state codes assigned to a given internal rep, by matching
+// their profile email against sales_reps.outside_sales_email.
+export async function resolveStatesForUser(userId: string): Promise<string[]> {
+  if (!userId) return [];
+
+  const { data: prof } = await supabaseAdmin
+    .from("profiles")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const email = String((prof as { email?: string | null } | null)?.email || "")
+    .trim()
+    .toLowerCase();
+  if (!email) return [];
+
+  const { data: rep } = await supabaseAdmin
+    .from("sales_reps")
+    .select("states")
+    .ilike("outside_sales_email", email)
+    .maybeSingle();
+
+  const states = (rep as { states?: string[] | null } | null)?.states ?? [];
+  return states.map((s) => String(s || "").trim().toUpperCase()).filter(Boolean);
+}
