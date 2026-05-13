@@ -685,13 +685,22 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return accessToken ? `${base}&token=${encodeURIComponent(accessToken)}` : base;
   }
 
-  // "Open" should be inline (good for iOS Quick Look / in-app viewer)
+  // "Open" routes through the in-app viewer so the user always has a
+  // "Back to Solution" button instead of being stranded on a signed URL.
   function openInline(path: string) {
-    window.location.href = docOpenHref(path, false);
+    const qs = new URLSearchParams({
+      path,
+      from: window.location.pathname,
+      title: titleFromPath(path),
+    });
+    window.location.href = `/docs/view?${qs.toString()}`;
   }
 
   function forceDownload(path: string) {
-    window.location.href = docOpenHref(path, true);
+    // Programmatic anchor click keeps the current page alive instead of
+    // navigating the tab to a Content-Disposition: attachment response,
+    // which leaves users on a black screen on mobile.
+    triggerDownload(docOpenHref(path, true), basename(path));
   }
 
   async function shareAsset(path: string) {
