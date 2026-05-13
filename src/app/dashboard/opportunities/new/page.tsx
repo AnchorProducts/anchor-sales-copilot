@@ -27,6 +27,21 @@ export default function NewLeadPage() {
         return;
       }
 
+      // Consult form is for external reps only. Internal users go to the
+      // triage page (they review submissions; they don't submit them).
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (!alive) return;
+
+      const role = String((prof as { role?: string } | null)?.role || "");
+      if (role === "admin" || role === "anchor_rep") {
+        router.replace("/dashboard/opportunities");
+        return;
+      }
+
       setReady(true);
     })();
 

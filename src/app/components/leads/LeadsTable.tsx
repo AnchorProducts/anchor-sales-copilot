@@ -30,6 +30,11 @@ export default function LeadsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  // Set by the server when the logged-in rep is auto-scoped to specific
+  // states. Empty when the user is admin (sees everything) or when an
+  // internal rep hasn't been assigned any states yet.
+  const [scopedStates, setScopedStates] = useState<string[]>([]);
+  const isScoped = scopedStates.length > 0;
 
   async function load() {
     setLoading(true);
@@ -38,7 +43,9 @@ export default function LeadsTable() {
     try {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
-      if (region) params.set("region", region);
+      // Region filter only applies to admins (the only ones who see the
+      // input). For scoped reps the server enforces region itself.
+      if (region && !isScoped) params.set("region", region);
 
       const res = await fetch(`/api/leads?${params.toString()}`, { cache: "no-store" });
       const text = await res.text();
@@ -52,6 +59,7 @@ export default function LeadsTable() {
       }
 
       setLeads((json?.leads || []) as LeadRow[]);
+      setScopedStates((json?.scopedStates || []) as string[]);
       setLoading(false);
     } catch (e: any) {
       setError(e?.message || "Failed to load opportunities.");
@@ -70,7 +78,11 @@ export default function LeadsTable() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-black">Consults</div>
-          <div className="mt-1 text-sm text-[var(--anchor-gray)]">Internal consult management</div>
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+            {isScoped
+              ? `Triage for your region: ${scopedStates.join(", ")}`
+              : "Internal consult management"}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -86,12 +98,16 @@ export default function LeadsTable() {
               </option>
             ))}
           </Select>
-          <Input
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="Region (e.g. TX)"
-            className="h-9 px-3 text-[12px]"
-          />
+          {/* Region filter is only useful for admins — scoped reps
+              already only see their states. */}
+          {!isScoped && (
+            <Input
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="Region (e.g. TX)"
+              className="h-9 px-3 text-[12px]"
+            />
+          )}
         </div>
       </div>
 
@@ -102,7 +118,9 @@ export default function LeadsTable() {
           <Alert tone="neutral">Loading…</Alert>
         ) : leads.length === 0 ? (
           <Alert tone="neutral">
-            No leads found.
+            {isScoped
+              ? `No consults in ${scopedStates.join(", ")} yet.`
+              : "No leads found."}
           </Alert>
         ) : (
           <TableWrapper>
