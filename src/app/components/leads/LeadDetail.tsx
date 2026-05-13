@@ -239,14 +239,14 @@ export default function LeadDetail({ id }: { id: string }) {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="ds-caption">Consult</div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--anchor-deep)] sm:text-3xl">
+          <h1 className="mt-1 break-words text-xl font-bold leading-tight tracking-tight text-[var(--anchor-deep)] sm:text-3xl">
             {lead.customer_company}
           </h1>
-          <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+          <div className="mt-1 break-words text-sm text-[var(--anchor-gray)]">
             {lead.location_text}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           {lead.region_code && (
             <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--anchor-deep)]">
               {lead.region_code}
@@ -337,11 +337,16 @@ export default function LeadDetail({ id }: { id: string }) {
               </div>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button onClick={save} disabled={saving}>
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <Button onClick={save} disabled={saving} className="w-full">
                 {saving ? t("saving") : t("saveChangesCta")}
               </Button>
-              <Button variant="secondary" onClick={syncHubSpot} disabled={syncing}>
+              <Button
+                variant="secondary"
+                onClick={syncHubSpot}
+                disabled={syncing}
+                className="w-full"
+              >
                 {syncing ? t("syncing") : t("syncToHubSpot")}
               </Button>
             </div>
@@ -466,8 +471,10 @@ function Field({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[var(--anchor-gray)]">{label}</dt>
-      <dd className="font-medium text-[var(--text-primary)]">{value}</dd>
+      <dt className="shrink-0 text-[var(--anchor-gray)]">{label}</dt>
+      <dd className="min-w-0 truncate text-right font-medium text-[var(--text-primary)]" title={value}>
+        {value}
+      </dd>
     </div>
   );
 }
