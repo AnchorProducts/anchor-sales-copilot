@@ -126,6 +126,14 @@ export function AppSidebar() {
             <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission" active={isPath("/dashboard/commission")} />
           </>
         )}
+        {isInternal && (
+          <NavLink
+            href="/dashboard/opportunities"
+            kind="clipboard"
+            label="Active Consults"
+            active={isPath("/dashboard/opportunities")}
+          />
+        )}
         {isAdmin && (
           <>
             <NavLink href="/admin" kind="shield" label="Admin" active={isPath("/admin", true)} />
