@@ -37,6 +37,20 @@ function DocViewer() {
     return `/api/doc-open?path=${encodeURIComponent(path)}&download=1`;
   }, [path]);
 
+  function downloadDoc() {
+    if (!downloadHref || typeof document === "undefined") return;
+    // Programmatic click so the current page stays mounted (with its
+    // Back button) instead of the tab navigating to a file-stream URL,
+    // which renders a black screen on mobile Safari.
+    const a = document.createElement("a");
+    a.href = downloadHref;
+    a.rel = "noopener";
+    a.download = title;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   function goBack() {
     // Prefer history.back so scroll position on the source page is preserved.
     // Fall back to an explicit navigation if there's no entry to go back to
@@ -80,13 +94,14 @@ function DocViewer() {
           {title}
         </div>
 
-        <a
-          href={downloadHref}
+        <button
+          type="button"
+          onClick={downloadDoc}
           className="shrink-0 rounded-lg border border-[var(--anchor-green)] px-2.5 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white sm:text-sm"
           aria-label="Download document"
         >
           Download
-        </a>
+        </button>
       </header>
 
       <div className="flex-1 overflow-hidden bg-[var(--surface-page)]">
