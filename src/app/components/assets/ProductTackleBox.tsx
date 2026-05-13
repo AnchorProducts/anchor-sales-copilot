@@ -697,7 +697,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   }
 
   function forceDownload(path: string) {
-    window.location.href = docOpenHref(path, true);
+    // Programmatic anchor click keeps the current page alive instead of
+    // navigating the tab to a Content-Disposition: attachment response,
+    // which leaves users on a black screen on mobile.
+    triggerDownload(docOpenHref(path, true), basename(path));
   }
 
   async function shareAsset(path: string) {
