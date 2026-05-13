@@ -30,6 +30,12 @@ export default function LeadsTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  // null  = admin (sees everything)
+  // []    = anchor_rep with no states assigned yet
+  // ["…"] = anchor_rep scoped to those states
+  const [scopedStates, setScopedStates] = useState<string[] | null>(null);
+  const isScoped = scopedStates !== null;
+  const isUnassigned = isScoped && scopedStates!.length === 0;
 
   async function load() {
     setLoading(true);
@@ -38,7 +44,9 @@ export default function LeadsTable() {
     try {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
-      if (region) params.set("region", region);
+      // Region filter only applies to admins (the only ones who see the
+      // input). For scoped reps the server enforces region itself.
+      if (region && !isScoped) params.set("region", region);
 
       const res = await fetch(`/api/leads?${params.toString()}`, { cache: "no-store" });
       const text = await res.text();
@@ -52,6 +60,9 @@ export default function LeadsTable() {
       }
 
       setLeads((json?.leads || []) as LeadRow[]);
+      setScopedStates(
+        Array.isArray(json?.scopedStates) ? (json.scopedStates as string[]) : null
+      );
       setLoading(false);
     } catch (e: any) {
       setError(e?.message || "Failed to load opportunities.");
@@ -70,7 +81,13 @@ export default function LeadsTable() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-black">Consults</div>
-          <div className="mt-1 text-sm text-[var(--anchor-gray)]">Internal consult management</div>
+          <div className="mt-1 text-sm text-[var(--anchor-gray)]">
+            {isUnassigned
+              ? "No states assigned to you yet"
+              : isScoped
+                ? `Triage for your region: ${scopedStates!.join(", ")}`
+                : "Internal consult management"}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -86,12 +103,16 @@ export default function LeadsTable() {
               </option>
             ))}
           </Select>
-          <Input
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="Region (e.g. TX)"
-            className="h-9 px-3 text-[12px]"
-          />
+          {/* Region filter is only useful for admins — scoped reps
+              already only see their states. */}
+          {!isScoped && (
+            <Input
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="Region (e.g. TX)"
+              className="h-9 px-3 text-[12px]"
+            />
+          )}
         </div>
       </div>
 
@@ -101,8 +122,24 @@ export default function LeadsTable() {
         ) : loading ? (
           <Alert tone="neutral">Loading…</Alert>
         ) : leads.length === 0 ? (
-          <Alert tone="neutral">
-            No leads found.
+          <Alert tone={isUnassigned ? "error" : "neutral"}>
+            {isUnassigned ? (
+              <>
+                Your account isn&apos;t assigned to any states yet, so no
+                consults are showing. An admin needs to add you on the{" "}
+                <Link
+                  href="/admin/sales-reps"
+                  className="font-semibold underline"
+                >
+                  Sales Reps
+                </Link>{" "}
+                page with your email and the states you cover.
+              </>
+            ) : isScoped ? (
+              `No consults in ${scopedStates!.join(", ")} yet.`
+            ) : (
+              "No leads found."
+            )}
           </Alert>
         ) : (
           <TableWrapper>

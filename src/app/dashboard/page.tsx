@@ -252,6 +252,10 @@ export default function DashboardPage() {
     actions.push({ key: "commission", href: "/dashboard/commission/new",        label: t("commissionClaim"),   desc: t("commissionClaimDesc"),   icon: "wallet",    badge: "Commission" });
   }
 
+  if (roleReady && isInternal) {
+    actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
+  }
+
   if (roleReady && isAdmin) {
     actions.push({ key: "admin",    href: "/admin",                  label: "Admin Console",      desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield",  badge: "Admin"   });
     actions.push({ key: "reports",  href: "/admin/rooftop-reports",  label: "Assessment Reports", desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
