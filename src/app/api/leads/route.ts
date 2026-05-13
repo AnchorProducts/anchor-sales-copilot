@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
-import { resolveRegionalAssignment } from "@/lib/sales/regions";
+import { resolveRegionalAssignment, resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -206,7 +206,10 @@ async function sendInsideSalesLeadEmail(params: {
   selectedSolutions: Array<{ label: string; filesCount: number; comment: string | null }>;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
-  if (!resendKey) throw new Error("RESEND_API_KEY is missing");
+  // Silently skip sending if no key is configured. Lets us turn off
+  // notifications globally (e.g. while waiting on domain verification)
+  // by clearing RESEND_API_KEY in Vercel without breaking submissions.
+  if (!resendKey) return;
 
   const resend = new Resend(resendKey);
   const to = clean(params.toEmail);
@@ -610,18 +613,34 @@ export async function GET(req: Request) {
     const status = clean(searchParams.get("status"));
     const region = clean(searchParams.get("region"));
 
+    // anchor_rep is auto-scoped to their assigned states (null = admin,
+    // [] = anchor_rep with no states yet, ["TX",…] = scoped).
+    let repStates: string[] | null = null;
+    if (role === "anchor_rep") {
+      repStates = await resolveStatesForUser(auth.user.id);
+      if (repStates.length === 0) {
+        // Surface a distinct "unassigned" state instead of silently
+        // returning an empty list that looks like "no consults yet".
+        return NextResponse.json({ leads: [], scopedStates: [] });
+      }
+    }
+
     let query = supabaseAdmin
       .from("leads")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (status && STATUS_SET.has(status)) query = query.eq("status", status);
-    if (region) query = query.eq("region_code", upper(region));
+    if (region && !repStates) {
+      query = query.eq("region_code", upper(region));
+    } else if (repStates && repStates.length > 0) {
+      query = query.in("region_code", repStates);
+    }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ leads: data || [] });
+    return NextResponse.json({ leads: data || [], scopedStates: repStates });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load opportunities." }, { status: 500 });
   }
