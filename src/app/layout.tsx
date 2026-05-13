@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import { isInternal, APP_NAME, APP_SHORT } from "@/lib/appMode";
 import { MobileBottomNav } from "@/app/components/ui/MobileBottomNav";
 import { AppSidebar } from "@/app/components/ui/AppSidebar";
+import { UserEventTracker } from "@/app/components/UserEventTracker";
 
 export const metadata: Metadata = {
   title: {
@@ -60,6 +61,7 @@ export default function RootLayout({
         <AppSidebar />
         {children}
         <MobileBottomNav />
+        <UserEventTracker />
       </body>
     </html>
   );
