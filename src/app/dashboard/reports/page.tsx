@@ -54,6 +54,7 @@ type ChartsPayload = {
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   login: "Logins",
+  app_open: "App opens",
   page_view: "Page views",
   chat_message_sent: "Chat messages",
   lead_submitted: "Leads submitted",
