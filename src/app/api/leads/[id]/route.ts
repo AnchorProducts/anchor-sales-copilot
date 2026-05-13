@@ -55,7 +55,37 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    return NextResponse.json({ lead: data });
+    // Collect every attachment path on the lead and pre-sign them with
+    // the service role. The browser client can't mint these because
+    // storage RLS blocks reads on lead-uploads.
+    type AttachmentRef = { path?: unknown };
+    const paths = new Set<string>();
+    const topAttachments = Array.isArray((data as { attachments?: unknown }).attachments)
+      ? ((data as { attachments?: AttachmentRef[] }).attachments ?? [])
+      : [];
+    for (const a of topAttachments) {
+      if (typeof a?.path === "string" && a.path) paths.add(a.path);
+    }
+    const solutions = Array.isArray((data as { solution_requests?: unknown }).solution_requests)
+      ? ((data as { solution_requests?: Array<{ attachments?: AttachmentRef[] }> }).solution_requests ?? [])
+      : [];
+    for (const s of solutions) {
+      for (const a of s?.attachments ?? []) {
+        if (typeof a?.path === "string" && a.path) paths.add(a.path);
+      }
+    }
+
+    const attachmentUrls: Record<string, string> = {};
+    if (paths.size > 0) {
+      const { data: signed } = await supabaseAdmin.storage
+        .from("lead-uploads")
+        .createSignedUrls(Array.from(paths), 60 * 30);
+      for (const row of signed ?? []) {
+        if (row?.path && row?.signedUrl) attachmentUrls[row.path] = row.signedUrl;
+      }
+    }
+
+    return NextResponse.json({ lead: data, attachmentUrls });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load lead." }, { status: 500 });
   }
