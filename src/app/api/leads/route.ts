@@ -610,13 +610,14 @@ export async function GET(req: Request) {
     const status = clean(searchParams.get("status"));
     const region = clean(searchParams.get("region"));
 
-    // anchor_rep is auto-scoped to their assigned states. admin sees all.
-    let repStates: string[] = [];
+    // anchor_rep is auto-scoped to their assigned states (null = admin,
+    // [] = anchor_rep with no states yet, ["TX",…] = scoped).
+    let repStates: string[] | null = null;
     if (role === "anchor_rep") {
       repStates = await resolveStatesForUser(auth.user.id);
       if (repStates.length === 0) {
-        // Rep is internal but not assigned any states yet — return empty so
-        // they see a clear "ask admin to assign states" empty state.
+        // Surface a distinct "unassigned" state instead of silently
+        // returning an empty list that looks like "no consults yet".
         return NextResponse.json({ leads: [], scopedStates: [] });
       }
     }
@@ -627,9 +628,9 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false });
 
     if (status && STATUS_SET.has(status)) query = query.eq("status", status);
-    if (region) {
+    if (region && !repStates) {
       query = query.eq("region_code", upper(region));
-    } else if (repStates.length > 0) {
+    } else if (repStates && repStates.length > 0) {
       query = query.in("region_code", repStates);
     }
 
