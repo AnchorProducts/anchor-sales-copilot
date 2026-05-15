@@ -309,8 +309,8 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!customer_company) return NextResponse.json({ error: "Customer company is required." }, { status: 400 });
-    if (!details) return NextResponse.json({ error: "Opportunity details are required." }, { status: 400 });
+    if (!customer_company) return NextResponse.json({ error: "Project name is required." }, { status: 400 });
+    // details now holds the optional Project Follow Up note; no longer required.
     if (!project_address) return NextResponse.json({ error: "Project address is required." }, { status: 400 });
     if (!city || !state || !zip || !country) {
       return NextResponse.json({ error: "Project city, state, zip, and country are required." }, { status: 400 });
@@ -370,16 +370,24 @@ export async function POST(req: Request) {
     const region_code = deriveRegionCode(country, state);
     const location_text = buildLocation(project_address, city, state, zip, country);
     const regionalAssignment = await resolveRegionalAssignment(country, state);
-    const assignment_note = regionalAssignment
-      ? `Outside sales assignment: ${regionalAssignment.outside_sales_name}`
-      : null;
     const outside_sales_name = regionalAssignment?.outside_sales_name || null;
     const outside_sales_email = regionalAssignment?.outside_sales_email || null;
-    const notification_email = outside_sales_email;
-    const notification_name = outside_sales_name;
-    // Legacy leads-table columns are now mirrored from the outside rep.
-    const inside_sales_name = outside_sales_name;
-    const inside_sales_email = outside_sales_email;
+    // Prefer the configured internal sales rep for the project's state; fall
+    // back to the outside rep when an inside contact has not been set yet.
+    const inside_sales_name =
+      regionalAssignment?.inside_sales_name || outside_sales_name;
+    const inside_sales_email =
+      regionalAssignment?.inside_sales_email || outside_sales_email;
+    const notification_email = inside_sales_email;
+    const notification_name = inside_sales_name;
+    const assignment_note = regionalAssignment
+      ? [
+          inside_sales_name ? `Inside sales: ${inside_sales_name}` : null,
+          outside_sales_name ? `Outside sales: ${outside_sales_name}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | ") || null
+      : null;
 
     const { data: leadRow, error: insErr } = await supabaseAdmin
       .from("leads")
