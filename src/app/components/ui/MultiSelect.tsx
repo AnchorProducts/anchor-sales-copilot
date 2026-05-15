@@ -18,15 +18,29 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const ref = useRef<HTMLDivElement>(null);
+  // After closing the sheet via Done/X/backdrop, briefly swallow any synthetic
+  // click that iOS Safari fires on whatever lands under the touch point — that
+  // ghost click was reopening the trigger immediately after close.
+  const suppressReopenUntilRef = useRef(0);
 
   function toggleSection(heading: string) {
     setExpanded((prev) => ({ ...prev, [heading]: !prev[heading] }));
   }
 
+  function close() {
+    setOpen(false);
+    suppressReopenUntilRef.current = Date.now() + 400;
+  }
+
+  function onTriggerClick() {
+    if (Date.now() < suppressReopenUntilRef.current) return;
+    setOpen((o) => !o);
+  }
+
   // Close on outside click (desktop)
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -58,7 +72,8 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
       {/* Trigger */}
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={onTriggerClick}
+        style={{ touchAction: "manipulation" }}
         className="ds-select flex min-h-[44px] w-full items-center justify-between px-3 py-2 text-left"
       >
         <span className={cn("truncate text-sm leading-snug", value.length === 0 && "text-black/40")}>
@@ -70,9 +85,12 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
       {open && (
         <>
           {/* Mobile backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
-            onClick={() => setOpen(false)}
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={close}
+            style={{ touchAction: "manipulation" }}
+            className="fixed inset-0 z-40 cursor-default bg-black/30 sm:hidden"
           />
 
           {/* Panel — bottom sheet on mobile, absolute dropdown on sm+ */}
@@ -83,16 +101,19 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
               // Desktop: absolute dropdown
               "sm:absolute sm:inset-x-auto sm:bottom-auto sm:top-full sm:mt-1 sm:w-full sm:rounded-xl sm:shadow-lg",
             )}
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {/* Mobile header */}
-            <div className="flex items-center justify-between border-b border-black/10 px-4 py-3 sm:hidden">
+            <div className="flex items-center justify-between border-b border-black/10 px-4 sm:hidden">
               <span className="text-sm font-semibold text-black">
                 {value.length > 0 ? `${value.length} selected` : "Select options"}
               </span>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
-                className="text-sm font-semibold text-[var(--anchor-green)]"
+                onClick={close}
+                style={{ touchAction: "manipulation" }}
+                aria-label="Close"
+                className="-mr-3 flex h-12 min-w-[80px] items-center justify-end px-3 text-base font-semibold text-[var(--anchor-green)] active:opacity-60"
               >
                 Done
               </button>
