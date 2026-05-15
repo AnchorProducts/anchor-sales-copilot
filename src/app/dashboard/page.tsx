@@ -242,23 +242,28 @@ export default function DashboardPage() {
   // Quick actions list (role-gated)
   type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
   const actions: Action[] = [];
-  if (heroLink !== "/chat") {
-    actions.push({ key: "chat", href: "/chat", label: t("openCopilot"), desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
-  }
-  actions.push({ key: "assets", href: "/assets", label: t("assetManagement"),   desc: t("assetManagementDesc"),                       icon: "library",  badge: "Library" });
 
   if (roleReady && isExternal) {
-    actions.push({ key: "project",    href: "/dashboard/opportunities/new",     label: t("projectIdentifier"), desc: t("projectIdentifierDesc"), icon: "clipboard", badge: "Projects"   });
-    actions.push({ key: "commission", href: "/dashboard/commission/new",        label: t("commissionClaim"),   desc: t("commissionClaimDesc"),   icon: "wallet",    badge: "Commission" });
-  }
+    // External rep gets the four equal Quick Actions in this exact order:
+    //   Resource Library → Copilot → REC → Commission Claim Form
+    actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
+    actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
+    actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
+    actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),     desc: t("commissionClaimDesc"),     icon: "wallet",    badge: "Commission" });
+  } else {
+    if (heroLink !== "/chat") {
+      actions.push({ key: "chat", href: "/chat", label: t("openCopilot"), desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
+    }
+    actions.push({ key: "assets", href: "/assets", label: t("assetManagement"),   desc: t("assetManagementDesc"),                       icon: "library",  badge: "Library" });
 
-  if (roleReady && isInternal) {
-    actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
-  }
+    if (roleReady && isInternal) {
+      actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
+    }
 
-  if (roleReady && isAdmin) {
-    actions.push({ key: "admin",    href: "/admin",                  label: "Admin Console",      desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield",  badge: "Admin"   });
-    actions.push({ key: "reports",  href: "/admin/rooftop-reports",  label: "Assessment Reports", desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
+    if (roleReady && isAdmin) {
+      actions.push({ key: "admin",    href: "/admin",                  label: "Admin Console",      desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield",  badge: "Admin"   });
+      actions.push({ key: "reports",  href: "/admin/rooftop-reports",  label: "Assessment Reports", desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
+    }
   }
 
   const handleSearch = (e: React.FormEvent) => {
@@ -400,11 +405,11 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── Desktop layout: hero + actions on left, stats sidebar on right ── */}
-        <div className="mt-4 space-y-4 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
+        {/* ── Mobile / tablet layout: hero, then Quick Actions, then circles ── */}
+        <div className="mt-4 space-y-4">
 
         {/* ── Hero card ──────────────────────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] lg:col-span-2 lg:p-7">
+        <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[var(--anchor-green)] opacity-20" />
           <button aria-label="More" className="absolute right-4 top-4 text-white/70 transition hover:text-white">
             <Icon name="more" className="h-[18px] w-[18px]" />
@@ -426,37 +431,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Stat icon buttons ──────────────────────────────────────────── */}
-        <div className={`grid ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
-          {stats.map((s, i) => {
-            const isExt = "external" in s && (s as { external?: boolean }).external;
-            const Wrap = isExt
-              ? ({ children }: { children: React.ReactNode }) => (
-                  <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">
-                    {children}
-                  </a>
-                )
-              : ({ children }: { children: React.ReactNode }) => (
-                  <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
-                );
-            const sText = "text" in s ? (s as { text?: string }).text : undefined;
-            return (
-              <Wrap key={i}>
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)]">
-                  {sText ? (
-                    <span className="text-[20px] font-bold tracking-tight">{sText}</span>
-                  ) : (
-                    <Icon name={s.icon} className="h-7 w-7" />
-                  )}
-                </div>
-                <div className="text-center text-[11px] font-medium text-[var(--anchor-deep)] sm:text-xs">{s.label}</div>
-              </Wrap>
-            );
-          })}
-        </div>
-
         {/* ── Quick actions list ─────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] lg:col-span-2">
+        <div className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between pb-1">
             <h2 className="text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
           </div>
@@ -486,6 +462,35 @@ export default function DashboardPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* ── Stat icon buttons (below Quick Actions) ────────────────────── */}
+        <div className={`grid ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
+          {stats.map((s, i) => {
+            const isExt = "external" in s && (s as { external?: boolean }).external;
+            const Wrap = isExt
+              ? ({ children }: { children: React.ReactNode }) => (
+                  <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">
+                    {children}
+                  </a>
+                )
+              : ({ children }: { children: React.ReactNode }) => (
+                  <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
+                );
+            const sText = "text" in s ? (s as { text?: string }).text : undefined;
+            return (
+              <Wrap key={i}>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)]">
+                  {sText ? (
+                    <span className="text-[20px] font-bold tracking-tight">{sText}</span>
+                  ) : (
+                    <Icon name={s.icon} className="h-7 w-7" />
+                  )}
+                </div>
+                <div className="text-center text-[11px] font-medium text-[var(--anchor-deep)] sm:text-xs">{s.label}</div>
+              </Wrap>
+            );
+          })}
         </div>
 
         </div>
@@ -557,8 +562,53 @@ export default function DashboardPage() {
 
           {/* Content */}
           <div className="flex-1 px-8 pb-12">
-            {/* Stat icon buttons */}
-            <div className="flex flex-wrap items-start gap-8">
+            {/* Hero */}
+            <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
+                  <span className="text-[11px] font-semibold tracking-wide">Update</span>
+                </div>
+                <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
+                <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
+                  {heroTitle}
+                </div>
+                <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
+                  {heroLinkLabel}
+                  <Icon name="right" className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Quick Actions grid */}
+            <div className="mt-5 rounded-3xl bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+              <h2 className="text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
+                {actions.map((a) => {
+                  const Inner = (
+                    <div className="flex h-full items-start gap-4 rounded-2xl border border-[var(--surface-soft)] p-4 transition hover:border-[var(--anchor-mint)] hover:bg-[var(--surface-soft)]/40">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+                        <Icon name={a.icon} className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
+                        <div className="mt-1 text-xs text-[var(--anchor-gray)]">{a.desc}</div>
+                      </div>
+                      <Icon name="right" className="mt-1 h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
+                    </div>
+                  );
+                  return a.external ? (
+                    <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="block">{Inner}</a>
+                  ) : (
+                    <Link key={a.key} href={a.href} className="block">{Inner}</Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Stat icon buttons (below Quick Actions) */}
+            <div className="mt-6 flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
                 const Wrap = isExt
@@ -582,51 +632,6 @@ export default function DashboardPage() {
                   </Wrap>
                 );
               })}
-            </div>
-
-            {/* Hero */}
-            <div className="relative mt-5 overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-              <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
-              <div className="relative">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
-                  <span className="text-[11px] font-semibold tracking-wide">Update</span>
-                </div>
-                <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
-                <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
-                  {heroTitle}
-                </div>
-                <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
-                  {heroLinkLabel}
-                  <Icon name="right" className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Quick Actions grid */}
-            <div className="mt-5 rounded-3xl bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-              <h2 className="text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
-              <div className="mt-4 grid grid-cols-2 gap-4">
-                {actions.map((a) => {
-                  const Inner = (
-                    <div className="flex h-full items-start gap-4 rounded-2xl border border-[var(--surface-soft)] p-4 transition hover:border-[var(--anchor-mint)] hover:bg-[var(--surface-soft)]/40">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
-                        <Icon name={a.icon} className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
-                        <div className="mt-1 text-xs text-[var(--anchor-gray)]">{a.desc}</div>
-                      </div>
-                      <Icon name="right" className="mt-1 h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
-                    </div>
-                  );
-                  return a.external ? (
-                    <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="block">{Inner}</a>
-                  ) : (
-                    <Link key={a.key} href={a.href} className="block">{Inner}</Link>
-                  );
-                })}
-              </div>
             </div>
 
             {booting && (

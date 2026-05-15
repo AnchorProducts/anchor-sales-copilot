@@ -43,7 +43,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from("sales_reps")
-    .select("id, outside_sales_name, outside_sales_email, teams_link, states, created_at, updated_at")
+    .select("id, outside_sales_name, outside_sales_email, inside_sales_name, inside_sales_email, teams_link, states, created_at, updated_at")
     .order("outside_sales_name");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -64,6 +64,8 @@ export async function POST(req: Request) {
   const row = {
     outside_sales_name: outsideName,
     outside_sales_email: outsideEmail,
+    inside_sales_name: clean(body?.inside_sales_name) || null,
+    inside_sales_email: clean(body?.inside_sales_email).toLowerCase() || null,
     teams_link: clean(body?.teams_link) || null,
     states: normalizeStates(body?.states),
   };
@@ -89,6 +91,8 @@ export async function PATCH(req: Request) {
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
   if ("outside_sales_name" in body) update.outside_sales_name = clean(body.outside_sales_name) || null;
   if ("outside_sales_email" in body) update.outside_sales_email = clean(body.outside_sales_email).toLowerCase() || null;
+  if ("inside_sales_name" in body) update.inside_sales_name = clean(body.inside_sales_name) || null;
+  if ("inside_sales_email" in body) update.inside_sales_email = clean(body.inside_sales_email).toLowerCase() || null;
   if ("teams_link" in body) update.teams_link = clean(body.teams_link) || null;
   if ("states" in body) update.states = normalizeStates(body.states);
 

@@ -16,6 +16,8 @@ type Rep = {
   id: string;
   outside_sales_name: string | null;
   outside_sales_email: string | null;
+  inside_sales_name: string | null;
+  inside_sales_email: string | null;
   teams_link: string | null;
   states: string[];
 };
@@ -24,6 +26,8 @@ type RepDraft = {
   id?: string;
   outside_sales_name: string;
   outside_sales_email: string;
+  inside_sales_name: string;
+  inside_sales_email: string;
   teams_link: string;
   statesText: string;
 };
@@ -31,6 +35,8 @@ type RepDraft = {
 const EMPTY_DRAFT: RepDraft = {
   outside_sales_name: "",
   outside_sales_email: "",
+  inside_sales_name: "",
+  inside_sales_email: "",
   teams_link: "",
   statesText: "",
 };
@@ -40,6 +46,8 @@ function repToDraft(rep: Rep): RepDraft {
     id: rep.id,
     outside_sales_name: rep.outside_sales_name || "",
     outside_sales_email: rep.outside_sales_email || "",
+    inside_sales_name: rep.inside_sales_name || "",
+    inside_sales_email: rep.inside_sales_email || "",
     teams_link: rep.teams_link || "",
     statesText: (rep.states || []).join(", "),
   };
@@ -123,6 +131,8 @@ export default function AdminSalesRepsPage() {
       id: draft.id,
       outside_sales_name: draft.outside_sales_name.trim(),
       outside_sales_email: draft.outside_sales_email.trim().toLowerCase(),
+      inside_sales_name: draft.inside_sales_name.trim() || null,
+      inside_sales_email: draft.inside_sales_email.trim().toLowerCase() || null,
       teams_link: draft.teams_link.trim() || null,
       states,
     };
@@ -207,6 +217,30 @@ export default function AdminSalesRepsPage() {
                   </label>
 
                   <label className="grid gap-1.5 text-sm">
+                    <span className="font-semibold">Inside Sales Name</span>
+                    <Input
+                      value={draft.inside_sales_name}
+                      onChange={(e) => setDraft({ ...draft, inside_sales_name: e.target.value })}
+                      className="h-11 px-3 text-sm"
+                      placeholder="Inside sales rep"
+                    />
+                    <span className="text-[11px] text-[var(--anchor-gray)]">
+                      REC submissions for the covered states route to this contact. Falls back to the outside rep when blank.
+                    </span>
+                  </label>
+
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-semibold">Inside Sales Email</span>
+                    <Input
+                      value={draft.inside_sales_email}
+                      onChange={(e) => setDraft({ ...draft, inside_sales_email: e.target.value })}
+                      className="h-11 px-3 text-sm"
+                      type="email"
+                      placeholder="inside@anchorp.com"
+                    />
+                  </label>
+
+                  <label className="grid gap-1.5 text-sm">
                     <span className="font-semibold">Teams Link</span>
                     <Input
                       value={draft.teams_link}
@@ -273,6 +307,11 @@ export default function AdminSalesRepsPage() {
                             <div className="break-words font-semibold">{rep.outside_sales_name || "—"}</div>
                             {rep.outside_sales_email && (
                               <div className="truncate text-[12px] text-[var(--anchor-gray)]">{rep.outside_sales_email}</div>
+                            )}
+                            {(rep.inside_sales_name || rep.inside_sales_email) && (
+                              <div className="mt-1 truncate text-[12px] text-[var(--anchor-gray)]">
+                                Inside: {[rep.inside_sales_name, rep.inside_sales_email].filter(Boolean).join(" · ")}
+                              </div>
                             )}
                             {rep.teams_link ? (
                               <div className="truncate text-[12px] text-[var(--anchor-green)]">

@@ -414,14 +414,51 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     () => nonSolutionProducts.filter((p) => p.section === "anchor"),
     [nonSolutionProducts]
   );
+
+  // Group anchors into U-Anchor 2000/3000/5000 series for the collapsible UI.
+  const ANCHOR_CATEGORIES = useMemo(
+    () => [
+      { key: "u-anchor-2000", label: "U-Anchor 2000 Series", prefixes: ["U2", "u2", "2000"] },
+      { key: "u-anchor-3000", label: "U-Anchor 3000 Series", prefixes: ["U3", "u3", "3000"] },
+      { key: "u-anchor-5000", label: "U-Anchor 5000 Series", prefixes: ["U5", "u5", "5000"] },
+    ],
+    []
+  );
+
+  function classifyAnchor(p: ProductRow): string | null {
+    const hay = `${p.name} ${p.sku || ""} ${p.series || ""}`.toLowerCase();
+    for (const cat of ANCHOR_CATEGORIES) {
+      if (cat.prefixes.some((pref) => hay.includes(pref.toLowerCase()))) {
+        return cat.key;
+      }
+    }
+    return null;
+  }
+
+  const anchorGroups = useMemo(() => {
+    const groups: Record<string, ProductRow[]> = {};
+    for (const cat of ANCHOR_CATEGORIES) groups[cat.key] = [];
+    const other: ProductRow[] = [];
+    for (const p of anchorRows) {
+      const key = classifyAnchor(p);
+      if (key && groups[key]) groups[key].push(p);
+      else other.push(p);
+    }
+    return { groups, other };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchorRows, ANCHOR_CATEGORIES]);
   const internalRows = useMemo(
     () => nonSolutionProducts.filter((p) => p.section === "internal_assets"),
     [nonSolutionProducts]
   );
 
+  // When the anchors filter is active we always want to render the
+  // category placeholders (so the "U-Anchor 5000 Series — coming soon"
+  // category remains visible). Treat the anchors block as "having results"
+  // whenever the user explicitly asks for anchors, even if no rows exist.
   const hasAnyResult =
     (showSolutions && catalogGroups.length > 0) ||
-    (showAnchors && anchorRows.length > 0) ||
+    (showAnchors && (anchorRows.length > 0 || (filter === "anchor" && !q.trim()))) ||
     (showInternal && internalRows.length > 0);
 
   return (
@@ -546,20 +583,73 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                 );
               })}
 
-            {showAnchors && anchorRows.length > 0 && (
+            {showAnchors && (anchorRows.length > 0 || filter === "anchor" || filter === "all") && (
               <section className="grid gap-2">
                 <h3 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
                   {t("anchors")}
                 </h3>
                 <div className="grid gap-2">
-                  {anchorRows.map((p) => (
-                    <SolutionCard
-                      key={p.id}
-                      product={p}
-                      openLabel={t("open")}
-                      title={t("openTackleBox")}
-                    />
-                  ))}
+                  {ANCHOR_CATEGORIES.map((cat) => {
+                    const items = anchorGroups.groups[cat.key] || [];
+                    // Hide an empty 5000-series only when not actively searching;
+                    // when searching, the parent already filters out empties.
+                    if (items.length === 0 && q.trim()) return null;
+                    const isCollapsed = q.trim() ? false : collapsed[`anchor:${cat.key}`] ?? true;
+                    return (
+                      <div key={cat.key} className="grid gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(`anchor:${cat.key}`)}
+                          className="flex w-full items-center justify-between gap-3 rounded-[12px] border border-black/10 bg-[var(--surface-soft)] px-4 py-3 text-left hover:bg-[var(--surface-soft)]/80"
+                          aria-expanded={!isCollapsed}
+                        >
+                          <span className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                            {cat.label}
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-black/60">
+                              {items.length}
+                            </span>
+                            {items.length === 0 && (
+                              <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-black/50">
+                                Coming soon
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-black/40">{isCollapsed ? "▾" : "▴"}</span>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="grid gap-2">
+                            {items.length > 0 ? (
+                              items.map((p) => (
+                                <SolutionCard
+                                  key={p.id}
+                                  product={p}
+                                  openLabel={t("open")}
+                                  title={t("openTackleBox")}
+                                />
+                              ))
+                            ) : (
+                              <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 text-[12px] text-[var(--anchor-gray)]">
+                                Coming soon — {cat.label} products will appear here.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {anchorGroups.other.length > 0 && (
+                    <div className="grid gap-2">
+                      {anchorGroups.other.map((p) => (
+                        <SolutionCard
+                          key={p.id}
+                          product={p}
+                          openLabel={t("open")}
+                          title={t("openTackleBox")}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </section>
             )}

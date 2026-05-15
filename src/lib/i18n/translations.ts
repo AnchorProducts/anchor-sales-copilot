@@ -54,7 +54,7 @@ export const translations = {
     projectIdentifier: "Rooftop Equipment Consult",
     projectIdentifierDesc: "Send photos and consult details directly to inside sales.",
     submitProject: "Submit Project",
-    commissionClaim: "Commission Claim",
+    commissionClaim: "Commission Claim Form",
     commissionClaimDesc: "Submit a commission claim form prior to order shipment.",
     submitClaim: "Submit Claim",
     profileSettings: "Profile Settings",
