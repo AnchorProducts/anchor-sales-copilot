@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 
-// next-pwa has no published types
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const withPWA = require("next-pwa")({
   dest: "public",
@@ -27,4 +26,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+export default process.env.NODE_ENV === "development"
+  ? nextConfig
+  : withPWA(nextConfig);
