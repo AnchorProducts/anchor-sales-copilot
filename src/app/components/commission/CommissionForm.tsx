@@ -8,7 +8,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { ROOF_BRANDS } from "@/lib/roofing/options";
+import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 import { trackEvent } from "@/lib/analytics/track";
@@ -22,14 +22,18 @@ type UserProfile = {
 
 type FormState = {
   certified: boolean;
-  unaware_other_salesperson: "yes" | "no" | "";
-  specifier_assisted: "yes" | "no" | "";
+  // "correct" = no other salesperson involved; "multiple" = there were
+  // additional salespeople (which reveals the free-text input).
+  salesperson_disclosure: "correct" | "multiple" | "";
+  additional_salespeople: string;
   estimated_order_date: string;
+  job_name: string;
   company_placing_order: string;
   order_city: string;
   order_state: string;
   u_anchors_ordered: string[];
   qty: string;
+  roof_type: string[];
   roof_brand: string[];
   other_items: string[];
   ship_to_address: string;
@@ -76,14 +80,16 @@ const OTHER_ITEMS_SECTIONS = SOLUTION_CATEGORIES.map((category) => {
 
 const INITIAL_FORM: FormState = {
   certified: false,
-  unaware_other_salesperson: "",
-  specifier_assisted: "",
+  salesperson_disclosure: "",
+  additional_salespeople: "",
   estimated_order_date: "",
+  job_name: "",
   company_placing_order: "",
   order_city: "",
   order_state: "",
   u_anchors_ordered: [],
   qty: "",
+  roof_type: [],
   roof_brand: [],
   other_items: [],
   ship_to_address: "",
@@ -101,6 +107,7 @@ export default function CommissionForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [submittedByExpanded, setSubmittedByExpanded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -134,8 +141,12 @@ export default function CommissionForm() {
 
   function validate() {
     if (!form.certified) return "Please certify that you are the independent salesperson for this order.";
-    if (!form.unaware_other_salesperson) return "Please answer the first YES/NO question.";
-    if (!form.specifier_assisted) return "Please answer the second YES/NO question.";
+    if (!form.salesperson_disclosure) {
+      return "Confirm whether other salespeople were involved.";
+    }
+    if (form.salesperson_disclosure === "multiple" && !form.additional_salespeople.trim()) {
+      return "List the additional salespeople involved.";
+    }
     if (!form.company_placing_order.trim()) return "Company placing order is required.";
     return null;
   }
@@ -158,14 +169,27 @@ export default function CommissionForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           certified: form.certified,
-          unaware_other_salesperson: form.unaware_other_salesperson,
-          specifier_assisted: form.specifier_assisted,
+          // Map disclosure → legacy column so server-side reports/downstream
+          // tools that already consume `unaware_other_salesperson` keep
+          // working ("correct" means the rep is unaware of other reps).
+          unaware_other_salesperson:
+            form.salesperson_disclosure === "correct"
+              ? "yes"
+              : form.salesperson_disclosure === "multiple"
+                ? "no"
+                : null,
+          additional_salespeople:
+            form.salesperson_disclosure === "multiple"
+              ? form.additional_salespeople
+              : null,
           estimated_order_date: form.estimated_order_date || null,
+          job_name: form.job_name,
           company_placing_order: form.company_placing_order,
           order_city: form.order_city,
           order_state: form.order_state,
           u_anchors_ordered: form.u_anchors_ordered.join(", "),
           qty: form.qty,
+          roof_type: form.roof_type.join(", "),
           roof_brand: form.roof_brand.join(", "),
           other_items: form.other_items.join(", "),
           ship_to_address: form.ship_to_address,
@@ -183,7 +207,13 @@ export default function CommissionForm() {
         return;
       }
 
-      trackEvent("commission_submitted", { claimId: json?.id ?? null });
+      trackEvent("commission_submitted", {
+        claimId: json?.id ?? null,
+        state: form.order_state || form.ship_state || null,
+        // OEM stays null until phase-2 collection; the field already lives
+        // in the analytics metadata so aggregation can pick it up later.
+        oem: form.roof_brand[0] || null,
+      });
       setSuccess("Commission claim submitted successfully.");
       setForm(INITIAL_FORM);
     } catch (err: any) {
@@ -203,15 +233,27 @@ export default function CommissionForm() {
         </div>
 
         {profile && (
-          <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">{t("repFirmIndividual")}</div>
-            <div className="mt-2 grid gap-1 text-sm text-[var(--anchor-gray)]">
-              {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
-              {profile.company && <div>{profile.company}</div>}
-              {profile.phone && <div>{profile.phone}</div>}
-              {profile.email && <div>{profile.email}</div>}
-            </div>
-            <div className="mt-2 text-[11px] text-black/40">{t("yourContactInfo")}</div>
+          <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
+            <button
+              type="button"
+              onClick={() => setSubmittedByExpanded((v) => !v)}
+              aria-expanded={submittedByExpanded}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <span className="text-sm font-semibold text-black">{t("submittedBy")}</span>
+              <span className="shrink-0 text-[11px] text-black/40">{submittedByExpanded ? "▴" : "▾"}</span>
+            </button>
+            {submittedByExpanded && (
+              <div className="px-4 pb-4">
+                <div className="grid gap-1 text-sm text-[var(--anchor-gray)]">
+                  {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
+                  {profile.company && <div>{profile.company}</div>}
+                  {profile.phone && <div>{profile.phone}</div>}
+                  {profile.email && <div>{profile.email}</div>}
+                </div>
+                <div className="mt-2 text-[11px] text-black/40">{t("yourContactInfo")}</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -222,33 +264,40 @@ export default function CommissionForm() {
           </label>
 
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="grid gap-4">
-              <div>
-                <div className="mb-2 text-sm">{t("unawareQuestion")}</div>
-                <div className="flex gap-4 text-sm">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="unaware_other_salesperson" value="yes" checked={form.unaware_other_salesperson === "yes"} onChange={() => update("unaware_other_salesperson", "yes")} />
-                    <span className="font-semibold">{t("yes")}</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="unaware_other_salesperson" value="no" checked={form.unaware_other_salesperson === "no"} onChange={() => update("unaware_other_salesperson", "no")} />
-                    <span className="font-semibold">{t("no")}</span>
-                  </label>
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 text-sm">{t("specifierQuestion")}</div>
-                <div className="flex gap-4 text-sm">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="specifier_assisted" value="yes" checked={form.specifier_assisted === "yes"} onChange={() => update("specifier_assisted", "yes")} />
-                    <span className="font-semibold">{t("yes")}</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="specifier_assisted" value="no" checked={form.specifier_assisted === "no"} onChange={() => update("specifier_assisted", "no")} />
-                    <span className="font-semibold">{t("no")}</span>
-                  </label>
-                </div>
-              </div>
+            <div className="text-sm">
+              I am not aware of any additional salesperson or entity that had a role in securing this sale.
+            </div>
+            <div className="mt-3 grid gap-2 text-sm">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="salesperson_disclosure"
+                  value="correct"
+                  className="mt-1"
+                  checked={form.salesperson_disclosure === "correct"}
+                  onChange={() => update("salesperson_disclosure", "correct")}
+                />
+                <span>Correct</span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="salesperson_disclosure"
+                  value="multiple"
+                  className="mt-1"
+                  checked={form.salesperson_disclosure === "multiple"}
+                  onChange={() => update("salesperson_disclosure", "multiple")}
+                />
+                <span>There were multiple salespeople involved – List Additional Salespeople</span>
+              </label>
+              {form.salesperson_disclosure === "multiple" && (
+                <Textarea
+                  value={form.additional_salespeople}
+                  onChange={(e) => update("additional_salespeople", e.target.value)}
+                  className="min-h-[80px] px-3 py-2 text-sm"
+                  placeholder="List the additional salesperson(s) or entities that had a role in securing this sale."
+                />
+              )}
             </div>
           </div>
 
@@ -263,6 +312,16 @@ export default function CommissionForm() {
               <Input value={form.company_placing_order} onChange={(e) => update("company_placing_order", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("companyPlaceholder")} />
             </label>
           )}
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold">Job Name</span>
+            <Input
+              value={form.job_name}
+              onChange={(e) => update("job_name", e.target.value)}
+              className="h-10 px-3 text-sm"
+              placeholder="Job name"
+            />
+          </label>
 
           <div className="grid grid-cols-3 gap-3">
             <label className="col-span-2 grid gap-1 text-sm">
@@ -284,8 +343,23 @@ export default function CommissionForm() {
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="font-semibold">{t("qty")}</span>
-            <Input value={form.qty} onChange={(e) => update("qty", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("qty")} />
+            <span className="font-semibold">Approximate Quantity Ordered</span>
+            <Input
+              value={form.qty}
+              onChange={(e) => update("qty", e.target.value)}
+              className="h-10 px-3 text-sm"
+              placeholder="Approximate quantity ordered"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold">Roof Type</span>
+            <MultiSelect
+              options={ROOF_TYPES}
+              value={form.roof_type}
+              onChange={(v) => update("roof_type", v)}
+              placeholder={t("selectRoofTypes")}
+            />
           </label>
 
           <label className="grid gap-1 text-sm">

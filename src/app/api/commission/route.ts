@@ -26,11 +26,13 @@ async function sendCommissionEmail(params: {
   repPhone: string | null;
   repEmail: string | null;
   estimatedOrderDate: string | null;
+  jobName: string | null;
   companyPlacingOrder: string;
   orderCity: string | null;
   orderState: string | null;
   uAnchorsOrdered: string | null;
   qty: string | null;
+  roofType: string | null;
   roofBrand: string | null;
   otherItems: string | null;
   shipToAddress: string | null;
@@ -40,7 +42,7 @@ async function sendCommissionEmail(params: {
   projectDescription: string | null;
   certified: boolean;
   unawareOtherSalesperson: string | null;
-  specifierAssisted: string | null;
+  additionalSalespeople: string | null;
   claimId: string;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
@@ -56,13 +58,17 @@ async function sendCommissionEmail(params: {
   lines.push(`Rep: ${params.repName || "—"} | ${params.repCompany || "—"} | ${params.repPhone || "—"} | ${params.repEmail || "—"}`);
   lines.push(`Certified: ${params.certified ? "Yes" : "No"}`);
   lines.push(`Unaware of other salesperson: ${params.unawareOtherSalesperson || "—"}`);
-  lines.push(`Specifier assisted by separate sales efforts: ${params.specifierAssisted || "—"}`);
+  if (params.additionalSalespeople) {
+    lines.push(`Additional Salespeople: ${params.additionalSalespeople}`);
+  }
   lines.push("");
+  lines.push(`Job Name: ${params.jobName || "—"}`);
   lines.push(`Company Placing Order: ${params.companyPlacingOrder}`);
   lines.push(`Estimated Order Date: ${params.estimatedOrderDate || "—"}`);
   lines.push(`Order City/State: ${[params.orderCity, params.orderState].filter(Boolean).join(", ") || "—"}`);
   lines.push(`U-Anchor(s) Ordered: ${params.uAnchorsOrdered || "—"}`);
-  lines.push(`Qty: ${params.qty || "—"}`);
+  lines.push(`Approximate Quantity Ordered: ${params.qty || "—"}`);
+  lines.push(`Roof Type: ${params.roofType || "—"}`);
   lines.push(`Roof Brand: ${params.roofBrand || "—"}`);
   lines.push(`Other Items: ${params.otherItems || "—"}`);
   lines.push("");
@@ -94,13 +100,15 @@ export async function POST(req: Request) {
 
     const certified = body.certified === true;
     const unaware_other_salesperson = body.unaware_other_salesperson || null;
-    const specifier_assisted = body.specifier_assisted || null;
+    const additional_salespeople = clean(body.additional_salespeople) || null;
     const estimated_order_date = clean(body.estimated_order_date) || null;
+    const job_name = clean(body.job_name) || null;
     const company_placing_order = clean(body.company_placing_order);
     const order_city = clean(body.order_city) || null;
     const order_state = clean(body.order_state) || null;
     const u_anchors_ordered = clean(body.u_anchors_ordered) || null;
     const qty = clean(body.qty) || null;
+    const roof_type = clean(body.roof_type) || null;
     const roof_brand = clean(body.roof_brand) || null;
     const other_items = clean(body.other_items) || null;
     const ship_to_address = clean(body.ship_to_address) || null;
@@ -128,13 +136,15 @@ export async function POST(req: Request) {
         rep_email,
         certified,
         unaware_other_salesperson,
-        specifier_assisted,
+        additional_salespeople,
         estimated_order_date: estimated_order_date || null,
+        job_name,
         company_placing_order,
         order_city,
         order_state,
         u_anchors_ordered,
         qty,
+        roof_type,
         roof_brand,
         other_items,
         ship_to_address,
@@ -158,11 +168,13 @@ export async function POST(req: Request) {
         repPhone: rep_phone,
         repEmail: rep_email,
         estimatedOrderDate: estimated_order_date,
+        jobName: job_name,
         companyPlacingOrder: company_placing_order,
         orderCity: order_city,
         orderState: order_state,
         uAnchorsOrdered: u_anchors_ordered,
         qty,
+        roofType: roof_type,
         roofBrand: roof_brand,
         otherItems: other_items,
         shipToAddress: ship_to_address,
@@ -172,7 +184,7 @@ export async function POST(req: Request) {
         projectDescription: project_description,
         certified,
         unawareOtherSalesperson: unaware_other_salesperson,
-        specifierAssisted: specifier_assisted,
+        additionalSalespeople: additional_salespeople,
         claimId: (claim as any).id,
       });
     } catch (emailErr) {

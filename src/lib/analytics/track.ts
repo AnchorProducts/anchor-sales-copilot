@@ -52,12 +52,15 @@ export function trackEvent(
   metadata?: Record<string, unknown>
 ) {
   if (typeof window === "undefined") return;
+  // Phase 1 analytics: every event carries an `oem` slot in metadata so later
+  // aggregation by OEM works uniformly, even before OEM is populated.
+  const withOem = { oem: null as string | null, ...(metadata ?? {}) };
   // Explicit events (login, form submits, etc.) fire from any path.
   // The endpoint is auth-gated, so unauthenticated calls fail silently.
   postEvents({
     event_type: eventType,
     page_path: window.location.pathname,
-    metadata: metadata ?? {},
+    metadata: withOem,
   });
 }
 
