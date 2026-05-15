@@ -4,6 +4,8 @@ export type SalesRep = {
   id?: string;
   outside_sales_name: string | null;
   outside_sales_email: string | null;
+  inside_sales_name: string | null;
+  inside_sales_email: string | null;
   teams_link: string | null;
   states: string[];
 };
@@ -13,6 +15,8 @@ const FALLBACK_REPS: SalesRep[] = [
   {
     outside_sales_name: "Test Assignment",
     outside_sales_email: null,
+    inside_sales_name: null,
+    inside_sales_email: null,
     teams_link: null,
     states: ["TX"],
   },
@@ -21,7 +25,7 @@ const FALLBACK_REPS: SalesRep[] = [
 export async function loadAllSalesReps(): Promise<SalesRep[]> {
   const { data, error } = await supabaseAdmin
     .from("sales_reps")
-    .select("id, outside_sales_name, outside_sales_email, teams_link, states")
+    .select("id, outside_sales_name, outside_sales_email, inside_sales_name, inside_sales_email, teams_link, states")
     .order("outside_sales_name");
 
   if (error || !data || data.length === 0) return FALLBACK_REPS;

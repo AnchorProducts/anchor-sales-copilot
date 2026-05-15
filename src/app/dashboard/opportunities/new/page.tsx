@@ -63,7 +63,9 @@ export default function NewLeadPage() {
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="ds-caption">{t("leadIntake")}</div>
           <h1 className="mt-2 text-2xl">{t("projectIdentifier")}</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("shareProjectReqs")}</p>
+          <p className="mt-1 text-sm text-[var(--anchor-gray)]">
+            Share project opportunities, contacts to follow up with, notes and photos and an Anchor Products representative will handle the rest. Next steps, sit back while a team of rooftop equipment experts increase your commissions, customer satisfaction and ensures your customers are secure during the storms ahead.
+          </p>
         </Card>
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
