@@ -266,7 +266,14 @@ h2,
 .ds-input,
 .ds-select,
 .ds-textarea {
+  /* Fields must stay inside their wrapper on every viewport. width:100%
+     + max-width:100% + box-sizing:border-box keeps the visible box fixed
+     to the parent, no matter how long the typed entry is. min-width:0 is
+     needed so the field doesn't expand its grid/flex track. */
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
@@ -284,6 +291,9 @@ h2,
 .ds-textarea {
   min-height: 96px;
   padding: 10px 12px;
+  /* Lock the textarea size — never let the drag handle expand it past
+     the white wrapper. */
+  resize: none;
 }
 
 .ds-input::placeholder,
