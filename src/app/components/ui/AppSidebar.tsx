@@ -123,7 +123,7 @@ export function AppSidebar() {
           <>
             <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isPath("/dashboard/opportunities")} />
             <NavLink href="/dashboard/notable-projects/new" kind="camera" label="Notable Project" active={isPath("/dashboard/notable-projects")} />
-            <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission" active={isPath("/dashboard/commission")} />
+            <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission Claim Form" active={isPath("/dashboard/commission")} />
           </>
         )}
         {isInternal && (
