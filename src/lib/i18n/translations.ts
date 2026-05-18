@@ -230,7 +230,7 @@ export const translations = {
     contactPhoneText: "Phone (text)",
     addPhoneInSettings: "Add a phone number in",
     bestContactLabel: "Best contact",
-    contractorsOnProject: "Contractors on this Project",
+    contractorsOnProject: "Contractor(s) on this Project",
     addContactInfoContractors: "Add contact information for any contractors involved in this project.",
     contractor: "Contractor",
     fullNamePlain: "Full name",

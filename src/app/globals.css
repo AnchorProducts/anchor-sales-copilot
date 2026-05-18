@@ -457,3 +457,88 @@ h2,
 .anchor-topbar {
   background: linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
 }
+
+/* ── Hero feature visuals ──────────────────────────────────────────────── */
+/* Each animation is gated behind prefers-reduced-motion below. */
+
+/* Title swap fade-in */
+@keyframes hero-title-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hero-title-anim {
+  animation: hero-title-in 420ms ease-out both;
+}
+
+/* Copilot — twinkling sparkles */
+@keyframes hero-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.6) rotate(0deg); }
+  40%      { opacity: 1; transform: scale(1)   rotate(8deg); }
+  70%      { opacity: 0.4; transform: scale(0.9) rotate(-4deg); }
+}
+.hero-sparkle {
+  transform-origin: center;
+  animation: hero-sparkle 3.2s ease-in-out infinite;
+}
+
+/* Resource Library — page turn */
+@keyframes hero-page-turn {
+  0%   { transform: perspective(220px) rotateY(0deg);   opacity: 1; }
+  45%  { transform: perspective(220px) rotateY(-160deg); opacity: 1; }
+  55%  { transform: perspective(220px) rotateY(-160deg); opacity: 0; }
+  56%  { transform: perspective(220px) rotateY(0deg);   opacity: 0; }
+  65%  { transform: perspective(220px) rotateY(0deg);   opacity: 1; }
+  100% { transform: perspective(220px) rotateY(0deg);   opacity: 1; }
+}
+.hero-page-flip {
+  transform-origin: left center;
+  animation: hero-page-turn 3.6s ease-in-out infinite;
+}
+
+/* Rooftop Consult — drawing checkmark */
+@keyframes hero-check-draw {
+  0%   { stroke-dashoffset: 30; opacity: 0; }
+  20%  { opacity: 1; }
+  60%  { stroke-dashoffset: 0;  opacity: 1; }
+  85%  { stroke-dashoffset: 0;  opacity: 1; }
+  100% { stroke-dashoffset: 30; opacity: 0; }
+}
+.hero-check {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: hero-check-draw 3.2s ease-in-out infinite;
+}
+
+/* Commission — bill peeking out of wallet */
+@keyframes hero-bill-rise {
+  0%, 100% { transform: translateY(8px); opacity: 0.0; }
+  30%      { transform: translateY(-2px); opacity: 1; }
+  70%      { transform: translateY(-6px); opacity: 1; }
+}
+.hero-bill {
+  animation: hero-bill-rise 3.4s ease-in-out infinite;
+}
+
+/* Notable Project — camera flash */
+@keyframes hero-flash {
+  0%, 70%, 100% { opacity: 0; transform: scale(0.6); }
+  10%           { opacity: 0.9; transform: scale(1); }
+  25%           { opacity: 0.2; transform: scale(1.4); }
+}
+.hero-flash {
+  transform-origin: center;
+  animation: hero-flash 2.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-title-anim,
+  .hero-sparkle,
+  .hero-page-flip,
+  .hero-check,
+  .hero-bill,
+  .hero-flash {
+    animation: none !important;
+  }
+  .hero-check { stroke-dashoffset: 0; opacity: 1; }
+  .hero-bill, .hero-sparkle, .hero-flash { opacity: 1; }
+}
