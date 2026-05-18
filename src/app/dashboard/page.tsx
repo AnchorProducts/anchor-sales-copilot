@@ -68,6 +68,137 @@ function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName
   }
 }
 
+/* ─── Hero feature catalog ──────────────────────────────────────────────── */
+type HeroFeatureKey = "chat" | "assets" | "consults" | "commission" | "notable";
+
+type HeroSpec = { title: string; linkLabel: string; href: string };
+
+function heroSpecFor(feature: HeroFeatureKey, role: string | null): HeroSpec {
+  switch (feature) {
+    case "chat":
+      return { title: "Open Copilot for advice on your next project", linkLabel: "Open Copilot", href: "/chat" };
+    case "assets":
+      return { title: "Browse the Resource Library for fresh assets", linkLabel: "Open Library", href: "/assets" };
+    case "consults":
+      return role === "external_rep"
+        ? { title: "Send a Rooftop Equipment Consult to your inside team", linkLabel: "Start a Consult", href: "/dashboard/opportunities/new" }
+        : { title: "Triage Rooftop Equipment Consults from your region", linkLabel: "Open Consults", href: "/dashboard/opportunities" };
+    case "commission":
+      return { title: "File a Commission Claim before your order ships", linkLabel: "Open Claim Form", href: "/dashboard/commission/new" };
+    case "notable":
+      return { title: "Log a Notable Project win", linkLabel: "Submit Project", href: "/dashboard/notable-projects/new" };
+  }
+}
+
+/* ─── Per-feature animated visual ───────────────────────────────────────── */
+function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroFeatureKey; size?: number }) {
+  const wrap: React.CSSProperties = { width: size, height: size };
+  const mint = "var(--anchor-mint)";
+
+  switch (feature) {
+    case "chat":
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          <g fill={mint}>
+            <g className="hero-sparkle" style={{ animationDelay: "0s" }} transform="translate(48 22)">
+              <path d="M0 -14 L3 -3 L14 0 L3 3 L0 14 L-3 3 L-14 0 L-3 -3 Z" />
+            </g>
+            <g className="hero-sparkle" style={{ animationDelay: "0.9s" }} transform="translate(20 58)">
+              <path d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" />
+            </g>
+            <g className="hero-sparkle" style={{ animationDelay: "1.6s" }} transform="translate(76 70)">
+              <path d="M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z" />
+            </g>
+            <g className="hero-sparkle" style={{ animationDelay: "2.2s" }} transform="translate(70 36)">
+              <path d="M0 -6 L1.5 -1.5 L6 0 L1.5 1.5 L0 6 L-1.5 1.5 L-6 0 L-1.5 -1.5 Z" />
+            </g>
+          </g>
+        </svg>
+      );
+
+    case "assets":
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          <g fill="none" stroke={mint} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round">
+            {/* book covers */}
+            <path d="M50 24 L22 30 L22 76 L50 80" fill="rgba(156,226,187,0.18)" />
+            <path d="M50 24 L78 30 L78 76 L50 80" fill="rgba(156,226,187,0.18)" />
+            {/* spine */}
+            <line x1="50" y1="24" x2="50" y2="80" />
+            {/* static left page lines */}
+            <line x1="30" y1="40" x2="46" y2="38" />
+            <line x1="30" y1="48" x2="46" y2="46" />
+            <line x1="30" y1="56" x2="46" y2="54" />
+          </g>
+          {/* turning right page */}
+          <path
+            d="M50 24 L78 30 L78 76 L50 80 Z"
+            fill={mint}
+            opacity="0.85"
+            className="hero-page-flip"
+            style={{ transformOrigin: "50px 52px" }}
+          />
+        </svg>
+      );
+
+    case "consults":
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          <g fill="none" stroke={mint} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round">
+            {/* clipboard body */}
+            <rect x="26" y="26" width="48" height="56" rx="6" fill="rgba(156,226,187,0.18)" />
+            {/* clip */}
+            <rect x="40" y="20" width="20" height="10" rx="2" fill="rgba(156,226,187,0.35)" />
+            {/* a couple of static lines */}
+            <line x1="36" y1="50" x2="64" y2="50" opacity="0.55" />
+            <line x1="36" y1="60" x2="58" y2="60" opacity="0.4" />
+          </g>
+          {/* drawing checkmark */}
+          <path
+            d="M36 70 L46 78 L66 58"
+            fill="none"
+            stroke={mint}
+            strokeWidth="3.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="hero-check"
+          />
+        </svg>
+      );
+
+    case "commission":
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          {/* rising bill (behind wallet) */}
+          <g className="hero-bill">
+            <rect x="34" y="34" width="32" height="20" rx="3" fill={mint} opacity="0.9" />
+            <text x="50" y="49" textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--anchor-deep)">$</text>
+          </g>
+          {/* wallet body */}
+          <g fill="rgba(156,226,187,0.22)" stroke={mint} strokeWidth="2.4" strokeLinejoin="round">
+            <rect x="22" y="44" width="56" height="38" rx="6" />
+            {/* card slot */}
+            <rect x="60" y="58" width="14" height="10" rx="2" fill={mint} />
+          </g>
+        </svg>
+      );
+
+    case "notable":
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          {/* flash burst */}
+          <circle cx="50" cy="50" r="22" fill={mint} opacity="0.5" className="hero-flash" />
+          {/* camera body */}
+          <g fill="rgba(156,226,187,0.22)" stroke={mint} strokeWidth="2.4" strokeLinejoin="round">
+            <path d="M22 38 H38 L42 32 H58 L62 38 H78 A4 4 0 0 1 82 42 V70 A4 4 0 0 1 78 74 H22 A4 4 0 0 1 18 70 V42 A4 4 0 0 1 22 38 Z" />
+            <circle cx="50" cy="56" r="10" fill="rgba(156,226,187,0.35)" />
+            <circle cx="50" cy="56" r="5" fill={mint} />
+          </g>
+        </svg>
+      );
+  }
+}
+
 /* ─── Initials helper ───────────────────────────────────────────────────── */
 const initials = (s: string) =>
   s.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "?";
@@ -90,6 +221,8 @@ export default function DashboardPage() {
   const suggestLoadingRef = useRef(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRefDesktop = useRef<HTMLDivElement | null>(null);
+
+  const [topFeature, setTopFeature] = useState<HeroFeatureKey | null>(null);
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
@@ -196,6 +329,27 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [serviceState]);
 
+  // Fetch the user's most-used feature (last 7 days) once they're authed.
+  useEffect(() => {
+    if (booting || !roleReady) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/user-events/most-used", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        if (!alive) return;
+        const f = json?.feature;
+        if (f === "chat" || f === "assets" || f === "consults" || f === "commission" || f === "notable") {
+          setTopFeature(f);
+        }
+      } catch {
+        // analytics is best-effort; never block the hero
+      }
+    })();
+    return () => { alive = false; };
+  }, [booting, roleReady]);
+
   const isExternal = role === "external_rep";
   const isAdmin = role === "admin";
   const isInternal = role === "admin" || role === "anchor_rep";
@@ -205,14 +359,36 @@ export default function DashboardPage() {
 
   const todayLabel = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
-  const heroTitle = isAdmin
+  // Allowed hero features per role. Admin keeps its bespoke pulse copy
+  // unless their top feature is one of these workspace tools.
+  const allowedFeatures: HeroFeatureKey[] = isExternal
+    ? ["chat", "assets", "consults", "commission", "notable"]
+    : role === "anchor_rep"
+    ? ["chat", "assets", "consults"]
+    : isAdmin
+    ? ["chat", "assets"]
+    : [];
+
+  const resolvedFeature: HeroFeatureKey | null =
+    topFeature && allowedFeatures.includes(topFeature) ? topFeature : null;
+
+  const heroSpec = resolvedFeature ? heroSpecFor(resolvedFeature, role) : null;
+
+  const heroTitle = heroSpec
+    ? heroSpec.title
+    : isAdmin
     ? "Admin pulse — view activity & assessments"
     : isInternal
     ? "Internal tools ready — copilot & assets"
-    : "Open Copilot for advice on your next project"
-  ;
-  const heroLink = isAdmin ? "/admin" : "/chat";
-  const heroLinkLabel = isAdmin ? "See Admin" : "Open Copilot";
+    : "Open Copilot for advice on your next project";
+  const heroLink = heroSpec ? heroSpec.href : isAdmin ? "/admin" : "/chat";
+  const heroLinkLabel = heroSpec ? heroSpec.linkLabel : isAdmin ? "See Admin" : "Open Copilot";
+
+  // What animated visual to show. Falls back to sparkles (Copilot) so the
+  // card never renders without art.
+  const visualFeature: HeroFeatureKey = resolvedFeature ?? "chat";
+  // Re-keyed so the title fades in when the feature resolves.
+  const heroAnimKey = resolvedFeature ?? "default";
 
   const subtitle = isAdmin
     ? "Configure reps, review activity, and audit reports."
@@ -411,7 +587,10 @@ export default function DashboardPage() {
         {/* ── Hero card ──────────────────────────────────────────────────── */}
         <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[var(--anchor-green)] opacity-20" />
-          <button aria-label="More" className="absolute right-4 top-4 text-white/70 transition hover:text-white">
+          <div className="pointer-events-none absolute right-3 top-6 z-0 opacity-95">
+            <HeroFeatureVisual feature={visualFeature} size={92} />
+          </div>
+          <button aria-label="More" className="absolute right-4 top-4 z-10 text-white/70 transition hover:text-white">
             <Icon name="more" className="h-[18px] w-[18px]" />
           </button>
 
@@ -421,7 +600,10 @@ export default function DashboardPage() {
               <span className="text-[11px] font-semibold tracking-wide">Update</span>
             </div>
             <div className="mt-2 text-[11px] text-white/70">{todayLabel}</div>
-            <div className="mt-2 max-w-[80%] text-[19px] font-bold leading-snug tracking-tight sm:text-[20px]">
+            <div
+              key={`m-${heroAnimKey}`}
+              className="hero-title-anim mt-2 max-w-[70%] text-[19px] font-bold leading-snug tracking-tight sm:text-[20px]"
+            >
               {heroTitle}
             </div>
             <Link href={heroLink} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-white/80 transition hover:text-white">
@@ -565,13 +747,19 @@ export default function DashboardPage() {
             {/* Hero */}
             <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
               <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
+              <div className="pointer-events-none absolute right-8 top-8 z-0 opacity-95">
+                <HeroFeatureVisual feature={visualFeature} size={132} />
+              </div>
               <div className="relative">
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
                   <span className="text-[11px] font-semibold tracking-wide">Update</span>
                 </div>
                 <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
-                <div className="mt-3 max-w-[80%] text-[26px] font-bold leading-tight tracking-tight">
+                <div
+                  key={`d-${heroAnimKey}`}
+                  className="hero-title-anim mt-3 max-w-[70%] text-[26px] font-bold leading-tight tracking-tight"
+                >
                   {heroTitle}
                 </div>
                 <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
