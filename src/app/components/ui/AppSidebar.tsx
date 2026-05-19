@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useEffectiveRole } from "@/lib/role/viewAs";
 
 type IconKind =
   | "grid" | "sparkles" | "library" | "clipboard" | "camera"
@@ -85,9 +86,15 @@ export function AppSidebar() {
     };
   }, [supabase]);
 
+  const actualRole = profile?.role || "";
+  const effectiveRole = useEffectiveRole(actualRole) || "";
+
   if (shouldHide(pathname)) return null;
 
-  const role = profile?.role || "";
+  // Role gating uses the effective role so admins can preview each view.
+  // Sign-out, profile lookups, etc. still use the real session — only UI is
+  // overridden.
+  const role = effectiveRole;
   const isExternal = role === "external_rep";
   const isAdmin = role === "admin";
   const isInternal = role === "anchor_rep" || role === "admin";
