@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useEffectiveRole } from "@/lib/role/viewAs";
 
 type SearchProductRow = {
   id: string;
@@ -350,9 +351,12 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [booting, roleReady]);
 
-  const isExternal = role === "external_rep";
-  const isAdmin = role === "admin";
-  const isInternal = role === "admin" || role === "anchor_rep";
+  // For UI gating use the effective role so admins can preview each view.
+  // `role` (actual) still drives data fetches/sign-out elsewhere.
+  const effectiveRole = useEffectiveRole(role);
+  const isExternal = effectiveRole === "external_rep";
+  const isAdmin = effectiveRole === "admin";
+  const isInternal = effectiveRole === "admin" || effectiveRole === "anchor_rep";
 
   const firstName = (fullName || "").trim().split(/\s+/)[0] || "";
   const greetingName = firstName || "there";
@@ -363,7 +367,7 @@ export default function DashboardPage() {
   // unless their top feature is one of these workspace tools.
   const allowedFeatures: HeroFeatureKey[] = isExternal
     ? ["chat", "assets", "consults", "commission", "notable"]
-    : role === "anchor_rep"
+    : effectiveRole === "anchor_rep"
     ? ["chat", "assets", "consults"]
     : isAdmin
     ? ["chat", "assets"]
@@ -372,7 +376,7 @@ export default function DashboardPage() {
   const resolvedFeature: HeroFeatureKey | null =
     topFeature && allowedFeatures.includes(topFeature) ? topFeature : null;
 
-  const heroSpec = resolvedFeature ? heroSpecFor(resolvedFeature, role) : null;
+  const heroSpec = resolvedFeature ? heroSpecFor(resolvedFeature, effectiveRole) : null;
 
   const heroTitle = heroSpec
     ? heroSpec.title
