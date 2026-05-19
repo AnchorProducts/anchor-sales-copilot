@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
+import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +30,22 @@ type AssessmentReport = {
   user_id?: string;
 };
 
+type ClickAggregate = { label: string; path: string; count: number };
+type RecentEvent = {
+  created_at: string;
+  event_type: string;
+  page_path: string | null;
+  label: string | null;
+};
+
 type UserEvents = {
   total7: number;
   total30: number;
   lastSeen: string | null;
   byType: Record<string, number>;
   topPages: Array<{ path: string; count: number }>;
+  topClicks: ClickAggregate[];
+  recent: RecentEvent[];
 };
 
 type UserRow = ExternalUser & {
@@ -435,25 +446,52 @@ export default function ReportsPage() {
 
                       {isOpen && (
                         <div className="border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-4 sm:px-6 sm:py-5">
-                          {/* Activity summary line */}
-                          <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                            <span className="font-semibold text-[var(--anchor-deep)]">
-                              Last 30 days
-                            </span>
-                            <span className="text-[var(--anchor-gray)]">
-                              {u.events.total30} events
-                            </span>
-                            <span className="text-[var(--anchor-gray)]">
-                              · {u.events.total7} in past 7d
-                            </span>
-                            {u.events.lastSeen && (
-                              <span className="text-[var(--anchor-gray)]">
-                                · last seen {fmtDateTime(u.events.lastSeen)}
+                          {/* Activity summary line + PDF export */}
+                          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                              <span className="font-semibold text-[var(--anchor-deep)]">
+                                Last 30 days
                               </span>
-                            )}
-                            {u.phone && (
-                              <span className="text-[var(--anchor-gray)]">· {u.phone}</span>
-                            )}
+                              <span className="text-[var(--anchor-gray)]">
+                                {u.events.total30} events
+                              </span>
+                              <span className="text-[var(--anchor-gray)]">
+                                · {u.events.total7} in past 7d
+                              </span>
+                              {u.events.lastSeen && (
+                                <span className="text-[var(--anchor-gray)]">
+                                  · last seen {fmtDateTime(u.events.lastSeen)}
+                                </span>
+                              )}
+                              {u.phone && (
+                                <span className="text-[var(--anchor-gray)]">· {u.phone}</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              data-track-id="user-activity-pdf"
+                              onClick={() =>
+                                generateUserActivityPdf({
+                                  full_name: u.full_name,
+                                  email: u.email,
+                                  company: u.company,
+                                  phone: u.phone,
+                                  created_at: u.created_at,
+                                  conversationCount: u.conversationCount,
+                                  leadCount: u.leadCount,
+                                  reportCount: u.reports.length,
+                                  events: u.events,
+                                })
+                              }
+                              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white sm:text-sm"
+                            >
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              Download PDF
+                            </button>
                           </div>
 
                           {u.events.total30 === 0 ? (
@@ -461,7 +499,7 @@ export default function ReportsPage() {
                               No activity recorded in the last 30 days.
                             </p>
                           ) : (
-                            <div className="mb-5 grid gap-3 sm:gap-4 md:grid-cols-2">
+                            <div className="mb-5 grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
                               <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
                                 <div className="ds-caption mb-3">Event breakdown</div>
                                 <ul className="space-y-2 text-sm">
@@ -492,6 +530,32 @@ export default function ReportsPage() {
                                           {p.path}
                                         </code>
                                         <span className="ds-badge !rounded-full">{p.count}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                              <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 md:col-span-2 xl:col-span-1">
+                                <div className="ds-caption mb-3">Top clicks</div>
+                                {u.events.topClicks.length === 0 ? (
+                                  <div className="text-sm text-[var(--anchor-gray)]">
+                                    No click activity yet.
+                                  </div>
+                                ) : (
+                                  <ul className="space-y-2 text-sm">
+                                    {u.events.topClicks.map((c, i) => (
+                                      <li key={`${c.path}::${c.label}::${i}`} className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="truncate text-[var(--text-primary)]" title={c.label}>
+                                            {c.label || "—"}
+                                          </div>
+                                          {c.path && (
+                                            <code className="block truncate font-mono text-[11px] text-[var(--anchor-gray)]" title={c.path}>
+                                              {c.path}
+                                            </code>
+                                          )}
+                                        </div>
+                                        <span className="ds-badge !rounded-full shrink-0">{c.count}</span>
                                       </li>
                                     ))}
                                   </ul>
