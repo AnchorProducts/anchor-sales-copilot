@@ -7,6 +7,7 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
 import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
+import { prettyPagePath } from "@/lib/analytics/pagePath";
 
 export const dynamic = "force-dynamic";
 
@@ -523,12 +524,12 @@ export default function ReportsPage() {
                                   <ul className="space-y-2 text-sm">
                                     {u.events.topPages.map((p) => (
                                       <li key={p.path} className="flex items-center justify-between gap-3">
-                                        <code
-                                          className="truncate font-mono text-xs text-[var(--text-primary)]"
+                                        <span
+                                          className="truncate text-[var(--text-primary)]"
                                           title={p.path}
                                         >
-                                          {p.path}
-                                        </code>
+                                          {prettyPagePath(p.path)}
+                                        </span>
                                         <span className="ds-badge !rounded-full">{p.count}</span>
                                       </li>
                                     ))}
@@ -550,9 +551,9 @@ export default function ReportsPage() {
                                             {c.label || "—"}
                                           </div>
                                           {c.path && (
-                                            <code className="block truncate font-mono text-[11px] text-[var(--anchor-gray)]" title={c.path}>
-                                              {c.path}
-                                            </code>
+                                            <span className="block truncate text-[11px] text-[var(--anchor-gray)]" title={c.path}>
+                                              {prettyPagePath(c.path)}
+                                            </span>
                                           )}
                                         </div>
                                         <span className="ds-badge !rounded-full shrink-0">{c.count}</span>
