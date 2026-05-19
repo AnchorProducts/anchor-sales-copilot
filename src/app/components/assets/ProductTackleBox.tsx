@@ -140,6 +140,15 @@ function triggerDownload(href: string, filename?: string) {
   a.remove();
 }
 
+// Mobile detection — on phones we hand PDFs straight to the OS browser
+// (Safari/Chrome) which has a proper native PDF viewer, instead of trying
+// to embed via the in-app /docs/view wrapper (whose <object> fallback
+// shows a useless "can't preview" screen on iOS).
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function basename(path: string) {
   const clean = String(path || "").split("?")[0];
   return clean.split("/").pop() || clean;
@@ -685,9 +694,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return accessToken ? `${base}&token=${encodeURIComponent(accessToken)}` : base;
   }
 
-  // "Open" routes through the in-app viewer so the user always has a
-  // "Back to Solution" button instead of being stranded on a signed URL.
+  // "Open" on desktop routes through the in-app viewer (Back button etc.).
+  // On mobile, open the doc URL in a new tab so the phone's browser renders
+  // the PDF in its native viewer instead of falling into the <object>
+  // fallback screen.
   function openInline(path: string) {
+    if (isMobileDevice()) {
+      window.open(docOpenHref(path, false), "_blank", "noopener");
+      return;
+    }
     const qs = new URLSearchParams({
       path,
       from: window.location.pathname,
@@ -697,9 +712,14 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   }
 
   function forceDownload(path: string) {
-    // Programmatic anchor click keeps the current page alive instead of
-    // navigating the tab to a Content-Disposition: attachment response,
-    // which leaves users on a black screen on mobile.
+    if (isMobileDevice()) {
+      // Hand off to the phone's browser — it'll honor Content-Disposition:
+      // attachment via its native download/share sheet.
+      window.open(docOpenHref(path, true), "_blank", "noopener");
+      return;
+    }
+    // Desktop: programmatic anchor click keeps the current page alive
+    // instead of navigating the tab to the attachment response.
     triggerDownload(docOpenHref(path, true), basename(path));
   }
 

@@ -35,6 +35,11 @@ function docViewerHref(path: string, title: string | null) {
   });
   return `/docs/view?${qs.toString()}`;
 }
+
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
 function isDocxPath(path: string) {
   const p = String(path || "").toLowerCase().split("?")[0];
   return p.endsWith(".docx");
@@ -274,15 +279,23 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   const isPdf = (p: string) => p.toLowerCase().endsWith(".pdf");
 
   const isPreviewable = isPdf(a.path);
-  // PDFs route through the in-app viewer (with a Back button); DOCX
-  // and other formats just download in the same tab.
-  const href = isPreviewable ? docViewerHref(a.path, a.title) : docOpenHref(a.path, true);
+  // On desktop, PDFs route through the in-app viewer (with a Back button).
+  // On mobile, hand the URL straight to the phone's browser so its native
+  // PDF viewer renders the file instead of the in-app <object> fallback.
+  // Non-PDFs (DOCX, etc.) always go straight to the download URL.
+  const mobile = isMobileDevice();
+  const href = isPreviewable
+    ? (mobile ? docOpenHref(a.path, false) : docViewerHref(a.path, a.title))
+    : docOpenHref(a.path, true);
+  // Open in a new tab on mobile (or whenever we're going straight to the
+  // file URL), so the user can swipe back to the app afterward.
+  const openInNewTab = !isPreviewable || mobile;
 
   return (
     <a
   key={a.id}
   href={href}
-  {...(isPreviewable ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+  {...(openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
   className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 text-left transition hover:bg-black/[0.03]"
 >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
