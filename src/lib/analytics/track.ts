@@ -74,3 +74,20 @@ export function trackPageView(pathname: string) {
     metadata: {},
   });
 }
+
+export type ClickMeta = {
+  el: string;          // tag name, e.g. "a" or "button"
+  label?: string;      // visible/aria text, truncated
+  href?: string;       // for anchor tags
+  trackId?: string;    // optional data-track-id override
+  role?: string;       // aria role if non-native (e.g. role="button")
+};
+
+export function trackClick(meta: ClickMeta) {
+  if (typeof window === "undefined") return;
+  postEvents({
+    event_type: "click",
+    page_path: window.location.pathname,
+    metadata: { oem: null, ...meta },
+  });
+}

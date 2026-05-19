@@ -47,7 +47,15 @@ type EventRow = {
   user_id: string;
   event_type: string;
   page_path: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
+};
+type ClickAggregate = { label: string; path: string; count: number };
+type RecentEvent = {
+  created_at: string;
+  event_type: string;
+  page_path: string | null;
+  label: string | null;
 };
 type EventAggregate = {
   total7: number;
@@ -55,6 +63,8 @@ type EventAggregate = {
   lastSeen: string | null;
   byType: Record<string, number>;
   topPages: Array<{ path: string; count: number }>;
+  topClicks: ClickAggregate[];
+  recent: RecentEvent[];
 };
 
 export async function GET() {
@@ -91,9 +101,10 @@ export async function GET() {
     userIds.length
       ? supabaseAdmin
           .from("user_events")
-          .select("user_id,event_type,page_path,created_at")
+          .select("user_id,event_type,page_path,metadata,created_at")
           .in("user_id", userIds)
           .gte("created_at", thirtyDaysAgo)
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as EventRow[], error: null }),
   ]);
 
@@ -113,6 +124,11 @@ export async function GET() {
   const events: EventRow[] = (eventRes.data ?? []) as EventRow[];
   const eventAggs: Record<string, EventAggregate> = {};
   const pageCounts: Record<string, Record<string, number>> = {};
+  // key = path + "::" + label, value = count, so the same label on
+  // different pages is counted separately (useful for "Open Copilot"
+  // appearing in multiple spots).
+  const clickCounts: Record<string, Record<string, { label: string; path: string; count: number }>> = {};
+  const recentByUser: Record<string, RecentEvent[]> = {};
 
   for (const e of events) {
     if (!e.user_id) continue;
@@ -122,6 +138,8 @@ export async function GET() {
       lastSeen: null,
       byType: {},
       topPages: [],
+      topClicks: [],
+      recent: [],
     });
     agg.total30 += 1;
     if (new Date(e.created_at).getTime() >= sevenDayCutoff) agg.total7 += 1;
@@ -131,6 +149,32 @@ export async function GET() {
       const pc = (pageCounts[e.user_id] ??= {});
       pc[e.page_path] = (pc[e.page_path] ?? 0) + 1;
     }
+
+    if (e.event_type === "click") {
+      const meta = (e.metadata ?? {}) as Record<string, unknown>;
+      const label = String(meta.trackId || meta.label || meta.href || meta.el || "click");
+      const path = e.page_path || "";
+      const key = `${path}::${label}`;
+      const userClicks = (clickCounts[e.user_id] ??= {});
+      const entry = (userClicks[key] ??= { label, path, count: 0 });
+      entry.count += 1;
+    }
+
+    // Keep the latest 25 events per user for the timeline / PDF.
+    const recent = (recentByUser[e.user_id] ??= []);
+    if (recent.length < 25) {
+      const m = (e.metadata ?? {}) as Record<string, unknown>;
+      const label =
+        e.event_type === "click"
+          ? String(m.trackId || m.label || m.href || m.el || "")
+          : null;
+      recent.push({
+        created_at: e.created_at,
+        event_type: e.event_type,
+        page_path: e.page_path,
+        label,
+      });
+    }
   }
 
   for (const uid of Object.keys(eventAggs)) {
@@ -139,6 +183,10 @@ export async function GET() {
       .map(([path, count]) => ({ path, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
+    eventAggs[uid].topClicks = Object.values(clickCounts[uid] ?? {})
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    eventAggs[uid].recent = recentByUser[uid] ?? [];
   }
 
   // Aggregate daily series and overall event-type mix for the dashboard charts.
@@ -171,6 +219,8 @@ export async function GET() {
       lastSeen: null,
       byType: {},
       topPages: [],
+      topClicks: [],
+      recent: [],
     },
   }));
 
