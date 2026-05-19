@@ -20,6 +20,12 @@ type AdminCard = {
 
 const CARDS: AdminCard[] = [
   {
+    title: "Users",
+    description: "Edit names, emails, phone numbers, and roles for every user (external, internal, admin).",
+    badge: "Config",
+    href: "/admin/users",
+  },
+  {
     title: "Sales Reps",
     description: "Configure inside/outside sales reps, regions, Teams links, and contact info.",
     badge: "Config",
