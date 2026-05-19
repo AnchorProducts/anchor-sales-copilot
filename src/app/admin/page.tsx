@@ -26,6 +26,12 @@ const CARDS: AdminCard[] = [
     href: "/admin/users",
   },
   {
+    title: "Manufacturer Contacts",
+    description: "See who at each manufacturer is using the app and what they're doing.",
+    badge: "Analytics",
+    href: "/admin/manufacturer-contacts",
+  },
+  {
     title: "Sales Reps",
     description: "Configure inside/outside sales reps, regions, Teams links, and contact info.",
     badge: "Config",
