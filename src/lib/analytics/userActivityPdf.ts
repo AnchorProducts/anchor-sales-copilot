@@ -1,6 +1,7 @@
 "use client";
 
 import jsPDF from "jspdf";
+import { prettyPagePath } from "./pagePath";
 
 export type UserPdfPayload = {
   full_name: string | null;
@@ -169,7 +170,7 @@ export function generateUserActivityPdf(u: UserPdfPayload) {
     body("—", { color: [120, 120, 120] });
   } else {
     for (const p of u.events.topPages) {
-      row(p.path, `${p.count}`);
+      row(prettyPagePath(p.path), `${p.count}`);
     }
   }
   y += 6;
@@ -182,7 +183,7 @@ export function generateUserActivityPdf(u: UserPdfPayload) {
   } else {
     for (const c of u.events.topClicks) {
       const right = `${c.count}`;
-      const left = c.path ? `${c.label}  ·  ${c.path}` : c.label;
+      const left = c.path ? `${c.label}  ·  ${prettyPagePath(c.path)}` : c.label;
       row(left, right);
     }
   }
@@ -199,7 +200,7 @@ export function generateUserActivityPdf(u: UserPdfPayload) {
       const what = r.label
         ? `${eventTypeLabel(r.event_type)} · ${r.label}`
         : eventTypeLabel(r.event_type);
-      const where = r.page_path ? ` · ${r.page_path}` : "";
+      const where = r.page_path ? ` · ${prettyPagePath(r.page_path)}` : "";
       row(when, `${what}${where}`);
     }
   }
