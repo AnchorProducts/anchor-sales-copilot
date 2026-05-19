@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,11 @@ function deriveBackLabel(from: string): string {
   return "Back";
 }
 
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function DocViewer() {
   const params = useSearchParams();
   const router = useRouter();
@@ -31,6 +36,15 @@ function DocViewer() {
     if (!path) return "";
     return `/api/doc-open?path=${encodeURIComponent(path)}&download=0`;
   }, [path]);
+
+  // On mobile, the <object> embed below falls back to a "can't preview"
+  // screen on iOS Safari. Hand the doc straight to the phone's browser
+  // (its native PDF viewer) instead.
+  useEffect(() => {
+    if (!inlineSrc) return;
+    if (!isMobileDevice()) return;
+    window.location.replace(inlineSrc);
+  }, [inlineSrc]);
 
   const downloadHref = useMemo(() => {
     if (!path) return "";
