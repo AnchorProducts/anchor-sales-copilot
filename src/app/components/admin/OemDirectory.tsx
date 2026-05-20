@@ -7,6 +7,10 @@ import {
   generateUserActivityPdf,
   type UserPdfPayload,
 } from "@/lib/analytics/userActivityPdf";
+import {
+  OemContactModal,
+  type OemContactFormValues,
+} from "@/app/components/admin/OemContactModal";
 
 type Activity = {
   total7: number;
@@ -86,6 +90,28 @@ export function OemDirectory() {
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
+  // CRUD modal state. `mode = null` means closed.
+  const [modal, setModal] = useState<
+    | { mode: "add" }
+    | { mode: "edit"; contact: Contact }
+    | null
+  >(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  function contactToFormValues(c: Contact): OemContactFormValues {
+    return {
+      manufacturer: c.manufacturer || "",
+      first_name: c.first_name || "",
+      last_name: c.last_name || "",
+      email: c.email || "",
+      phone: c.phone || "",
+      cell: c.cell || "",
+      title: c.title || "",
+      territory: c.territory || "",
+      region: c.region || "",
+    };
+  }
+
   const toggleGroup = (manufacturer: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -156,7 +182,7 @@ export function OemDirectory() {
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, []);
+  }, [reloadKey]);
 
   const manufacturers = useMemo(() => {
     const set = new Set<string>();
@@ -215,6 +241,22 @@ export function OemDirectory() {
           <Counter label="With email" value={counts.withEmail} />
         </section>
       )}
+
+      {/* Add button */}
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          data-track-id="oem-contact-add"
+          onClick={() => setModal({ mode: "add" })}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] sm:text-sm"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Add OEM contact
+        </button>
+      </div>
 
       {/* Controls */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -390,8 +432,19 @@ export function OemDirectory() {
 
                           {open && (
                             <div className="border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-4 sm:px-6 sm:py-5">
-                              {c.signed_up && c.profile_id && (
-                                <div className="mb-3 flex items-center justify-end">
+                              <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  data-track-id="manufacturer-contact-edit"
+                                  onClick={() => setModal({ mode: "edit", contact: c })}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-deep)] transition-colors hover:bg-[var(--surface-soft)]"
+                                >
+                                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                                {c.signed_up && c.profile_id && (
                                   <button
                                     type="button"
                                     data-track-id="manufacturer-contact-pdf"
@@ -406,8 +459,8 @@ export function OemDirectory() {
                                     </svg>
                                     {pdfBusyId === c.profile_id ? "Generating…" : "Download PDF"}
                                   </button>
-                                </div>
-                              )}
+                                )}
+                              </div>
                               {pdfError && expanded === c.id && (
                                 <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                                   {pdfError}
@@ -473,6 +526,26 @@ export function OemDirectory() {
             );
           })}
         </div>
+      )}
+
+      {modal && (
+        <OemContactModal
+          open={true}
+          mode={modal.mode}
+          initialValues={modal.mode === "edit" ? contactToFormValues(modal.contact) : undefined}
+          contactId={modal.mode === "edit" ? modal.contact.id : undefined}
+          knownManufacturers={manufacturers}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null);
+            setReloadKey((k) => k + 1);
+          }}
+          onDeleted={() => {
+            setModal(null);
+            setExpanded(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
       )}
     </>
   );

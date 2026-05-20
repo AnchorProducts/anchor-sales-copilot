@@ -18,7 +18,7 @@ type Option = { value: AppRole; label: string; sub: string };
 const OPTIONS: Option[] = [
   { value: "admin",        label: "Admin",         sub: "Full admin view" },
   { value: "anchor_rep",   label: "Internal sales", sub: "Anchor rep view" },
-  { value: "external_rep", label: "External sales", sub: "Outside rep view" },
+  { value: "external_rep", label: "External user", sub: "Outside rep view" },
 ];
 
 export function AdminViewAsSwitcher() {

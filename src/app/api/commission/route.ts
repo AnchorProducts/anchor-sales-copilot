@@ -49,7 +49,28 @@ async function sendCommissionEmail(params: {
   if (!resendKey) return;
 
   const resend = new Resend(resendKey);
-  const to = clean(process.env.COMMISSION_NOTIFICATIONS_EMAIL || process.env.LEAD_NOTIFICATIONS_FROM || "reports@anchorp.com");
+
+  // Prefer the recipient from the admin-managed notification_settings table.
+  // Fall back to the env var so deployments without a DB row still work.
+  let dbRecipient: string | null = null;
+  try {
+    const { data } = await supabaseAdmin
+      .from("notification_settings")
+      .select("commission_recipient_email")
+      .eq("id", 1)
+      .maybeSingle();
+    const raw = (data as { commission_recipient_email?: string | null } | null)?.commission_recipient_email;
+    if (raw && typeof raw === "string") dbRecipient = raw.trim();
+  } catch {
+    // Soft-fail to env var if the lookup blows up.
+  }
+
+  const to = clean(
+    dbRecipient ||
+    process.env.COMMISSION_NOTIFICATIONS_EMAIL ||
+    process.env.LEAD_NOTIFICATIONS_FROM ||
+    "reports@anchorp.com"
+  );
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
 
   const lines: string[] = [];
