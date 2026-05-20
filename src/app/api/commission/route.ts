@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import { generateCommissionClaimPdf } from "@/lib/pdf/commissionClaimPdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,7 +112,47 @@ async function sendCommissionEmail(params: {
 
   const subject = `Commission Claim - ${params.companyPlacingOrder} (${params.claimId.slice(0, 8)})`;
 
-  const result = await resend.emails.send({ from, to: [to], subject, text: lines.join("\n") });
+  // Generate a styled PDF mirroring the email body so the recipient gets a
+  // shareable record. Same content as the text body, formatted for printing.
+  const { buffer: pdfBuffer, filename: pdfFilename } = generateCommissionClaimPdf({
+    claimId: params.claimId,
+    submittedAt: new Date(),
+    repName: params.repName,
+    repCompany: params.repCompany,
+    repPhone: params.repPhone,
+    repEmail: params.repEmail,
+    certified: params.certified,
+    unawareOtherSalesperson: params.unawareOtherSalesperson,
+    additionalSalespeople: params.additionalSalespeople,
+    estimatedOrderDate: params.estimatedOrderDate,
+    jobName: params.jobName,
+    companyPlacingOrder: params.companyPlacingOrder,
+    orderCity: params.orderCity,
+    orderState: params.orderState,
+    uAnchorsOrdered: params.uAnchorsOrdered,
+    qty: params.qty,
+    roofType: params.roofType,
+    roofBrand: params.roofBrand,
+    otherItems: params.otherItems,
+    shipToAddress: params.shipToAddress,
+    shipCity: params.shipCity,
+    shipState: params.shipState,
+    shipZip: params.shipZip,
+    projectDescription: params.projectDescription,
+  });
+
+  const result = await resend.emails.send({
+    from,
+    to: [to],
+    subject,
+    text: lines.join("\n"),
+    attachments: [
+      {
+        filename: pdfFilename,
+        content: pdfBuffer,
+      },
+    ],
+  });
   const maybeError = (result as { error?: { message?: string } | null } | null)?.error;
   if (maybeError) {
     return {
