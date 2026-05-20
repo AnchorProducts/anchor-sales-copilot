@@ -20,6 +20,11 @@ async function getProfile(userId: string) {
   return data as any;
 }
 
+type EmailResult =
+  | { status: "sent"; to: string; from: string; messageId: string | null }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; reason: string; to: string; from: string };
+
 async function sendCommissionEmail(params: {
   repName: string | null;
   repCompany: string | null;
@@ -44,9 +49,11 @@ async function sendCommissionEmail(params: {
   unawareOtherSalesperson: string | null;
   additionalSalespeople: string | null;
   claimId: string;
-}) {
+}): Promise<EmailResult> {
   const resendKey = clean(process.env.RESEND_API_KEY);
-  if (!resendKey) return;
+  if (!resendKey) {
+    return { status: "skipped", reason: "RESEND_API_KEY env var is not set" };
+  }
 
   const resend = new Resend(resendKey);
 
@@ -72,6 +79,10 @@ async function sendCommissionEmail(params: {
     "reports@anchorp.com"
   );
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+
+  if (!to) {
+    return { status: "skipped", reason: "No recipient configured (DB + env both empty)" };
+  }
 
   const lines: string[] = [];
   lines.push(`New Commission Claim Form submitted (ID: ${params.claimId.slice(0, 8)})`);
@@ -101,8 +112,17 @@ async function sendCommissionEmail(params: {
   const subject = `Commission Claim - ${params.companyPlacingOrder} (${params.claimId.slice(0, 8)})`;
 
   const result = await resend.emails.send({ from, to: [to], subject, text: lines.join("\n") });
-  const maybeError = (result as any)?.error;
-  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+  const maybeError = (result as { error?: { message?: string } | null } | null)?.error;
+  if (maybeError) {
+    return {
+      status: "failed",
+      reason: clean(maybeError?.message) || "Resend returned an error",
+      to,
+      from,
+    };
+  }
+  const messageId = (result as { data?: { id?: string } | null } | null)?.data?.id ?? null;
+  return { status: "sent", to, from, messageId };
 }
 
 export async function POST(req: Request) {
@@ -192,10 +212,9 @@ export async function POST(req: Request) {
       );
     }
 
-    let emailStatus: "sent" | "skipped" | "failed" = "skipped";
-    let emailError: string | null = null;
+    let emailResult: EmailResult;
     try {
-      await sendCommissionEmail({
+      emailResult = await sendCommissionEmail({
         repName: rep_name,
         repCompany: rep_company,
         repPhone: rep_phone,
@@ -218,21 +237,33 @@ export async function POST(req: Request) {
         certified,
         unawareOtherSalesperson: unaware_other_salesperson,
         additionalSalespeople: additional_salespeople,
-        claimId: (claim as any).id,
+        claimId: (claim as { id: string }).id,
       });
-      // sendCommissionEmail returns early (no throw) when RESEND_API_KEY is
-      // unset, so a success from that function means either "sent" or
-      // "skipped because emails are off." We can't tell from here, but the
-      // caller can inspect emailStatus + Resend logs to disambiguate.
-      emailStatus = process.env.RESEND_API_KEY ? "sent" : "skipped";
     } catch (emailErr) {
-      console.error("commission email error", emailErr);
-      emailStatus = "failed";
-      emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      console.error("commission email error (unexpected throw)", emailErr);
+      emailResult = {
+        status: "failed",
+        reason: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        to: "",
+        from: "",
+      };
     }
 
+    console.log("commission email result", emailResult);
+
+    const emailStatus = emailResult.status;
+    const emailError = emailResult.status === "failed" || emailResult.status === "skipped" ? emailResult.reason : null;
+    const emailTo = emailResult.status === "sent" || emailResult.status === "failed" ? emailResult.to : null;
+    const emailFrom = emailResult.status === "sent" || emailResult.status === "failed" ? emailResult.from : null;
+
     return NextResponse.json(
-      { id: (claim as any).id, emailStatus, emailError },
+      {
+        id: (claim as { id: string }).id,
+        emailStatus,
+        emailError,
+        emailTo,
+        emailFrom,
+      },
       { status: 201 }
     );
   } catch (err: any) {

@@ -63,10 +63,10 @@ const CARDS: AdminCard[] = [
   },
   {
     title: "Commission Claims",
-    description: "Submitted commission claims and approval status.",
+    description: "Every commission claim submitted by external reps, with rep info and order details.",
     badge: "Analytics",
+    href: "/admin/commission-claims",
     icon: "wallet",
-    comingSoon: true,
   },
   {
     title: "Rooftop Reports",
