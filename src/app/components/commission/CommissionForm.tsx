@@ -213,7 +213,21 @@ export default function CommissionForm() {
         // in the analytics metadata so aggregation can pick it up later.
         oem: form.roof_brand[0] || null,
       });
-      setSuccess("Commission claim submitted successfully.");
+
+      // Surface the email status from the API. Saved-but-not-emailed is the
+      // common silent-failure mode (Resend domain issue, missing key, etc.)
+      // and the rep should know if the recipient won't actually see this.
+      if (json?.emailStatus === "failed") {
+        setSuccess(
+          `Commission claim saved. Note: email notification failed (${json?.emailError || "unknown"}). Contact your admin.`
+        );
+      } else if (json?.emailStatus === "skipped") {
+        setSuccess(
+          "Commission claim saved. Note: email notifications are disabled — contact your admin to enable them."
+        );
+      } else {
+        setSuccess("Commission claim submitted successfully.");
+      }
       setForm(INITIAL_FORM);
     } catch (err: any) {
       setError(err?.message || "Failed to submit claim.");
