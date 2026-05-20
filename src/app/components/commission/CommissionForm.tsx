@@ -107,6 +107,7 @@ export default function CommissionForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [submittedByExpanded, setSubmittedByExpanded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -252,24 +253,53 @@ export default function CommissionForm() {
         </div>
 
         {profile && (
-          <div className="mt-5 rounded-2xl border border-[var(--anchor-deep)]/15 bg-[var(--anchor-mint)]/30 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-deep)]">
-                {t("submittedBy")}
+          <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--anchor-deep)]/15 bg-[var(--anchor-mint)]/30">
+            <button
+              type="button"
+              onClick={() => setSubmittedByExpanded((v) => !v)}
+              aria-expanded={submittedByExpanded}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left sm:px-5"
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-deep)]">
+                  {t("submittedBy")}
+                </div>
+                <div className="mt-0.5 truncate text-xs text-[var(--anchor-deep)]/70" title={profile.full_name || profile.email || ""}>
+                  {profile.full_name || profile.email || "Your profile"}
+                  {profile.company && ` · ${profile.company}`}
+                </div>
               </div>
-              <div className="text-[10px] text-[var(--anchor-deep)]/60">
-                Pulled from your profile
-              </div>
-            </div>
-            <div className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
-              <ProfileField label="Name" value={profile.full_name} />
-              <ProfileField label="Company" value={profile.company} />
-              <ProfileField label="Phone" value={profile.phone} />
-              <ProfileField label="Email" value={profile.email} mono />
-            </div>
-            {(!profile.full_name || !profile.company || !profile.phone || !profile.email) && (
-              <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-                Some contact info is missing. Update it on your profile so the recipient knows how to reach you.
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`h-5 w-5 shrink-0 text-[var(--anchor-deep)]/60 transition-transform ${submittedByExpanded ? "rotate-180" : ""}`}
+                aria-hidden
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {submittedByExpanded && (
+              <div className="border-t border-[var(--anchor-deep)]/10 px-4 py-3 sm:px-5 sm:py-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-[10px] text-[var(--anchor-deep)]/60">
+                    Pulled from your profile
+                  </div>
+                </div>
+                <div className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                  <ProfileField label="Name" value={profile.full_name} />
+                  <ProfileField label="Company" value={profile.company} />
+                  <ProfileField label="Phone" value={profile.phone} />
+                  <ProfileField label="Email" value={profile.email} mono />
+                </div>
+                {(!profile.full_name || !profile.company || !profile.phone || !profile.email) && (
+                  <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    Some contact info is missing. Update it on your profile so the recipient knows how to reach you.
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -319,9 +349,14 @@ export default function CommissionForm() {
             </div>
           </div>
 
-          <label className="grid gap-1 text-sm">
+          <label className="grid min-w-0 gap-1 text-sm">
             <span className="font-semibold">{t("estimatedOrderDate")}</span>
-            <Input type="date" value={form.estimated_order_date} onChange={(e) => update("estimated_order_date", e.target.value)} className="min-h-[44px] w-full px-3 py-2 text-sm" />
+            <Input
+              type="date"
+              value={form.estimated_order_date}
+              onChange={(e) => update("estimated_order_date", e.target.value)}
+              className="block min-h-[44px] w-full min-w-0 max-w-full px-3 py-2 text-sm"
+            />
           </label>
 
           {!profile?.company && (
