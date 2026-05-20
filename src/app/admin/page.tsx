@@ -26,22 +26,16 @@ const CARDS: AdminCard[] = [
     href: "/admin/users",
   },
   {
-    title: "Manufacturer Contacts",
-    description: "See who at each manufacturer is using the app and what they're doing.",
+    title: "Analytics",
+    description: "One-stop dashboard for internal, external, and manufacturer user activity. Download summary or per-user PDFs.",
     badge: "Analytics",
-    href: "/admin/manufacturer-contacts",
+    href: "/admin/analytics",
   },
   {
     title: "Sales Reps",
     description: "Configure inside/outside sales reps, regions, Teams links, and contact info.",
     badge: "Config",
     href: "/admin/sales-reps",
-  },
-  {
-    title: "User Activity",
-    description: "External user breakdown, copilot sessions, project counts, and rooftop reports.",
-    badge: "Analytics",
-    href: "/dashboard/reports",
   },
   {
     title: "Projects",
