@@ -45,7 +45,25 @@ export async function GET(req: Request) {
     // Tolerate emails-disabled mode: if either env is missing, do the
     // analytics aggregation + retention cleanup but skip the email.
     const resendKey = (process.env.RESEND_API_KEY || "").trim();
-    const recipients = parseRecipients(process.env.WEEKLY_REPORT_TO || "");
+
+    // Prefer recipients from admin-managed notification_settings table.
+    // Fall back to WEEKLY_REPORT_TO env var for legacy deployments.
+    let recipients: string[] = [];
+    try {
+      const { data } = await supabaseAdmin
+        .from("notification_settings")
+        .select("weekly_report_emails")
+        .eq("id", 1)
+        .maybeSingle();
+      const dbList = (data as { weekly_report_emails?: string[] | null } | null)?.weekly_report_emails;
+      if (Array.isArray(dbList)) recipients = dbList.filter((e) => typeof e === "string" && e.trim());
+    } catch {
+      // Soft-fail to env var.
+    }
+    if (recipients.length === 0) {
+      recipients = parseRecipients(process.env.WEEKLY_REPORT_TO || "");
+    }
+
     const emailsEnabled = !!resendKey && recipients.length > 0;
     const resend = emailsEnabled ? new Resend(resendKey) : null;
     const to = recipients;
