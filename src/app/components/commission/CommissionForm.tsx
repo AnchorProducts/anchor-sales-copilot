@@ -107,7 +107,6 @@ export default function CommissionForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [submittedByExpanded, setSubmittedByExpanded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -225,39 +224,37 @@ export default function CommissionForm() {
 
   return (
     <form onSubmit={submit}>
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
-        <div className="text-sm font-semibold text-black">{t("commissionClaimFormTitle")}</div>
-        <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+      <Card className="border-t-4 border-t-[var(--anchor-green)] p-5 sm:p-6">
+        <div className="text-sm text-[var(--anchor-gray)]">
           {t("commissionFormDesc")}{" "}
-          <span className="font-semibold text-black">{t("lateRequestsNote")}</span>
+          <span className="font-semibold text-[var(--anchor-deep)]">{t("lateRequestsNote")}</span>
         </div>
 
         {profile && (
-          <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
-            <button
-              type="button"
-              onClick={() => setSubmittedByExpanded((v) => !v)}
-              aria-expanded={submittedByExpanded}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            >
-              <span className="text-sm font-semibold text-black">{t("submittedBy")}</span>
-              <span className="shrink-0 text-[11px] text-black/40">{submittedByExpanded ? "▴" : "▾"}</span>
-            </button>
-            {submittedByExpanded && (
-              <div className="px-4 pb-4">
-                <div className="grid gap-1 text-sm text-[var(--anchor-gray)]">
-                  {profile.full_name && <div><span className="font-medium text-black">{profile.full_name}</span></div>}
-                  {profile.company && <div>{profile.company}</div>}
-                  {profile.phone && <div>{profile.phone}</div>}
-                  {profile.email && <div>{profile.email}</div>}
-                </div>
-                <div className="mt-2 text-[11px] text-black/40">{t("yourContactInfo")}</div>
+          <div className="mt-5 rounded-2xl border border-[var(--anchor-deep)]/15 bg-[var(--anchor-mint)]/30 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-deep)]">
+                {t("submittedBy")}
+              </div>
+              <div className="text-[10px] text-[var(--anchor-deep)]/60">
+                Pulled from your profile
+              </div>
+            </div>
+            <div className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+              <ProfileField label="Name" value={profile.full_name} />
+              <ProfileField label="Company" value={profile.company} />
+              <ProfileField label="Phone" value={profile.phone} />
+              <ProfileField label="Email" value={profile.email} mono />
+            </div>
+            {(!profile.full_name || !profile.company || !profile.phone || !profile.email) && (
+              <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                Some contact info is missing. Update it on your profile so the recipient knows how to reach you.
               </div>
             )}
           </div>
         )}
 
-        <div className="mt-5 grid gap-5">
+        <div className="mt-6 grid gap-5 sm:gap-6">
           <label className="flex items-start gap-3 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 cursor-pointer">
             <input type="checkbox" checked={form.certified} onChange={(e) => update("certified", e.target.checked)} className="mt-0.5 shrink-0" />
             <span className="text-sm">{t("certifyText")}</span>
@@ -404,12 +401,33 @@ export default function CommissionForm() {
         {error && <Alert className="mt-4" tone="error">{error}</Alert>}
         {success && <Alert className="mt-4" tone="success">{t("commissionSubmitted")}</Alert>}
 
-        <div className="mt-5 flex gap-2">
+        <div className="mt-6 flex gap-2">
           <Button type="submit" disabled={submitting} className="px-4 py-2 text-[12px]" variant="primary">
             {submitting ? t("submitting") : t("submitCommissionClaim")}
           </Button>
         </div>
       </Card>
     </form>
+  );
+}
+
+function ProfileField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string | null;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]/60">
+        {label}
+      </div>
+      <div className={`mt-0.5 truncate ${mono ? "font-mono text-xs" : "text-sm"} ${value ? "text-[var(--anchor-deep)]" : "text-black/35"}`} title={value || undefined}>
+        {value || "Not set"}
+      </div>
+    </div>
   );
 }
