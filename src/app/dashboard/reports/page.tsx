@@ -7,9 +7,43 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
 import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
+import { generateCategorySummaryPdf } from "@/lib/analytics/categoryActivityPdf";
 import { prettyPagePath } from "@/lib/analytics/pagePath";
 
 export const dynamic = "force-dynamic";
+
+export type ActivityCategory = "internal" | "external" | "manufacturer";
+
+const CATEGORY_META: Record<ActivityCategory, {
+  title: string;
+  subtitle: string;
+  description: string;
+  emptyKey: "noExternalUsers" | "noInternalUsers" | "noManufacturerUsers";
+}> = {
+  external: {
+    title: "External Reps Activity",
+    subtitle: "External user activity",
+    description: "What every external rep is doing, across sessions, leads, and assessments.",
+    emptyKey: "noExternalUsers",
+  },
+  internal: {
+    title: "Internal Users Activity",
+    subtitle: "Internal user activity",
+    description: "What every Anchor employee (anchor_rep + admin) is doing across the app.",
+    emptyKey: "noInternalUsers",
+  },
+  manufacturer: {
+    title: "Manufacturer Users Activity",
+    subtitle: "Manufacturer user activity",
+    description: "Activity for manufacturer contacts who have signed up for the app.",
+    emptyKey: "noManufacturerUsers",
+  },
+};
+
+export function parseCategory(value: string | null): ActivityCategory {
+  if (value === "internal" || value === "manufacturer") return value;
+  return "external";
+}
 
 type ExternalUser = {
   id: string;
@@ -18,6 +52,7 @@ type ExternalUser = {
   company: string | null;
   phone: string | null;
   created_at: string | null;
+  manufacturer?: string | null;
 };
 
 type AssessmentReport = {
@@ -141,9 +176,11 @@ function avatarColor(seed: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-export default function ReportsPage() {
+export function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
+
+  const meta = CATEGORY_META[category];
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +199,7 @@ export default function ReportsPage() {
         if (!alive) return;
         if (!userData.user) { router.replace("/"); return; }
 
-        const res = await fetch("/api/admin/user-activity", {
+        const res = await fetch(`/api/admin/user-activity?category=${category}`, {
           credentials: "include",
           cache: "no-store",
         });
@@ -190,7 +227,7 @@ export default function ReportsPage() {
     })();
 
     return () => { alive = false; };
-  }, [supabase, router]);
+  }, [supabase, router, category]);
 
   const totalReports = users.reduce((s, u) => s + u.reports.length, 0);
   const totalConvs   = users.reduce((s, u) => s + u.conversationCount, 0);
@@ -247,20 +284,50 @@ export default function ReportsPage() {
   const { t } = useTranslation();
 
   return (
-    <main className="ds-page">
-      <AppNavbar
-        title={t("anchorSalesCoPilot")}
-        subtitle="User activity"
-        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
-      />
-
-      <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">
-        {/* Page heading */}
-        <header className="mb-6 sm:mb-8">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">User activity</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-            What every external rep is doing, across sessions, leads, and assessments.
-          </p>
+    <>
+      {/* Page heading */}
+      <header className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{meta.title}</h1>
+            <p className="mt-1 text-sm text-[var(--anchor-gray)]">
+              {meta.description}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-track-id="category-summary-pdf"
+            disabled={loading || users.length === 0}
+            onClick={() =>
+              generateCategorySummaryPdf({
+                category,
+                users: users.map((u) => ({
+                  full_name: u.full_name,
+                  email: u.email,
+                  company: u.company,
+                  manufacturer: u.manufacturer ?? null,
+                  conversationCount: u.conversationCount,
+                  leadCount: u.leadCount,
+                  reports: u.reports,
+                  events: {
+                    total7: u.events.total7,
+                    total30: u.events.total30,
+                    lastSeen: u.events.lastSeen,
+                    byType: u.events.byType,
+                    topPages: u.events.topPages,
+                  },
+                })),
+                charts,
+              })
+            }
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download summary PDF
+          </button>
         </header>
 
         {loading && <StatsSkeleton />}
@@ -368,7 +435,13 @@ export default function ReportsPage() {
 
               {filteredUsers.length === 0 && (
                 <div className="px-6 py-14 text-center text-sm text-[var(--anchor-gray)]">
-                  {search ? "No users match this search." : t("noExternalUsers")}
+                  {search
+                    ? "No users match this search."
+                    : category === "external"
+                    ? t("noExternalUsers")
+                    : category === "internal"
+                    ? "No internal users found."
+                    : "No manufacturer users have signed up yet."}
                 </div>
               )}
 
@@ -391,11 +464,15 @@ export default function ReportsPage() {
                             <span className="truncate text-sm font-semibold text-[var(--anchor-deep)] sm:text-base">
                               {u.full_name || u.email}
                             </span>
-                            {u.company && (
+                            {u.manufacturer ? (
+                              <span className="truncate text-xs text-[var(--anchor-gray)]">
+                                · {u.manufacturer}
+                              </span>
+                            ) : u.company ? (
                               <span className="truncate text-xs text-[var(--anchor-gray)]">
                                 · {u.company}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <div className="truncate text-xs text-[var(--anchor-gray)]">
                             {u.email}
@@ -618,6 +695,36 @@ export default function ReportsPage() {
             </Card>
           </>
         )}
+    </>
+  );
+}
+
+export default function ReportsPage() {
+  // Thin URL-driven wrapper around <CategoryAnalyticsView/> so the legacy
+  // /dashboard/reports?category=… URLs keep working. The unified /admin/analytics
+  // page imports CategoryAnalyticsView directly and switches the prop via tabs.
+  const [category, setCategory] = useState<ActivityCategory>("external");
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setCategory(parseCategory(new URLSearchParams(window.location.search).get("category")));
+  }, []);
+
+  const meta = CATEGORY_META[category];
+
+  return (
+    <main className="ds-page">
+      <AppNavbar
+        title={t("anchorSalesCoPilot")}
+        subtitle={meta.subtitle}
+        menuItems={[
+          { label: t("dashboard"), href: "/dashboard" },
+          { label: "Analytics", href: "/admin/analytics" },
+        ]}
+      />
+      <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">
+        <CategoryAnalyticsView category={category} />
       </div>
     </main>
   );
