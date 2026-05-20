@@ -30,35 +30,40 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Returns:
+  //   feature   — the user's MOST RECENT opened feature (drives the hero)
+  //   lastSeen  — when that recent event happened
+  //   counts    — per-feature page_view counts over the last 30 days
+  //               (drives bento tile sizing — heavier-used apps get wider tiles)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
     .from("user_events")
-    .select("page_path")
+    .select("page_path, created_at")
     .eq("user_id", auth.user.id)
     .eq("event_type", "page_view")
-    .gte("created_at", sevenDaysAgo)
-    .limit(1000);
+    .gte("created_at", thirtyDaysAgo)
+    .order("created_at", { ascending: false })
+    .limit(2000);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const counts = new Map<string, number>();
-  for (const row of data ?? []) {
-    const key = pathToFeature((row as { page_path: string | null }).page_path);
-    if (!key) continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
+  const counts: Record<string, number> = {};
   let topKey: string | null = null;
-  let topCount = 0;
-  for (const [key, count] of counts) {
-    if (count > topCount) {
+  let lastSeen: string | null = null;
+  for (const row of data ?? []) {
+    const r = row as { page_path: string | null; created_at: string };
+    const key = pathToFeature(r.page_path);
+    if (!key) continue;
+    counts[key] = (counts[key] ?? 0) + 1;
+    // First row in our DESC-by-created_at sort is the most recent feature event.
+    if (topKey === null) {
       topKey = key;
-      topCount = count;
+      lastSeen = r.created_at;
     }
   }
 
-  return NextResponse.json({ feature: topKey, count: topCount });
+  return NextResponse.json({ feature: topKey, lastSeen, counts });
 }
