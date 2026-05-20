@@ -7,6 +7,10 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { prettyPagePath } from "@/lib/analytics/pagePath";
+import {
+  generateUserActivityPdf,
+  type UserPdfPayload,
+} from "@/lib/analytics/userActivityPdf";
 
 export const dynamic = "force-dynamic";
 
@@ -69,14 +73,7 @@ function displayName(c: Contact): string {
   );
 }
 
-export default function AdminManufacturerContactsPage() {
-  const router = useRouter();
-  const supabase = useMemo(() => supabaseBrowser(), []);
-  const { t } = useTranslation();
-
-  const [ready, setReady] = useState(false);
-  const [accessError, setAccessError] = useState<string | null>(null);
-
+export function OemDirectory() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -86,30 +83,68 @@ export default function AdminManufacturerContactsPage() {
   const [manufacturerFilter, setManufacturerFilter] = useState<string>("all");
   const [signupFilter, setSignupFilter] = useState<"all" | "signed_up" | "not_signed_up">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // Admin gate.
+  // Cache of full per-user activity payloads (keyed by profile_id), fetched
+  // on demand the first time anyone clicks "Download PDF" on this page.
+  type FullActivityUser = UserPdfPayload & { id: string };
+  const [fullActivityById, setFullActivityById] = useState<Map<string, FullActivityUser> | null>(null);
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  const toggleGroup = (manufacturer: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(manufacturer)) next.delete(manufacturer);
+      else next.add(manufacturer);
+      return next;
+    });
+  };
+
+  async function downloadContactPdf(c: Contact) {
+    if (!c.profile_id) return;
+    setPdfBusyId(c.profile_id);
+    setPdfError(null);
+    try {
+      let cache = fullActivityById;
+      if (!cache) {
+        const res = await fetch("/api/admin/user-activity?category=manufacturer", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error || "Failed to load activity.");
+        const map = new Map<string, FullActivityUser>();
+        for (const u of (body?.users ?? []) as Array<FullActivityUser>) {
+          map.set(u.id, u);
+        }
+        cache = map;
+        setFullActivityById(map);
+      }
+      const u = cache.get(c.profile_id);
+      if (!u) {
+        setPdfError("No activity record found for this user.");
+        return;
+      }
+      generateUserActivityPdf({
+        full_name: u.full_name ?? displayName(c),
+        email: u.email,
+        company: u.company,
+        phone: u.phone,
+        created_at: u.created_at,
+        conversationCount: u.conversationCount,
+        leadCount: u.leadCount,
+        reportCount: (u as unknown as { reports?: unknown[] }).reports?.length ?? 0,
+        events: u.events,
+      });
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : "Failed to generate PDF.");
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
+
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!alive) return;
-      if (!data.user) { router.replace("/"); return; }
-
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .maybeSingle();
-      if (!alive) return;
-      const role = String((prof as { role?: string } | null)?.role || "");
-      if (role !== "admin") setAccessError("Admin access only.");
-      setReady(true);
-    })();
-    return () => { alive = false; };
-  }, [router, supabase]);
-
-  useEffect(() => {
-    if (!ready || accessError) return;
     let alive = true;
     (async () => {
       setLoading(true);
@@ -127,7 +162,7 @@ export default function AdminManufacturerContactsPage() {
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, [ready, accessError]);
+  }, []);
 
   const manufacturers = useMemo(() => {
     const set = new Set<string>();
@@ -172,26 +207,8 @@ export default function AdminManufacturerContactsPage() {
   }, [filtered]);
 
   return (
-    <main className="ds-page">
-      <AppNavbar
-        title="Manufacturer Contacts"
-        subtitle="Who's using the app, by manufacturer"
-        menuItems={[
-          { label: t("dashboard"), href: "/dashboard" },
-          { label: "Admin Console", href: "/admin" },
-        ]}
-      />
-
-      <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">
-        {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
-        ) : accessError ? (
-          <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)] p-5 text-sm text-[var(--anchor-deep)]">
-            {accessError}
-          </Card>
-        ) : (
-          <>
-            {/* Headline counters */}
+    <>
+      {/* Headline counters */}
             {counts && (
               <section className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                 <Counter label="Manufacturers" value={counts.manufacturers} />
@@ -294,9 +311,19 @@ export default function AdminManufacturerContactsPage() {
               <Card className="p-5 text-sm text-[var(--anchor-gray)]">No contacts match.</Card>
             ) : (
               <div className="space-y-5">
-                {grouped.map(([manufacturer, list]) => (
+                {grouped.map(([manufacturer, list]) => {
+                  const collapsed = collapsedGroups.has(manufacturer);
+                  return (
                   <Card key={manufacturer} className="overflow-hidden p-0">
-                    <div className="flex items-center justify-between gap-3 border-b border-[var(--border-default)] px-4 py-3 sm:px-6">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(manufacturer)}
+                      aria-expanded={!collapsed}
+                      className={
+                        "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-soft)] sm:px-6 " +
+                        (collapsed ? "" : "border-b border-[var(--border-default)]")
+                      }
+                    >
                       <div>
                         <div className="text-base font-bold tracking-tight text-[var(--anchor-deep)]">
                           {manufacturer}
@@ -305,8 +332,16 @@ export default function AdminManufacturerContactsPage() {
                           {list.length} contact{list.length === 1 ? "" : "s"} · {list.filter((c) => c.signed_up).length} signed up
                         </div>
                       </div>
-                    </div>
+                      <svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                        className={`h-5 w-5 shrink-0 text-[var(--anchor-gray)] transition-transform ${collapsed ? "" : "rotate-180"}`}
+                        aria-hidden
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
 
+                    {!collapsed && (
                     <ul className="divide-y divide-[var(--border-default)]">
                       {list.map((c) => {
                         const open = expanded === c.id;
@@ -361,6 +396,29 @@ export default function AdminManufacturerContactsPage() {
 
                             {open && (
                               <div className="border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-4 sm:px-6 sm:py-5">
+                                {c.signed_up && c.profile_id && (
+                                  <div className="mb-3 flex items-center justify-end">
+                                    <button
+                                      type="button"
+                                      data-track-id="manufacturer-contact-pdf"
+                                      disabled={pdfBusyId === c.profile_id}
+                                      onClick={() => downloadContactPdf(c)}
+                                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="7 10 12 15 17 10" />
+                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                      </svg>
+                                      {pdfBusyId === c.profile_id ? "Generating…" : "Download PDF"}
+                                    </button>
+                                  </div>
+                                )}
+                                {pdfError && expanded === c.id && (
+                                  <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                    {pdfError}
+                                  </div>
+                                )}
                                 <div className="grid gap-3 sm:grid-cols-2">
                                   <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 text-sm">
                                     <div className="ds-caption mb-2">Contact</div>
@@ -416,11 +474,65 @@ export default function AdminManufacturerContactsPage() {
                         );
                       })}
                     </ul>
+                    )}
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
-          </>
+    </>
+  );
+}
+
+export default function AdminManufacturerContactsPage() {
+  // Legacy /admin/manufacturer-contacts URL — kept working with its own admin
+  // gate. The unified /admin/analytics page renders <OemDirectory/> directly
+  // and owns its own gate.
+  const router = useRouter();
+  const supabase = useMemo(() => supabaseBrowser(), []);
+  const { t } = useTranslation();
+
+  const [ready, setReady] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!alive) return;
+      if (!data.user) { router.replace("/"); return; }
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (!alive) return;
+      const role = String((prof as { role?: string } | null)?.role || "");
+      if (role !== "admin") setAccessError("Admin access only.");
+      setReady(true);
+    })();
+    return () => { alive = false; };
+  }, [router, supabase]);
+
+  return (
+    <main className="ds-page">
+      <AppNavbar
+        title="Manufacturer Contacts"
+        subtitle="Who's using the app, by manufacturer"
+        menuItems={[
+          { label: t("dashboard"), href: "/dashboard" },
+          { label: "Analytics", href: "/admin/analytics" },
+        ]}
+      />
+      <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">
+        {!ready ? (
+          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+        ) : accessError ? (
+          <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)] p-5 text-sm text-[var(--anchor-deep)]">
+            {accessError}
+          </Card>
+        ) : (
+          <OemDirectory />
         )}
       </div>
     </main>
