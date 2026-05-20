@@ -38,12 +38,16 @@ export default function CommissionClaimPage() {
         menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
-      <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
-          <div className="ds-caption">{t("independentRepresentative")}</div>
-          <h1 className="mt-2 text-2xl">{t("commissionClaimFormTitle")}</h1>
+      <div className="mx-auto max-w-3xl px-4 py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-10">
+        <header className="mb-5 sm:mb-6">
+          <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-gray)]">
+            {t("independentRepresentative")}
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--anchor-deep)] sm:text-3xl">
+            {t("commissionClaimFormTitle")}
+          </h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("completeAndSubmit")}</p>
-        </Card>
+        </header>
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : (
