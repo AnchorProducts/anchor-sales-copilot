@@ -124,3 +124,30 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: Request) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+  const url = new URL(req.url);
+  const id = clean(url.searchParams.get("id"));
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  // Block self-delete — an admin removing themselves mid-session would lock
+  // the console and orphan resources.
+  if (id === gate.user.id) {
+    return NextResponse.json(
+      { error: "You can't delete your own account. Ask another admin." },
+      { status: 400 }
+    );
+  }
+
+  // Deleting via the auth admin removes the auth.users row; profiles cascades
+  // via its FK to auth.users (id REFERENCES auth.users ON DELETE CASCADE).
+  const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+  if (authErr) {
+    return NextResponse.json({ error: `Delete failed: ${authErr.message}` }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

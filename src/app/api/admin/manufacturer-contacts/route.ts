@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -165,4 +165,61 @@ export async function GET() {
       manufacturers: Array.from(new Set(contacts.map((c) => c.manufacturer))).length,
     },
   });
+}
+
+// Editable fields on a manufacturer contact. Restricting on the server keeps
+// callers from setting `id` / `created_at` / `raw` directly.
+const EDITABLE_FIELDS = [
+  "manufacturer",
+  "first_name",
+  "last_name",
+  "full_name",
+  "email",
+  "phone",
+  "cell",
+  "title",
+  "territory",
+  "region",
+] as const;
+
+type EditableField = (typeof EDITABLE_FIELDS)[number];
+
+function pickEditableFields(body: Record<string, unknown>): Partial<Record<EditableField, string | null>> {
+  const out: Partial<Record<EditableField, string | null>> = {};
+  for (const k of EDITABLE_FIELDS) {
+    if (k in body) {
+      const v = body[k];
+      out[k] = typeof v === "string" ? v.trim() || null : null;
+    }
+  }
+  return out;
+}
+
+export async function POST(req: NextRequest) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
+  const fields = pickEditableFields(body);
+  const manufacturer = fields.manufacturer;
+  if (!manufacturer) {
+    return NextResponse.json({ error: "Manufacturer is required." }, { status: 400 });
+  }
+
+  // Derive full_name when not provided, from first + last.
+  if (!fields.full_name) {
+    const composed = [fields.first_name, fields.last_name].filter(Boolean).join(" ").trim();
+    if (composed) fields.full_name = composed;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("manufacturer_contacts")
+    .insert(fields)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ contact: data });
 }
