@@ -179,7 +179,17 @@ export async function POST(req: Request) {
 
     if (insertErr) {
       console.error("commission insert error", insertErr);
-      return NextResponse.json({ error: "Failed to save claim." }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Failed to save claim.",
+          // Surface the underlying Postgres message so the admin can diagnose
+          // missing-column / RLS issues without digging into server logs.
+          details: insertErr.message,
+          code: insertErr.code,
+          hint: insertErr.hint,
+        },
+        { status: 500 }
+      );
     }
 
     try {
