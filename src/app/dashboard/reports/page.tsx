@@ -12,7 +12,7 @@ import { prettyPagePath } from "@/lib/analytics/pagePath";
 
 export const dynamic = "force-dynamic";
 
-export type ActivityCategory = "internal" | "external" | "manufacturer";
+type ActivityCategory = "internal" | "external" | "manufacturer";
 
 const CATEGORY_META: Record<ActivityCategory, {
   title: string;
@@ -40,7 +40,7 @@ const CATEGORY_META: Record<ActivityCategory, {
   },
 };
 
-export function parseCategory(value: string | null): ActivityCategory {
+function parseCategory(value: string | null): ActivityCategory {
   if (value === "internal" || value === "manufacturer") return value;
   return "external";
 }
@@ -176,7 +176,7 @@ function avatarColor(seed: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-export function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
+function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
 

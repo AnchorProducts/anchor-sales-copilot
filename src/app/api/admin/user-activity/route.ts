@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export type ActivityCategory = "all" | "internal" | "external" | "manufacturer";
+type ActivityCategory = "all" | "internal" | "external" | "manufacturer";
 
 function parseCategory(value: string | null): ActivityCategory {
   if (value === "all" || value === "internal" || value === "manufacturer") return value;
