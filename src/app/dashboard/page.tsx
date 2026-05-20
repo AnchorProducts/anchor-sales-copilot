@@ -101,21 +101,36 @@ function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroVisualKey; siz
 
   switch (feature) {
     case "chat":
+      // Animated chat bubble with three "typing" dots — instantly reads as
+      // an AI/copilot conversation interface.
       return (
         <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          <g fill={mint}>
-            <g className="hero-sparkle" style={{ animationDelay: "0s" }} transform="translate(48 22)">
-              <path d="M0 -14 L3 -3 L14 0 L3 3 L0 14 L-3 3 L-14 0 L-3 -3 Z" />
-            </g>
-            <g className="hero-sparkle" style={{ animationDelay: "0.9s" }} transform="translate(20 58)">
-              <path d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" />
-            </g>
-            <g className="hero-sparkle" style={{ animationDelay: "1.6s" }} transform="translate(76 70)">
-              <path d="M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z" />
-            </g>
-            <g className="hero-sparkle" style={{ animationDelay: "2.2s" }} transform="translate(70 36)">
-              <path d="M0 -6 L1.5 -1.5 L6 0 L1.5 1.5 L0 6 L-1.5 1.5 L-6 0 L-1.5 -1.5 Z" />
-            </g>
+          {/* Chat bubble body */}
+          <path
+            d="M22 30 H78 A6 6 0 0 1 84 36 V60 A6 6 0 0 1 78 66 H46 L34 76 V66 H22 A6 6 0 0 1 16 60 V36 A6 6 0 0 1 22 30 Z"
+            fill="rgba(156,226,187,0.22)"
+            stroke={mint}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+
+          {/* Typing dots — pulse opacity + radius at staggered intervals */}
+          <circle cx="36" cy="48" r="3.5" fill={mint}>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" repeatCount="indefinite" />
+            <animate attributeName="r" values="3;4;3" dur="1.4s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="50" cy="48" r="3.5" fill={mint}>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" begin="0.2s" repeatCount="indefinite" />
+            <animate attributeName="r" values="3;4;3" dur="1.4s" begin="0.2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="64" cy="48" r="3.5" fill={mint}>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" begin="0.4s" repeatCount="indefinite" />
+            <animate attributeName="r" values="3;4;3" dur="1.4s" begin="0.4s" repeatCount="indefinite" />
+          </circle>
+
+          {/* Small sparkle in the corner — hints at "AI magic" */}
+          <g className="hero-sparkle" transform="translate(78 20)">
+            <path d="M0 -6 L1.5 -1.5 L6 0 L1.5 1.5 L0 6 L-1.5 1.5 L-6 0 L-1.5 -1.5 Z" fill={mint} />
           </g>
         </svg>
       );
