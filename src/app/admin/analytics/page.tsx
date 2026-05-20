@@ -11,7 +11,7 @@ import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
 import { OemScorecard } from "@/app/components/admin/OemScorecard";
 import { DormantUsersPanel } from "@/app/components/admin/DormantUsersPanel";
 import { OemHeadToHead } from "@/app/components/admin/OemHeadToHead";
-import { OemDirectory } from "@/app/admin/manufacturer-contacts/page";
+import { OemDirectory } from "@/app/components/admin/OemDirectory";
 import {
   generateAllOemsReportPdf,
   generateSingleOemReportPdf,
