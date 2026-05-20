@@ -242,9 +242,9 @@ export default function AdminHubPage() {
             {error}
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {CARDS.map((card) => (
-              <BentoTile key={card.title} card={card} />
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-4 lg:[grid-auto-flow:dense]">
+            {CARDS.map((card, i) => (
+              <BentoTile key={card.title} card={card} index={i} />
             ))}
           </div>
         )}
@@ -253,9 +253,17 @@ export default function AdminHubPage() {
   );
 }
 
-function BentoTile({ card }: { card: AdminCard }) {
+function BentoTile({ card, index }: { card: AdminCard; index: number }) {
   const isLink = !card.comingSoon && !!card.href;
-  const span = card.featured ? "md:col-span-2" : "";
+  // Featured tile spans 2 cols. The remaining tiles follow a varied pattern
+  // [1, 2, 1, 1, 2, 1, …] so the gallery doesn't read as a uniform grid.
+  let span = "";
+  if (card.featured) {
+    span = "md:col-span-2 lg:col-span-2";
+  } else {
+    const pattern = ["lg:col-span-2", "lg:col-span-1", "lg:col-span-1", "lg:col-span-2", "lg:col-span-1"];
+    span = pattern[index % pattern.length];
+  }
   const inner = card.featured ? <FeaturedTileInner card={card} /> : <RegularTileInner card={card} />;
 
   const wrap = `group ${span} ${isLink ? "transition-transform duration-200 hover:-translate-y-0.5" : "cursor-default opacity-80"}`;
@@ -272,7 +280,7 @@ function BentoTile({ card }: { card: AdminCard }) {
 
 function FeaturedTileInner({ card }: { card: AdminCard }) {
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-[var(--anchor-deep)] to-[#1d6b4a] p-6 text-white shadow-md transition-shadow duration-200 group-hover:shadow-xl sm:p-8">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-[var(--anchor-deep)] to-[#1d6b4a] p-6 text-white shadow-md transition-all duration-200 group-hover:brightness-110 group-hover:shadow-xl sm:p-8">
       {/* Subtle decorative icon */}
       <TileIcon
         name={card.icon}
@@ -305,7 +313,7 @@ function FeaturedTileInner({ card }: { card: AdminCard }) {
 
 function RegularTileInner({ card }: { card: AdminCard }) {
   return (
-    <Card className="flex h-full flex-col p-5 transition-shadow duration-200 group-hover:shadow-md sm:p-6">
+    <Card className="flex h-full flex-col p-5 transition-all duration-200 group-hover:border-[var(--anchor-green)] group-hover:bg-[var(--anchor-mint)]/30 group-hover:shadow-md sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <span className="inline-flex items-center justify-center rounded-xl bg-[var(--anchor-mint)]/40 p-2.5 text-[var(--anchor-deep)]">
           <TileIcon name={card.icon} className="h-5 w-5" />
