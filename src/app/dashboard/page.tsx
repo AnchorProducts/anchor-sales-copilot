@@ -70,7 +70,10 @@ function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName
 }
 
 /* ─── Hero feature catalog ──────────────────────────────────────────────── */
+// Data-driven features (returned by the most-recent endpoint).
 type HeroFeatureKey = "chat" | "assets" | "consults" | "commission" | "notable";
+// Visual-only key — includes "admin" for the admin-pulse fallback animation.
+type HeroVisualKey = HeroFeatureKey | "admin";
 
 type HeroSpec = { title: string; linkLabel: string; href: string };
 
@@ -92,7 +95,7 @@ function heroSpecFor(feature: HeroFeatureKey, role: string | null): HeroSpec {
 }
 
 /* ─── Per-feature animated visual ───────────────────────────────────────── */
-function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroFeatureKey; size?: number }) {
+function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroVisualKey; size?: number }) {
   const wrap: React.CSSProperties = { width: size, height: size };
   const mint = "var(--anchor-mint)";
 
@@ -197,6 +200,38 @@ function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroFeatureKey; si
           </g>
         </svg>
       );
+
+    case "admin":
+      // Animated bar chart — bars rise and fall at staggered rates to evoke
+      // a live activity dashboard.
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          {/* baseline */}
+          <line x1="14" y1="84" x2="86" y2="84" stroke={mint} strokeWidth="1.8" opacity="0.5" />
+          {/* bars */}
+          <rect x="20" y="50" width="12" height="34" rx="2" fill={mint} opacity="0.85">
+            <animate attributeName="height" values="34;52;28;46;34" dur="2.6s" repeatCount="indefinite" />
+            <animate attributeName="y" values="50;32;56;38;50" dur="2.6s" repeatCount="indefinite" />
+          </rect>
+          <rect x="36" y="34" width="12" height="50" rx="2" fill={mint}>
+            <animate attributeName="height" values="50;30;58;42;50" dur="2.2s" begin="0.2s" repeatCount="indefinite" />
+            <animate attributeName="y" values="34;54;26;42;34" dur="2.2s" begin="0.2s" repeatCount="indefinite" />
+          </rect>
+          <rect x="52" y="42" width="12" height="42" rx="2" fill={mint} opacity="0.9">
+            <animate attributeName="height" values="42;58;30;50;42" dur="2.8s" begin="0.5s" repeatCount="indefinite" />
+            <animate attributeName="y" values="42;26;54;34;42" dur="2.8s" begin="0.5s" repeatCount="indefinite" />
+          </rect>
+          <rect x="68" y="56" width="12" height="28" rx="2" fill={mint} opacity="0.75">
+            <animate attributeName="height" values="28;46;36;52;28" dur="2.4s" begin="0.8s" repeatCount="indefinite" />
+            <animate attributeName="y" values="56;38;48;32;56" dur="2.4s" begin="0.8s" repeatCount="indefinite" />
+          </rect>
+          {/* pulsing dot — current value indicator above bars */}
+          <circle cx="42" cy="20" r="3" fill={mint}>
+            <animate attributeName="r" values="3;5;3" dur="1.6s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
+          </circle>
+        </svg>
+      );
   }
 }
 
@@ -224,6 +259,7 @@ export default function DashboardPage() {
   const searchBoxRefDesktop = useRef<HTMLDivElement | null>(null);
 
   const [topFeature, setTopFeature] = useState<HeroFeatureKey | null>(null);
+  const [featureCounts, setFeatureCounts] = useState<Record<string, number>>({});
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
@@ -344,6 +380,9 @@ export default function DashboardPage() {
         if (f === "chat" || f === "assets" || f === "consults" || f === "commission" || f === "notable") {
           setTopFeature(f);
         }
+        if (json?.counts && typeof json.counts === "object") {
+          setFeatureCounts(json.counts as Record<string, number>);
+        }
       } catch {
         // analytics is best-effort; never block the hero
       }
@@ -390,7 +429,8 @@ export default function DashboardPage() {
 
   // What animated visual to show. Falls back to sparkles (Copilot) so the
   // card never renders without art.
-  const visualFeature: HeroFeatureKey = resolvedFeature ?? "chat";
+  const visualFeature: HeroVisualKey =
+    resolvedFeature ?? (isAdmin ? "admin" : "chat");
   // Re-keyed so the title fades in when the feature resolves.
   const heroAnimKey = resolvedFeature ?? "default";
 
@@ -588,65 +628,73 @@ export default function DashboardPage() {
         {/* ── Mobile / tablet layout: hero, then Quick Actions, then circles ── */}
         <div className="mt-4 space-y-4">
 
-        {/* ── Hero card ──────────────────────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+        {/* ── Hero button — whole block is the link, no inner CTA ────────── */}
+        <Link
+          href={heroLink}
+          data-track-id="dashboard-hero-tap"
+          aria-label={heroTitle}
+          className="group relative flex min-h-[124px] items-center overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md"
+        >
           <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[var(--anchor-green)] opacity-20" />
-          <div className="pointer-events-none absolute right-3 top-6 z-0 opacity-95">
-            <HeroFeatureVisual feature={visualFeature} size={92} />
-          </div>
-          <button aria-label="More" className="absolute right-4 top-4 z-10 text-white/70 transition hover:text-white">
-            <Icon name="more" className="h-[18px] w-[18px]" />
-          </button>
 
-          <div className="relative">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
-              <span className="text-[11px] font-semibold tracking-wide">Update</span>
+          <div className="relative flex w-full items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] text-white/70">{todayLabel}</div>
+              <div
+                key={`m-${heroAnimKey}`}
+                className="hero-title-anim mt-2 text-[19px] font-bold leading-snug tracking-tight sm:text-[20px]"
+              >
+                {heroTitle}
+              </div>
             </div>
-            <div className="mt-2 text-[11px] text-white/70">{todayLabel}</div>
-            <div
-              key={`m-${heroAnimKey}`}
-              className="hero-title-anim mt-2 max-w-[70%] text-[19px] font-bold leading-snug tracking-tight sm:text-[20px]"
-            >
-              {heroTitle}
-            </div>
-            <Link href={heroLink} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-white/80 transition hover:text-white">
-              {heroLinkLabel}
-              <Icon name="right" className="h-3 w-3" />
-            </Link>
+            <HeroFeatureVisual feature={visualFeature} size={64} />
           </div>
-        </div>
+        </Link>
 
-        {/* ── Quick actions list ─────────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-3xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <div className="flex items-center justify-between pb-1">
-            <h2 className="text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
-          </div>
+        {/* ── Quick actions bento — tile width scales with how much you use each app ── */}
+        <div>
+          <h2 className="px-1 text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 [grid-auto-flow:dense]">
+            {(() => {
+              const featureKeyFor = (key: string) => (key === "project" ? "consults" : key);
+              const ranked = [...actions]
+                .map((x) => ({ key: x.key, count: featureCounts[featureKeyFor(x.key)] ?? 0 }))
+                .sort((x, y) => y.count - x.count);
+              const hasAnyData = ranked.some((r) => r.count > 0);
+              // On mobile (2-col grid) only the single most-used action goes full
+              // width — going more than one wide-row eats the whole screen.
+              const topKeys = new Set(
+                hasAnyData
+                  ? ranked.slice(0, 1).filter((r) => r.count > 0).map((r) => r.key)
+                  : actions.slice(0, 1).map((a) => a.key)
+              );
 
-          <div className="mt-1 divide-y divide-[var(--surface-soft)]">
-            {actions.map((a) => {
-              const Row = (
-                <div className="flex items-center gap-3 py-3.5">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+              return actions.map((a) => {
+                const isTopUsed = topKeys.has(a.key);
+                const span = isTopUsed ? "col-span-2" : "col-span-1";
+                const Wrap = (props: { children: React.ReactNode; className: string }) =>
+                  a.external ? (
+                    <a href={a.href} target="_blank" rel="noopener noreferrer" className={props.className}>{props.children}</a>
+                  ) : (
+                    <Link href={a.href} className={props.className}>{props.children}</Link>
+                  );
+
+                return (
+                <Wrap
+                  key={a.key}
+                  className={`group block rounded-3xl border border-[var(--border-default)] bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--anchor-green)] hover:bg-[var(--anchor-mint)]/30 hover:shadow-md active:translate-y-0 active:shadow-sm ${span}`}
+                >
+                  <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white">
                     <Icon name={a.icon} className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
-                    <div className="truncate text-xs text-[var(--anchor-gray)]">{a.desc}</div>
+                  <div className="mt-3">
+                    <div className="text-sm font-bold leading-tight text-[var(--anchor-deep)]">{a.label}</div>
+                    <div className="mt-1 text-[11px] leading-snug text-[var(--anchor-gray)]">{a.desc}</div>
                   </div>
-                  <Icon name="right" className="h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
-                </div>
-              );
-              return a.external ? (
-                <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="-mx-5 block px-5 transition hover:bg-[var(--surface-soft)]/50">
-                  {Row}
-                </a>
-              ) : (
-                <Link key={a.key} href={a.href} className="-mx-5 block px-5 transition hover:bg-[var(--surface-soft)]/50">
-                  {Row}
-                </Link>
-              );
-            })}
+                </Wrap>
+                );
+              });
+            })()}
           </div>
         </div>
 
@@ -748,54 +796,78 @@ export default function DashboardPage() {
 
           {/* Content */}
           <div className="flex-1 px-8 pb-12">
-            {/* Hero */}
-            <div className="relative overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            {/* Hero button — whole block is the link */}
+            <Link
+              href={heroLink}
+              data-track-id="dashboard-hero-tap"
+              aria-label={heroTitle}
+              className="group relative flex min-h-[168px] items-center overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md"
+            >
               <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-[var(--anchor-green)] opacity-25" />
-              <div className="pointer-events-none absolute right-8 top-8 z-0 opacity-95">
-                <HeroFeatureVisual feature={visualFeature} size={132} />
-              </div>
-              <div className="relative">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--anchor-mint)]" />
-                  <span className="text-[11px] font-semibold tracking-wide">Update</span>
-                </div>
-                <div className="mt-3 text-[12px] text-white/70">{todayLabel}</div>
-                <div
-                  key={`d-${heroAnimKey}`}
-                  className="hero-title-anim mt-3 max-w-[70%] text-[26px] font-bold leading-tight tracking-tight"
-                >
-                  {heroTitle}
-                </div>
-                <Link href={heroLink} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 transition hover:text-white">
-                  {heroLinkLabel}
-                  <Icon name="right" className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
 
-            {/* Quick Actions grid */}
-            <div className="mt-5 rounded-3xl bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-              <h2 className="text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
-              <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
-                {actions.map((a) => {
-                  const Inner = (
-                    <div className="flex h-full items-start gap-4 rounded-2xl border border-[var(--surface-soft)] p-4 transition hover:border-[var(--anchor-mint)] hover:bg-[var(--surface-soft)]/40">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
-                        <Icon name={a.icon} className="h-5 w-5" />
+              <div className="relative flex w-full items-center gap-6">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-white/70">{todayLabel}</div>
+                  <div
+                    key={`d-${heroAnimKey}`}
+                    className="hero-title-anim mt-2 text-[26px] font-bold leading-tight tracking-tight"
+                  >
+                    {heroTitle}
+                  </div>
+                </div>
+                <HeroFeatureVisual feature={visualFeature} size={96} />
+              </div>
+            </Link>
+
+            {/* Quick Actions bento — tile width scales with how much you use each app */}
+            <div className="mt-5">
+              <h2 className="px-1 text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+              {/* Top 2 actions by 30-day usage count get col-span-2; rest 1-wide.
+                  Falls back to first action only when no usage data yet. */}
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:[grid-auto-flow:dense]">
+                {(() => {
+                  const featureKeyFor = (key: string) => (key === "project" ? "consults" : key);
+                  const ranked = [...actions]
+                    .map((x) => ({ key: x.key, count: featureCounts[featureKeyFor(x.key)] ?? 0 }))
+                    .sort((x, y) => y.count - x.count);
+                  const hasAnyData = ranked.some((r) => r.count > 0);
+                  const topKeys = new Set(
+                    hasAnyData
+                      ? ranked.slice(0, 2).filter((r) => r.count > 0).map((r) => r.key)
+                      : actions.slice(0, 1).map((a) => a.key) // fallback: just the first
+                  );
+
+                  return actions.map((a) => {
+                    const isTopUsed = topKeys.has(a.key);
+                    const span = isTopUsed ? "lg:col-span-2" : "lg:col-span-1";
+                  const Wrap = (props: { children: React.ReactNode; className: string }) =>
+                    a.external ? (
+                      <a href={a.href} target="_blank" rel="noopener noreferrer" className={props.className}>{props.children}</a>
+                    ) : (
+                      <Link href={a.href} className={props.className}>{props.children}</Link>
+                    );
+
+                  return (
+                    <Wrap
+                      key={a.key}
+                      className={`group block rounded-3xl border border-[var(--border-default)] bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--anchor-green)] hover:bg-[var(--anchor-mint)]/30 hover:shadow-md active:translate-y-0 active:shadow-sm ${span}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white">
+                          <Icon name={a.icon} className="h-5 w-5" />
+                        </div>
+                        <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                          {a.badge}
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-[var(--anchor-deep)]">{a.label}</div>
+                      <div className="mt-4">
+                        <div className="text-sm font-bold text-[var(--anchor-deep)] sm:text-base">{a.label}</div>
                         <div className="mt-1 text-xs text-[var(--anchor-gray)]">{a.desc}</div>
                       </div>
-                      <Icon name="right" className="mt-1 h-4 w-4 shrink-0 text-[var(--anchor-gray)]" strokeWidth={2.4} />
-                    </div>
+                    </Wrap>
                   );
-                  return a.external ? (
-                    <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className="block">{Inner}</a>
-                  ) : (
-                    <Link key={a.key} href={a.href} className="block">{Inner}</Link>
-                  );
-                })}
+                  });
+                })()}
               </div>
             </div>
 
