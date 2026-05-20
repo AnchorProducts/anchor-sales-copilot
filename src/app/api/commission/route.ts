@@ -192,6 +192,8 @@ export async function POST(req: Request) {
       );
     }
 
+    let emailStatus: "sent" | "skipped" | "failed" = "skipped";
+    let emailError: string | null = null;
     try {
       await sendCommissionEmail({
         repName: rep_name,
@@ -218,11 +220,21 @@ export async function POST(req: Request) {
         additionalSalespeople: additional_salespeople,
         claimId: (claim as any).id,
       });
+      // sendCommissionEmail returns early (no throw) when RESEND_API_KEY is
+      // unset, so a success from that function means either "sent" or
+      // "skipped because emails are off." We can't tell from here, but the
+      // caller can inspect emailStatus + Resend logs to disambiguate.
+      emailStatus = process.env.RESEND_API_KEY ? "sent" : "skipped";
     } catch (emailErr) {
       console.error("commission email error", emailErr);
+      emailStatus = "failed";
+      emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
     }
 
-    return NextResponse.json({ id: (claim as any).id }, { status: 201 });
+    return NextResponse.json(
+      { id: (claim as any).id, emailStatus, emailError },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error("commission route error", err);
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
