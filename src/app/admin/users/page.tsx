@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { OemDirectory } from "@/app/components/admin/OemDirectory";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ type Draft = {
 const ROLE_LABEL: Record<RoleKey, string> = {
   admin: "Admin",
   anchor_rep: "Internal sales",
-  external_rep: "External sales",
+  external_rep: "External user",
 };
 
 const ROLE_BADGE_CLASS: Record<RoleKey, string> = {
@@ -80,12 +81,17 @@ export default function AdminUsersPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | RoleKey>("all");
+  const [view, setView] = useState<"users" | "oems">("users");
 
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [original, setOriginal] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [rowMsg, setRowMsg] = useState<{ id: string; kind: "ok" | "err"; text: string } | null>(null);
+  // Two-step delete: first click flips this to the row's id, second click on
+  // the same row fires the API. Hovering off or clicking another row resets.
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Admin gate.
   useEffect(() => {
@@ -152,6 +158,38 @@ export default function AdminUsersPage() {
     setEditing(null);
     setDraft(null);
     setOriginal(null);
+  }
+
+  async function deleteUser(id: string) {
+    if (confirmingDelete !== id) {
+      setConfirmingDelete(id);
+      setRowMsg(null);
+      return;
+    }
+    setDeletingId(id);
+    setRowMsg(null);
+    try {
+      const res = await fetch(`/api/admin/users?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRowMsg({ id, kind: "err", text: json?.error || "Delete failed." });
+        return;
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      setConfirmingDelete(null);
+      if (editing === id) cancelEdit();
+    } catch (e: unknown) {
+      setRowMsg({
+        id,
+        kind: "err",
+        text: e instanceof Error ? e.message : "Delete failed.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function save() {
@@ -234,6 +272,39 @@ export default function AdminUsersPage() {
           </Card>
         ) : (
           <>
+            {/* View tabs: signed-up users vs OEM contact list */}
+            <div className="mb-4 flex gap-1 overflow-x-auto rounded-full border border-[var(--border-default)] bg-white p-1 sm:w-fit">
+              {(
+                [
+                  { key: "users", label: "Users" },
+                  { key: "oems", label: "OEM Contacts" },
+                ] as const
+              ).map((tab) => {
+                const active = view === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setView(tab.key)}
+                    aria-current={active ? "page" : undefined}
+                    data-track-id={`admin-users-tab-${tab.key}`}
+                    className={
+                      "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition " +
+                      (active
+                        ? "bg-[var(--anchor-deep)] text-white shadow-sm"
+                        : "text-[var(--anchor-gray)] hover:bg-[var(--surface-soft)] hover:text-[var(--anchor-deep)]")
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {view === "oems" ? (
+              <OemDirectory />
+            ) : (
+            <>
             {/* Controls */}
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative flex-1 sm:max-w-md">
@@ -316,14 +387,34 @@ export default function AdminUsersPage() {
                           </div>
 
                           {!isEditing && (
-                            <button
-                              type="button"
-                              data-track-id="admin-edit-user"
-                              onClick={() => beginEdit(u)}
-                              className="shrink-0 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white sm:text-sm"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                data-track-id="admin-edit-user"
+                                onClick={() => beginEdit(u)}
+                                className="rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white sm:text-sm"
+                              >
+                                Edit
+                              </button>
+                              {u.id !== me && (
+                                <button
+                                  type="button"
+                                  data-track-id="admin-delete-user"
+                                  disabled={deletingId === u.id}
+                                  onClick={() => void deleteUser(u.id)}
+                                  onBlur={() => {
+                                    if (confirmingDelete === u.id) setConfirmingDelete(null);
+                                  }}
+                                  className="whitespace-nowrap rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                                >
+                                  {deletingId === u.id
+                                    ? "Deleting…"
+                                    : confirmingDelete === u.id
+                                    ? "Click to confirm"
+                                    : "Delete"}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
 
@@ -454,6 +545,8 @@ export default function AdminUsersPage() {
                 </ul>
               )}
             </Card>
+            </>
+            )}
           </>
         )}
       </div>
