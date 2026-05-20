@@ -218,12 +218,19 @@ export default function CommissionForm() {
       // common silent-failure mode (Resend domain issue, missing key, etc.)
       // and the rep should know if the recipient won't actually see this.
       if (json?.emailStatus === "failed") {
+        const fromTo = json?.emailFrom && json?.emailTo
+          ? ` from=${json.emailFrom} to=${json.emailTo}`
+          : "";
         setSuccess(
-          `Commission claim saved. Note: email notification failed (${json?.emailError || "unknown"}). Contact your admin.`
+          `Commission claim saved, but email FAILED: ${json?.emailError || "unknown reason"}${fromTo}`
         );
       } else if (json?.emailStatus === "skipped") {
         setSuccess(
-          "Commission claim saved. Note: email notifications are disabled — contact your admin to enable them."
+          `Commission claim saved, but email was SKIPPED: ${json?.emailError || "no reason"}`
+        );
+      } else if (json?.emailStatus === "sent") {
+        setSuccess(
+          `Commission claim submitted successfully — email sent to ${json?.emailTo || "the configured recipient"}.`
         );
       } else {
         setSuccess("Commission claim submitted successfully.");
