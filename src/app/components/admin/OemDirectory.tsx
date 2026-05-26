@@ -21,7 +21,11 @@ type Activity = {
 
 type Contact = {
   id: string;
-  manufacturer: string;
+  contact_type: "manufacturer_rep" | "consultant" | string;
+  rep_kind: string | null;
+  manufacturer: string | null;
+  company: string | null;
+  manufacturers: string[];
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
@@ -43,7 +47,11 @@ type Counts = {
   withEmail: number;
   signedUp: number;
   manufacturers: number;
+  reps: number;
+  consultants: number;
 };
+
+type Group = { key: string; label: string; kind: "oem" | "consultant"; list: Contact[] };
 
 function fmtRelative(iso: string | null): string {
   if (!iso) return "Never";
@@ -71,6 +79,17 @@ function displayName(c: Contact): string {
   );
 }
 
+// Only manufacturer reps are single-OEM; every other type is multi-OEM.
+function isRep(c: Contact): boolean {
+  return (c.contact_type || "manufacturer_rep") === "manufacturer_rep";
+}
+
+function humanizeType(t: string | null | undefined): string {
+  const v = t || "manufacturer_rep";
+  if (v === "manufacturer_rep") return "Rep";
+  return v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, " ");
+}
+
 export function OemDirectory() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [counts, setCounts] = useState<Counts | null>(null);
@@ -79,6 +98,7 @@ export function OemDirectory() {
 
   const [search, setSearch] = useState("");
   const [manufacturerFilter, setManufacturerFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [signupFilter, setSignupFilter] = useState<"all" | "signed_up" | "not_signed_up">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -100,7 +120,11 @@ export function OemDirectory() {
 
   function contactToFormValues(c: Contact): OemContactFormValues {
     return {
+      contact_type: c.contact_type || "manufacturer_rep",
+      rep_kind: c.rep_kind || "",
       manufacturer: c.manufacturer || "",
+      company: c.company || "",
+      manufacturers: c.manufacturers || [],
       first_name: c.first_name || "",
       last_name: c.last_name || "",
       email: c.email || "",
@@ -112,11 +136,11 @@ export function OemDirectory() {
     };
   }
 
-  const toggleGroup = (manufacturer: string) => {
+  const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(manufacturer)) next.delete(manufacturer);
-      else next.add(manufacturer);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -184,16 +208,27 @@ export function OemDirectory() {
     return () => { alive = false; };
   }, [reloadKey]);
 
+  // Distinct OEMs across rep manufacturers and consultant links, for the pills.
   const manufacturers = useMemo(() => {
     const set = new Set<string>();
-    for (const c of contacts) set.add(c.manufacturer);
+    for (const c of contacts) for (const m of c.manufacturers) set.add(m);
     return Array.from(set).sort();
+  }, [contacts]);
+
+  // Distinct contact types present, reps first, for the type-filter chips.
+  const presentTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of contacts) set.add(c.contact_type || "manufacturer_rep");
+    return Array.from(set).sort((a, b) =>
+      a === "manufacturer_rep" ? -1 : b === "manufacturer_rep" ? 1 : a.localeCompare(b)
+    );
   }, [contacts]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return contacts.filter((c) => {
-      if (manufacturerFilter !== "all" && c.manufacturer !== manufacturerFilter) return false;
+      if (typeFilter !== "all" && (c.contact_type || "manufacturer_rep") !== typeFilter) return false;
+      if (manufacturerFilter !== "all" && !c.manufacturers.includes(manufacturerFilter)) return false;
       if (signupFilter === "signed_up" && !c.signed_up) return false;
       if (signupFilter === "not_signed_up" && c.signed_up) return false;
       if (!q) return true;
@@ -207,23 +242,32 @@ export function OemDirectory() {
         c.title,
         c.territory,
         c.region,
-        c.manufacturer,
+        c.company,
+        ...c.manufacturers,
       ]
         .map((v) => (v || "").toLowerCase())
         .join(" ");
       return hay.includes(q);
     });
-  }, [contacts, search, manufacturerFilter, signupFilter]);
+  }, [contacts, search, manufacturerFilter, typeFilter, signupFilter]);
 
-  // Group contacts by manufacturer for display.
-  const grouped = useMemo(() => {
-    const map = new Map<string, Contact[]>();
+  // Reps group under their OEM; consultants under their own company. Keys are
+  // namespaced so an OEM and a firm with the same name don't collide.
+  const grouped = useMemo<Group[]>(() => {
+    const map = new Map<string, Group>();
     for (const c of filtered) {
-      const list = map.get(c.manufacturer) ?? [];
-      list.push(c);
-      map.set(c.manufacturer, list);
+      const rep = isRep(c);
+      const label = rep ? c.manufacturer || "Unassigned" : c.company || "Independent";
+      const key = (rep ? "m::" : "c::") + label;
+      const g = map.get(key) ?? { key, label, kind: rep ? "oem" : "consultant", list: [] };
+      g.list.push(c);
+      map.set(key, g);
     }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(map.values()).sort((a, b) => {
+      // OEM groups first, then consultant firms; alphabetical within each.
+      if (a.kind !== b.kind) return a.kind === "oem" ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
   }, [filtered]);
 
   return (
@@ -232,13 +276,13 @@ export function OemDirectory() {
       {counts && (
         <section className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <Counter label="Manufacturers" value={counts.manufacturers} />
-          <Counter label="Total contacts" value={counts.total} />
+          <Counter label="Manufacturer reps" value={contacts.filter(isRep).length} />
+          <Counter label="Independents" value={contacts.filter((c) => !isRep(c)).length} />
           <Counter
             label="Signed up"
             value={counts.signedUp}
             accent="bg-[var(--anchor-mint)]/40 text-[var(--anchor-deep)]"
           />
-          <Counter label="With email" value={counts.withEmail} />
         </section>
       )}
 
@@ -254,7 +298,7 @@ export function OemDirectory() {
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Add OEM contact
+          Add contact
         </button>
       </div>
 
@@ -271,7 +315,7 @@ export function OemDirectory() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, email, title, territory…"
+            placeholder="Search name, email, company, OEM…"
             className="h-11 w-full rounded-full border border-[var(--border-default)] bg-white pl-11 pr-4 text-sm outline-none focus:border-[var(--anchor-green)]"
           />
         </div>
@@ -300,6 +344,29 @@ export function OemDirectory() {
         </div>
       </div>
 
+      {/* Type filter — dynamic from the types actually present */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {["all", ...presentTypes].map((k) => {
+          const active = typeFilter === k;
+          const label = k === "all" ? "All contacts" : `${humanizeType(k)}s`;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTypeFilter(k)}
+              className={
+                "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
+                (active
+                  ? "border-[var(--anchor-deep)] bg-[var(--anchor-deep)] text-white"
+                  : "border-[var(--border-default)] bg-white text-[var(--text-primary)] hover:bg-[var(--surface-soft)]")
+              }
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Manufacturer pills */}
       <div className="mb-4 -mx-1 overflow-x-auto px-1">
         <div className="flex gap-2">
@@ -317,7 +384,7 @@ export function OemDirectory() {
           </button>
           {manufacturers.map((m) => {
             const active = manufacturerFilter === m;
-            const count = contacts.filter((c) => c.manufacturer === m).length;
+            const count = contacts.filter((c) => c.manufacturers.includes(m)).length;
             return (
               <button
                 key={m}
@@ -347,25 +414,37 @@ export function OemDirectory() {
         <Card className="p-5 text-sm text-[var(--anchor-gray)]">No contacts match.</Card>
       ) : (
         <div className="space-y-5">
-          {grouped.map(([manufacturer, list]) => {
-            const collapsed = collapsedGroups.has(manufacturer);
+          {grouped.map((group) => {
+            const collapsed = collapsedGroups.has(group.key);
             return (
-              <Card key={manufacturer} className="overflow-hidden p-0">
+              <Card key={group.key} className="overflow-hidden p-0">
                 <button
                   type="button"
-                  onClick={() => toggleGroup(manufacturer)}
+                  onClick={() => toggleGroup(group.key)}
                   aria-expanded={!collapsed}
                   className={
                     "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-soft)] sm:px-6 " +
                     (collapsed ? "" : "border-b border-[var(--border-default)]")
                   }
                 >
-                  <div>
-                    <div className="text-base font-bold tracking-tight text-[var(--anchor-deep)]">
-                      {manufacturer}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-base font-bold tracking-tight text-[var(--anchor-deep)]">
+                        {group.label}
+                      </span>
+                      <span
+                        className={
+                          "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                          (group.kind === "consultant"
+                            ? "bg-[#ede9fe] text-[#5b21b6]"
+                            : "bg-[var(--anchor-mint)]/60 text-[var(--anchor-deep)]")
+                        }
+                      >
+                        {group.kind === "consultant" ? "Company" : "OEM"}
+                      </span>
                     </div>
                     <div className="text-[11px] text-[var(--anchor-gray)]">
-                      {list.length} contact{list.length === 1 ? "" : "s"} · {list.filter((c) => c.signed_up).length} signed up
+                      {group.list.length} contact{group.list.length === 1 ? "" : "s"} · {group.list.filter((c) => c.signed_up).length} signed up
                     </div>
                   </div>
                   <svg
@@ -379,8 +458,9 @@ export function OemDirectory() {
 
                 {!collapsed && (
                   <ul className="divide-y divide-[var(--border-default)]">
-                    {list.map((c) => {
+                    {group.list.map((c) => {
                       const open = expanded === c.id;
+                      const consultant = !isRep(c);
                       const status = c.signed_up
                         ? c.activity && c.activity.total7 > 0
                           ? { label: "Active", className: "bg-[var(--anchor-mint)] text-[var(--anchor-deep)]" }
@@ -399,6 +479,14 @@ export function OemDirectory() {
                                 <span className="truncate text-sm font-semibold text-[var(--anchor-deep)] sm:text-base">
                                   {displayName(c)}
                                 </span>
+                                <span
+                                  className={
+                                    "ds-badge !rounded-full " +
+                                    (consultant ? "bg-[#ede9fe] text-[#5b21b6]" : "bg-[var(--anchor-mint)]/60 text-[var(--anchor-deep)]")
+                                  }
+                                >
+                                  {humanizeType(c.contact_type)}
+                                </span>
                                 <span className={`ds-badge !rounded-full ${status.className}`}>
                                   {status.label}
                                 </span>
@@ -410,6 +498,18 @@ export function OemDirectory() {
                                 )}
                                 {c.email && <span className="truncate">· {c.email}</span>}
                               </div>
+                              {consultant && c.manufacturers.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {c.manufacturers.map((m) => (
+                                    <span
+                                      key={m}
+                                      className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-deep)]"
+                                    >
+                                      {m}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             <div className="hidden shrink-0 items-center gap-3 sm:flex">
                               {c.activity && (
@@ -469,6 +569,14 @@ export function OemDirectory() {
                               <div className="grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 text-sm">
                                   <div className="ds-caption mb-2">Contact</div>
+                                  {consultant ? (
+                                    <>
+                                      <Field label="Company" value={c.company} />
+                                      <Field label="Works with" value={c.manufacturers.join(", ") || null} />
+                                    </>
+                                  ) : (
+                                    <Field label="Manufacturer" value={c.manufacturer} />
+                                  )}
                                   <Field label="Email" value={c.email} mono />
                                   <Field label="Phone" value={c.phone} />
                                   <Field label="Cell" value={c.cell} />
