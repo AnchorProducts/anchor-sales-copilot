@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type IconName =
   | "users" | "chart" | "phone" | "clipboard" | "wallet"
-  | "shield" | "camera" | "book" | "image" | "mail";
+  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid";
 
 type AdminCard = {
   title: string;
@@ -34,6 +34,13 @@ const CARDS: AdminCard[] = [
     featured: true,
   },
   {
+    title: "OEM Matrix",
+    description: "Per-manufacturer engagement split by sales reps, tech reps, and consultants — downloads, weekly usage, and projects submitted.",
+    badge: "Analytics",
+    href: "/admin/oem-matrix",
+    icon: "grid",
+  },
+  {
     title: "Users",
     description: "Edit names, emails, phone numbers, and roles for every user.",
     badge: "Config",
@@ -46,6 +53,13 @@ const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/sales-reps",
     icon: "phone",
+  },
+  {
+    title: "Contacts",
+    description: "Manufacturer reps and independent consultants in one directory. Filter by type or OEM, see who's signed up, and export activity.",
+    badge: "Analytics",
+    href: "/admin/manufacturer-contacts",
+    icon: "briefcase",
   },
   {
     title: "Notifications",
@@ -190,6 +204,22 @@ function TileIcon({ name, className }: { name: IconName; className?: string }) {
         <svg {...props}>
           <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
           <polyline points="22 6 12 13 2 6" />
+        </svg>
+      );
+    case "briefcase":
+      return (
+        <svg {...props}>
+          <rect x="2" y="7" width="20" height="14" rx="2" />
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+        </svg>
+      );
+    case "grid":
+      return (
+        <svg {...props}>
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
       );
   }
