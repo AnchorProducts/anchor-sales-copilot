@@ -23,6 +23,9 @@ async function requireAdmin() {
 
 const EDITABLE_FIELDS = [
   "manufacturer",
+  "contact_type",
+  "rep_kind",
+  "company",
   "first_name",
   "last_name",
   "full_name",
@@ -47,6 +50,32 @@ function pickEditableFields(body: Record<string, unknown>): Partial<Record<Edita
   return out;
 }
 
+function pickManufacturers(body: Record<string, unknown>): string[] | null {
+  if (!("manufacturers" in body)) return null;
+  const raw = body.manufacturers;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t) seen.add(t);
+    }
+  }
+  return Array.from(seen);
+}
+
+async function syncManufacturerLinks(contactId: string, manufacturers: string[]) {
+  await supabaseAdmin
+    .from("manufacturer_contact_manufacturers")
+    .delete()
+    .eq("contact_id", contactId);
+  if (manufacturers.length > 0) {
+    await supabaseAdmin
+      .from("manufacturer_contact_manufacturers")
+      .insert(manufacturers.map((m) => ({ contact_id: contactId, manufacturer: m })));
+  }
+}
+
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
@@ -58,12 +87,37 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
   const fields = pickEditableFields(body);
-  if (Object.keys(fields).length === 0) {
+  let manufacturers = pickManufacturers(body);
+
+  // Type-aware normalization, only when the caller sends a contact_type.
+  // 'manufacturer_rep' is single-OEM; any other type is multi-OEM / company-keyed.
+  let isRep: boolean | null = null;
+  if ("contact_type" in fields) {
+    const type =
+      typeof fields.contact_type === "string" && fields.contact_type
+        ? fields.contact_type
+        : "manufacturer_rep";
+    fields.contact_type = type;
+    isRep = type === "manufacturer_rep";
+    if (isRep) {
+      // Reps carry a single OEM; clear any stale links.
+      manufacturers = [];
+    } else {
+      // Multi-OEM types key off company; OEMs live in the link table.
+      fields.manufacturer = null;
+      fields.rep_kind = null; // sales/tech only applies to OEM reps
+      if ("company" in fields && !fields.company) {
+        return NextResponse.json({ error: "Company is required for this contact type." }, { status: 400 });
+      }
+    }
+  }
+
+  if (Object.keys(fields).length === 0 && manufacturers === null) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
-  // If manufacturer is in the payload, it must be non-empty.
-  if ("manufacturer" in fields && !fields.manufacturer) {
+  // For reps, a supplied manufacturer must be non-empty.
+  if (isRep !== false && "manufacturer" in fields && !fields.manufacturer) {
     return NextResponse.json({ error: "Manufacturer cannot be empty." }, { status: 400 });
   }
 
@@ -73,16 +127,24 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (composed) fields.full_name = composed;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("manufacturer_contacts")
-    .update(fields)
-    .eq("id", id)
-    .select()
-    .single();
+  let data: unknown = null;
+  if (Object.keys(fields).length > 0) {
+    const res = await supabaseAdmin
+      .from("manufacturer_contacts")
+      .update(fields)
+      .eq("id", id)
+      .select()
+      .single();
+    if (res.error) return NextResponse.json({ error: res.error.message }, { status: 500 });
+    if (!res.data) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
+    data = res.data;
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
-  return NextResponse.json({ contact: data });
+  if (manufacturers !== null) {
+    await syncManufacturerLinks(id, manufacturers);
+  }
+
+  return NextResponse.json({ contact: data ?? { id } });
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -92,6 +154,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
+  // Link rows are removed by the ON DELETE CASCADE on contact_id.
   const { error } = await supabaseAdmin
     .from("manufacturer_contacts")
     .delete()

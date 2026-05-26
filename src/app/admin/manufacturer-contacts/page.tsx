@@ -40,8 +40,8 @@ export default function AdminManufacturerContactsPage() {
   return (
     <main className="ds-page">
       <AppNavbar
-        title="Manufacturer Contacts"
-        subtitle="Who's using the app, by manufacturer"
+        title="Contacts"
+        subtitle="Manufacturer reps & independent consultants"
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
           { label: "Analytics", href: "/admin/analytics" },
