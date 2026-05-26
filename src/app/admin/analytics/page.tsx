@@ -6,14 +6,17 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { prettyPagePath } from "@/lib/analytics/pagePath";
 import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
 import { OemScorecard } from "@/app/components/admin/OemScorecard";
 import { DormantUsersPanel } from "@/app/components/admin/DormantUsersPanel";
 import { OemHeadToHead } from "@/app/components/admin/OemHeadToHead";
-import { OemDirectory } from "@/app/components/admin/OemDirectory";
-import { TopOemsBarChart } from "@/app/components/admin/TopOemsBarChart";
-import { OemStatusDonut } from "@/app/components/admin/OemStatusDonut";
+import { PeopleDirectory } from "@/app/components/admin/PeopleDirectory";
+import { OemMatrixBars, type MatrixBarRow } from "@/app/components/admin/OemMatrixBars";
+import {
+  generateFullAnalyticsPdf,
+  type MatrixPdfPayload,
+  type MatrixPdfFilters,
+} from "@/lib/analytics/oemMatrixPdf";
 import {
   HeadlineDetailModal,
   type DetailUserRow,
@@ -29,6 +32,7 @@ export const dynamic = "force-dynamic";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type UserDailyPoint = { date: string; count: number };
+
 
 type UserRow = {
   id: string;
@@ -54,25 +58,6 @@ type UserRow = {
   dailyEvents: UserDailyPoint[];
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function userIsInternal(u: { role?: string | null }) {
-  return u.role === "anchor_rep" || u.role === "admin";
-}
-
-function fmtRelative(iso: string | null): string {
-  if (!iso) return "Never";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.floor(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return `${Math.floor(d / 7)}w ago`;
-}
-
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function AdminAnalyticsPage() {
@@ -87,9 +72,10 @@ export default function AdminAnalyticsPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [oemContactCounts, setOemContactCounts] = useState<Record<string, number>>({});
+  const [matrix, setMatrix] = useState<MatrixPdfPayload | null>(null);
+  const [exportManufacturer, setExportManufacturer] = useState<string>("all");
+  const [exportGroup, setExportGroup] = useState<string>("all");
 
-  const [search, setSearch] = useState("");
-  const [listTab, setListTab] = useState<"users" | "oems">("users");
   const [detail, setDetail] = useState<
     | { kind: "contributors" }
     | { kind: "active" }
@@ -141,6 +127,44 @@ export default function AdminAnalyticsPage() {
     })();
     return () => { alive = false; };
   }, [ready, accessError]);
+
+  // Per-manufacturer matrix (sales/tech/consultant) for the CEO graphs.
+  useEffect(() => {
+    if (!ready || accessError) return;
+    let alive = true;
+    (async () => {
+      const res = await fetch("/api/admin/oem-matrix", { credentials: "include", cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!alive || !res.ok) return;
+      setMatrix({
+        rows: body?.rows ?? [],
+        totals: body?.totals ?? { sales: null, tech: null, consultant: null },
+        events: body?.events ?? [],
+        projects: body?.projects ?? [],
+      } as MatrixPdfPayload);
+    })();
+    return () => { alive = false; };
+  }, [ready, accessError]);
+
+  // Shape the matrix into per-metric bar datasets, segmented by group.
+  const matrixBars = useMemo(() => {
+    const rows = matrix?.rows ?? [];
+    const build = (pick: (c: { downloaded: number; usesPerWeek: number; leads30: number; reports30: number }) => number): MatrixBarRow[] =>
+      rows.map((r) => ({
+        manufacturer: r.manufacturer,
+        vals: { sales: pick(r.groups.sales), tech: pick(r.groups.tech), consultant: pick(r.groups.consultant) },
+      }));
+    return {
+      adoption: build((c) => c.downloaded),
+      usage: build((c) => c.usesPerWeek),
+      leads: build((c) => c.leads30),
+      reports: build((c) => c.reports30),
+    };
+  }, [matrix]);
+
+  function exportFilters(): MatrixPdfFilters {
+    return { manufacturer: exportManufacturer, group: exportGroup };
+  }
 
   // Headline metrics. Compare this-week totals to a baseline made from the
   // prior 3 weeks (days 8-30). Gives a single +/-% delta that reads naturally.
@@ -196,23 +220,6 @@ export default function AdminAnalyticsPage() {
       }));
   }, [users]);
 
-  // Filtered + sorted user list for the bottom section.
-  const visibleUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const matched = q
-      ? users.filter((u) => {
-          const hay = `${u.full_name ?? ""} ${u.email} ${u.company ?? ""} ${u.manufacturer ?? ""}`.toLowerCase();
-          return hay.includes(q);
-        })
-      : users;
-    return [...matched].sort((a, b) => {
-      if (b.events.total7 !== a.events.total7) return b.events.total7 - a.events.total7;
-      const aT = a.events.lastSeen ? new Date(a.events.lastSeen).getTime() : 0;
-      const bT = b.events.lastSeen ? new Date(b.events.lastSeen).getTime() : 0;
-      return bT - aT;
-    });
-  }, [users, search]);
-
   function downloadUserPdf(u: UserRow) {
     generateUserActivityPdf({
       full_name: u.full_name,
@@ -264,7 +271,8 @@ export default function AdminAnalyticsPage() {
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
           { label: "Admin Console", href: "/admin" },
-          { label: "OEM Directory", href: "/admin/manufacturer-contacts" },
+          { label: "Contacts", href: "/admin/manufacturer-contacts" },
+          { label: "OEM Matrix", href: "/admin/oem-matrix" },
         ]}
       />
 
@@ -278,11 +286,57 @@ export default function AdminAnalyticsPage() {
         ) : (
           <>
             {/* Page heading */}
-            <header className="mb-6 sm:mb-8">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Analytics</h1>
-              <p className="mt-1 text-sm text-[var(--anchor-gray)] sm:text-base">
-                See who’s using the app, how often, and what they’re actually doing.
-              </p>
+            <header className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Analytics</h1>
+                <p className="mt-1 text-sm text-[var(--anchor-gray)] sm:text-base">
+                  See who’s using the app, how often, and what they’re actually doing.
+                </p>
+              </div>
+              {!loading && (
+                <div className="grid w-full grid-cols-2 items-end gap-2 lg:flex lg:w-auto lg:flex-wrap">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Manufacturer</span>
+                    <select
+                      value={exportManufacturer}
+                      onChange={(e) => setExportManufacturer(e.target.value)}
+                      className="ds-input h-9 w-full lg:w-44"
+                    >
+                      <option value="all">All manufacturers</option>
+                      {(matrix?.rows ?? []).map((r) => (
+                        <option key={r.manufacturer} value={r.manufacturer}>{r.manufacturer}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Type</span>
+                    <select
+                      value={exportGroup}
+                      onChange={(e) => setExportGroup(e.target.value)}
+                      className="ds-input h-9 w-full lg:w-40"
+                    >
+                      <option value="all">All types</option>
+                      <option value="sales">Sales reps</option>
+                      <option value="tech">Tech reps</option>
+                      <option value="consultant">Consultants</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    data-track-id="analytics-export-full"
+                    disabled={!matrix || matrix.rows.length === 0}
+                    onClick={() => matrix && generateFullAnalyticsPdf(matrix, exportFilters())}
+                    className="col-span-2 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50 lg:col-span-1"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Report PDF
+                  </button>
+                </div>
+              )}
             </header>
 
             {loadErr && (
@@ -292,86 +346,70 @@ export default function AdminAnalyticsPage() {
             {loading ? (
               <Card className="p-5 text-sm text-[var(--anchor-gray)]">Loading analytics…</Card>
             ) : (
-              <div className="space-y-10 sm:space-y-12">
+              <div className="space-y-6 sm:space-y-8">
 
-                {/* ─── Headline ───────────────────────────────────────────── */}
-                <section className="space-y-3 sm:space-y-4">
-                  <HeadlineHero
-                    total7={headline.total7}
-                    deltaPct={headline.deltaPct}
-                    onClick={() => setDetail({ kind: "contributors" })}
-                  />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <StatPairCard
-                      label="Active users this week"
-                      value={headline.active7}
-                      hint={`of ${headline.totalSignedUp} signed up`}
-                      accent={headline.activeRate >= 30 ? "good" : headline.activeRate >= 10 ? "neutral" : "bad"}
-                      footer={`${headline.activeRate}% activation`}
-                      onClick={() => setDetail({ kind: "active" })}
-                    />
-                    <StatPairCard
-                      label="Dormant users"
-                      value={headline.dormant}
-                      hint="no activity in 14+ days"
-                      accent={headline.dormant === 0 ? "good" : "bad"}
-                      footer={headline.dormant > 0 ? "Needs outreach" : "Nobody dormant"}
-                      onClick={() => setDetail({ kind: "dormant" })}
+                {/* ─── Headline KPI strip ─────────────────────────────────── */}
+                <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+                  <div className="sm:col-span-2">
+                    <HeadlineHero
+                      total7={headline.total7}
+                      deltaPct={headline.deltaPct}
+                      onClick={() => setDetail({ kind: "contributors" })}
                     />
                   </div>
-                </section>
-
-                {/* ─── Performance overview ──────────────────────────────── */}
-                <section>
-                  <SectionHeader
-                    title="Performance overview"
-                    description="A quick visual scan of who's leading and how OEMs break down by health."
+                  <StatPairCard
+                    label="Active users this week"
+                    value={headline.active7}
+                    hint={`of ${headline.totalSignedUp} signed up`}
+                    accent={headline.activeRate >= 30 ? "good" : headline.activeRate >= 10 ? "neutral" : "bad"}
+                    footer={`${headline.activeRate}% activation`}
+                    onClick={() => setDetail({ kind: "active" })}
                   />
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-5">
-                    <div className="rounded-3xl border border-[var(--border-default)] bg-white p-5 shadow-sm sm:p-6 lg:col-span-3">
-                      <div className="mb-4 flex items-baseline justify-between">
-                        <div>
-                          <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">Top OEMs</h3>
-                          <p className="text-xs text-[var(--anchor-gray)]">Ranked by events in the last 30 days</p>
-                        </div>
-                      </div>
-                      <TopOemsBarChart
-                        users={users.map((u) => ({
-                          manufacturer: u.manufacturer,
-                          events: { total30: u.events.total30 },
-                        }))}
-                      />
-                    </div>
-
-                    <div className="rounded-3xl border border-[var(--border-default)] bg-white p-5 shadow-sm sm:p-6 lg:col-span-2">
-                      <div className="mb-4">
-                        <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">OEM health mix</h3>
-                        <p className="text-xs text-[var(--anchor-gray)]">Every OEM by status — thriving, moderate, at risk, or no signups yet.</p>
-                      </div>
-                      <OemStatusDonut
-                        users={users.map((u) => ({
-                          manufacturer: u.manufacturer,
-                          leadCount: u.leadCount,
-                          events: { total7: u.events.total7, total30: u.events.total30 },
-                        }))}
-                        oemContactCounts={oemContactCounts}
-                      />
-                    </div>
-                  </div>
+                  <StatPairCard
+                    label="Dormant users"
+                    value={headline.dormant}
+                    hint="no activity in 14+ days"
+                    accent={headline.dormant === 0 ? "good" : "bad"}
+                    footer={headline.dormant > 0 ? "Needs outreach" : "Nobody dormant"}
+                    onClick={() => setDetail({ kind: "dormant" })}
+                  />
                 </section>
 
-                {/* ─── Section 1: Where to focus ─────────────────────────── */}
+                {/* ─── OEM engagement: charts (at a glance) + scorecard (detail) ─── */}
                 <section>
                   <SectionHeader
-                    title="Where to focus"
-                    description="The OEM scorecard for the “Unirac vs Carlisle” conversation. Click any row to drill into top users at that OEM."
+                    title="OEM engagement"
+                    description="How each manufacturer's sales reps, tech reps, and consultants are adopting and using the app — summarized in the charts, detailed in the scorecard below."
                   />
                   <div className="space-y-4 sm:space-y-5">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5 xl:grid-cols-4">
+                      <MatrixChartCard
+                        title="Adoption"
+                        subtitle="Signed-up contacts per OEM"
+                        data={matrixBars.adoption}
+                      />
+                      <MatrixChartCard
+                        title="Weekly usage"
+                        subtitle="Uses per week (events, last 7d)"
+                        data={matrixBars.usage}
+                        valueSuffix="/wk"
+                      />
+                      <MatrixChartCard
+                        title="Leads"
+                        subtitle="Leads submitted per OEM (last 30d)"
+                        data={matrixBars.leads}
+                      />
+                      <MatrixChartCard
+                        title="Reports"
+                        subtitle="Reports submitted per OEM (last 30d)"
+                        data={matrixBars.reports}
+                      />
+                    </div>
                     <Card className="p-4 sm:p-5">
                       <div className="mb-3">
                         <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">OEM scorecard</h3>
                         <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
-                          One row per OEM. Sort by any column. Default sort: activation % (highest first).
+                          One row per OEM. Sort by any column; click a row to drill into top users.
                         </p>
                       </div>
                       <OemScorecard
@@ -398,11 +436,10 @@ export default function AdminAnalyticsPage() {
                         onDownloadOemPdf={downloadOemPdf}
                       />
                     </Card>
-
                   </div>
                 </section>
 
-                {/* ─── Section 2: Head-to-head compare ───────────────────── */}
+                {/* ─── Compare two OEMs (focused tool) ───────────────────── */}
                 <section>
                   <SectionHeader
                     title="Compare two OEMs"
@@ -436,123 +473,22 @@ export default function AdminAnalyticsPage() {
                 <section>
                   <SectionHeader
                     title="Everyone in the system"
-                    description="When OEMs sign up, they will show up here."
+                    description="Manufacturer reps and independent consultants show up here once they sign up — filter by type or OEM and export any contact's activity."
                   />
-                  {/* Users section with OEM Contacts as a sub-view */}
                 <Card className="overflow-hidden p-0">
-                  <div className="flex flex-col gap-3 border-b border-[var(--border-default)] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <h2 className="text-base font-semibold">Users</h2>
-                      <div className="flex gap-1 rounded-full border border-[var(--border-default)] bg-[var(--surface-soft)] p-0.5">
-                        {(
-                          [
-                            { key: "users", label: "All" },
-                            { key: "oems", label: "OEM Contacts" },
-                          ] as const
-                        ).map((tab) => {
-                          const active = listTab === tab.key;
-                          return (
-                            <button
-                              key={tab.key}
-                              type="button"
-                              onClick={() => setListTab(tab.key)}
-                              aria-current={active ? "page" : undefined}
-                              data-track-id={`analytics-list-tab-${tab.key}`}
-                              className={
-                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition " +
-                                (active
-                                  ? "bg-[var(--anchor-deep)] text-white shadow-sm"
-                                  : "text-[var(--anchor-gray)] hover:text-[var(--anchor-deep)]")
-                              }
-                            >
-                              {tab.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {listTab === "users" && (
-                        <span className="whitespace-nowrap text-sm font-normal text-[var(--anchor-gray)]">
-                          {visibleUsers.length}
-                          {search && ` of ${users.length}`}
-                        </span>
-                      )}
-                    </div>
-                    {listTab === "users" && (
-                      <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search name, email, company…"
-                        className="ds-input w-full sm:w-auto sm:min-w-[16rem] sm:max-w-xs"
-                      />
-                    )}
+                  <div className="border-b border-[var(--border-default)] px-4 py-3 sm:px-6">
+                    <h2 className="text-base font-semibold">Everyone</h2>
+                    <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
+                      App users and contacts in one list — pick a type to filter down.
+                    </p>
                   </div>
-
-                  {listTab === "oems" ? (
-                    <div className="px-4 py-4 sm:px-6 sm:py-5">
-                      <OemDirectory />
-                    </div>
-                  ) : (
-                  <>
-                  {visibleUsers.length === 0 ? (
-                    <div className="px-6 py-14 text-center text-sm text-[var(--anchor-gray)]">
-                      No users match the current selection.
-                    </div>
-                  ) : (
-                    <ul className="divide-y divide-[var(--border-default)]">
-                      {visibleUsers.map((u) => (
-                        <li key={u.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                              <span className="truncate text-sm font-semibold text-[var(--anchor-deep)] sm:text-base">
-                                {u.full_name || u.email}
-                              </span>
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                  userIsInternal(u)
-                                    ? "bg-[var(--anchor-mint)]/50 text-[var(--anchor-deep)]"
-                                    : "bg-[var(--surface-soft)] text-[var(--anchor-gray)]"
-                                }`}
-                              >
-                                {userIsInternal(u) ? "Internal" : "External"}
-                              </span>
-                              {u.manufacturer && (
-                                <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
-                                  {u.manufacturer}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 truncate text-xs text-[var(--anchor-gray)]">
-                              {u.email}
-                              {u.events.lastSeen && ` · last seen ${fmtRelative(u.events.lastSeen)}`}
-                            </div>
-                            {u.events.topPages.length > 0 && (
-                              <div className="mt-1 truncate text-[11px] text-[var(--anchor-gray)]">
-                                Top page: {prettyPagePath(u.events.topPages[0].path)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
-                            <div className="flex items-center gap-4 text-center">
-                              <Stat label="7d" value={u.events.total7} />
-                              <Stat label="30d" value={u.events.total30} />
-                              <Stat label="leads" value={u.leadCount} />
-                            </div>
-                            <button
-                              type="button"
-                              data-track-id="analytics-user-pdf"
-                              onClick={() => downloadUserPdf(u)}
-                              className="shrink-0 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white"
-                            >
-                              PDF
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  </>
-                  )}
+                  <PeopleDirectory
+                    appUsers={users}
+                    onDownloadUserPdf={(id) => {
+                      const u = users.find((x) => x.id === id);
+                      if (u) downloadUserPdf(u);
+                    }}
+                  />
                 </Card>
                 </section>
               </div>
@@ -617,13 +553,24 @@ function SectionHeader({ title, description }: { title: string; description: str
   );
 }
 
-function Stat({ label, value, suffix = "" }: { label: string; value: number; suffix?: string }) {
+function MatrixChartCard({
+  title,
+  subtitle,
+  data,
+  valueSuffix,
+}: {
+  title: string;
+  subtitle: string;
+  data: MatrixBarRow[];
+  valueSuffix?: string;
+}) {
   return (
-    <div>
-      <div className="text-sm font-bold tabular-nums text-[var(--anchor-deep)]">
-        {value.toLocaleString()}{suffix}
+    <div className="rounded-3xl border border-[var(--border-default)] bg-white p-4 shadow-sm sm:p-6">
+      <div className="mb-3 sm:mb-4">
+        <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">{title}</h3>
+        <p className="text-xs text-[var(--anchor-gray)]">{subtitle}</p>
       </div>
-      <div className="text-[10px] uppercase tracking-wide text-[var(--anchor-gray)]">{label}</div>
+      <OemMatrixBars data={data} valueSuffix={valueSuffix} />
     </div>
   );
 }

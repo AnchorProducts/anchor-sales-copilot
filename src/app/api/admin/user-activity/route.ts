@@ -5,10 +5,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ActivityCategory = "all" | "internal" | "external" | "manufacturer";
+type ActivityCategory = "all" | "internal" | "external" | "manufacturer" | "consultant";
 
 function parseCategory(value: string | null): ActivityCategory {
-  if (value === "all" || value === "internal" || value === "manufacturer") return value;
+  if (value === "all" || value === "internal" || value === "manufacturer" || value === "consultant") return value;
   return "external";
 }
 
@@ -38,11 +38,13 @@ type ProfileRow = {
   created_at: string | null;
   role?: string | null;
   manufacturer?: string | null;
+  contact_type?: string | null;
 };
 
 type ManufacturerContactRow = {
-  manufacturer: string;
+  manufacturer: string | null;
   email: string | null;
+  contact_type: string | null;
 };
 
 type ConversationRow = { user_id: string | null };
@@ -87,24 +89,48 @@ export async function GET(req: NextRequest) {
 
   const category = parseCategory(req.nextUrl.searchParams.get("category"));
 
-  // Manufacturer contacts -> email map: lower(email) -> manufacturer name.
-  // Loaded for any category that needs the manufacturer tag (all + manufacturer)
-  // so user rows can be stamped with it.
+  // Contacts (reps + consultants) all live in manufacturer_contacts now.
+  //  - manufacturerByEmail: rep's single OEM, for scorecard tagging.
+  //  - contactTypeByEmail: rep vs consultant, stamped onto user rows.
+  //  - allContactEmails / consultantEmails: scope the respective categories.
   const manufacturerByEmail = new Map<string, string>();
-  // Total manufacturer-contact counts per OEM — used by the scorecard to compute
-  // signup rate (signed_up / total_contacts). Counts every contact row regardless
-  // of whether they have an email.
+  const contactTypeByEmail = new Map<string, string>();
+  const allContactEmails = new Set<string>();
+  const consultantEmails = new Set<string>();
+  // Total contact counts per OEM — used by the scorecard to compute signup rate
+  // (signed_up / total_contacts). Reps count under their OEM; consultants count
+  // under each OEM they're linked to.
   const oemContactCounts: Record<string, number> = {};
-  if (category === "manufacturer" || category === "all") {
-    const contactsSelect = category === "all"
-      ? supabaseAdmin.from("manufacturer_contacts").select("manufacturer,email")
-      : supabaseAdmin.from("manufacturer_contacts").select("manufacturer,email").not("email", "is", null);
-    const { data: contacts, error: contactsErr } = await contactsSelect;
+  if (category === "manufacturer" || category === "consultant" || category === "all") {
+    const { data: contacts, error: contactsErr } = await supabaseAdmin
+      .from("manufacturer_contacts")
+      .select("id,manufacturer,email,contact_type");
     if (contactsErr) return NextResponse.json({ error: contactsErr.message }, { status: 500 });
-    for (const c of (contacts ?? []) as ManufacturerContactRow[]) {
-      if (c.email) manufacturerByEmail.set(c.email.toLowerCase(), c.manufacturer);
-      if (category === "all") {
+
+    const consultantIds: string[] = [];
+    for (const c of (contacts ?? []) as Array<ManufacturerContactRow & { id: string }>) {
+      const isConsultant = c.contact_type === "consultant";
+      if (c.email) {
+        const key = c.email.toLowerCase();
+        allContactEmails.add(key);
+        contactTypeByEmail.set(key, isConsultant ? "consultant" : "manufacturer_rep");
+        if (isConsultant) consultantEmails.add(key);
+        else if (c.manufacturer) manufacturerByEmail.set(key, c.manufacturer);
+      }
+      if (category === "all" && !isConsultant && c.manufacturer) {
         oemContactCounts[c.manufacturer] = (oemContactCounts[c.manufacturer] ?? 0) + 1;
+      }
+      if (isConsultant) consultantIds.push(c.id);
+    }
+
+    // Count consultants toward each OEM they're linked to (scorecard denominator).
+    if (category === "all" && consultantIds.length > 0) {
+      const { data: links } = await supabaseAdmin
+        .from("manufacturer_contact_manufacturers")
+        .select("manufacturer")
+        .in("contact_id", consultantIds);
+      for (const l of (links ?? []) as Array<{ manufacturer: string }>) {
+        oemContactCounts[l.manufacturer] = (oemContactCounts[l.manufacturer] ?? 0) + 1;
       }
     }
   }
@@ -119,7 +145,19 @@ export async function GET(req: NextRequest) {
   } else if (category === "internal") {
     usersQuery = usersQuery.in("role", ["anchor_rep", "admin"]);
   } else if (category === "manufacturer") {
-    const emails = Array.from(manufacturerByEmail.keys());
+    // All external contacts — reps and consultants — so their per-user PDFs
+    // resolve from this endpoint.
+    const emails = Array.from(allContactEmails);
+    if (emails.length === 0) {
+      return NextResponse.json({
+        category,
+        users: [],
+        charts: { dailyEvents: [], eventsByType: {} },
+      });
+    }
+    usersQuery = usersQuery.in("email", emails);
+  } else if (category === "consultant") {
+    const emails = Array.from(consultantEmails);
     if (emails.length === 0) {
       return NextResponse.json({
         category,
@@ -136,18 +174,15 @@ export async function GET(req: NextRequest) {
 
   let users = (usersRaw ?? []) as ProfileRow[];
 
-  if (category === "manufacturer") {
-    users = users
-      .map((u) => ({
+  if (category === "manufacturer" || category === "consultant" || category === "all") {
+    users = users.map((u) => {
+      const key = (u.email || "").toLowerCase();
+      return {
         ...u,
-        manufacturer: manufacturerByEmail.get((u.email || "").toLowerCase()) ?? null,
-      }))
-      .filter((u) => u.manufacturer);
-  } else if (category === "all") {
-    users = users.map((u) => ({
-      ...u,
-      manufacturer: manufacturerByEmail.get((u.email || "").toLowerCase()) ?? null,
-    }));
+        manufacturer: manufacturerByEmail.get(key) ?? null,
+        contact_type: contactTypeByEmail.get(key) ?? null,
+      };
+    });
   }
 
   const userIds = users.map((u) => u.id);
