@@ -87,7 +87,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
   const fields = pickEditableFields(body);
-  let manufacturers = pickManufacturers(body);
+  const manufacturers = pickManufacturers(body);
+  const anchorCommission = typeof body.anchor_commission === "boolean" ? body.anchor_commission : undefined;
 
   // Type-aware normalization, only when the caller sends a contact_type.
   // 'manufacturer_rep' is single-OEM; any other type is multi-OEM / company-keyed.
@@ -100,8 +101,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     fields.contact_type = type;
     isRep = type === "manufacturer_rep";
     if (isRep) {
-      // Reps carry a single OEM; clear any stale links.
-      manufacturers = [];
+      // Reps now support multiple OEMs via the link table (like consultants).
+      // The `manufacturer` column keeps the primary (first) OEM for back-compat.
+      if (manufacturers !== null) {
+        if (manufacturers.length === 0) {
+          return NextResponse.json({ error: "At least one manufacturer is required for a rep." }, { status: 400 });
+        }
+        fields.manufacturer = manufacturers[0];
+      }
     } else {
       // Multi-OEM types key off company; OEMs live in the link table.
       fields.manufacturer = null;
@@ -112,7 +119,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
   }
 
-  if (Object.keys(fields).length === 0 && manufacturers === null) {
+  if (Object.keys(fields).length === 0 && manufacturers === null && anchorCommission === undefined) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
@@ -127,11 +134,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (composed) fields.full_name = composed;
   }
 
+  const updatePayload: Record<string, unknown> = { ...fields };
+  if (anchorCommission !== undefined) updatePayload.anchor_commission = anchorCommission;
+
   let data: unknown = null;
-  if (Object.keys(fields).length > 0) {
+  if (Object.keys(updatePayload).length > 0) {
     const res = await supabaseAdmin
       .from("manufacturer_contacts")
-      .update(fields)
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();

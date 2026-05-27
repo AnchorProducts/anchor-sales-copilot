@@ -381,11 +381,15 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [serviceState]);
 
-  // Fetch the user's most-used feature (last 7 days) once they're authed.
+  // Fetch the user's most-recent feature so the hero reflects the last thing
+  // they opened. Re-run whenever the dashboard regains focus — on mobile,
+  // returning here (in-app nav, PWA, or bfcache restore) often doesn't remount,
+  // so a mount-only fetch would leave the hero stale.
   useEffect(() => {
     if (booting || !roleReady) return;
     let alive = true;
-    (async () => {
+
+    const load = async () => {
       try {
         const res = await fetch("/api/user-events/most-used", { cache: "no-store" });
         if (!res.ok) return;
@@ -401,8 +405,21 @@ export default function DashboardPage() {
       } catch {
         // analytics is best-effort; never block the hero
       }
-    })();
-    return () => { alive = false; };
+    };
+
+    void load();
+
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    const onPageShow = () => { void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("focus", onPageShow);
+    return () => {
+      alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("focus", onPageShow);
+    };
   }, [booting, roleReady]);
 
   // For UI gating use the effective role so admins can preview each view.

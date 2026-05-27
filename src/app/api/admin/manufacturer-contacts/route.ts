@@ -69,7 +69,7 @@ export async function GET() {
   const { data: contactsData, error: contactsErr } = await supabaseAdmin
     .from("manufacturer_contacts")
     .select(
-      "id, manufacturer, contact_type, rep_kind, company, first_name, last_name, full_name, email, phone, cell, title, territory, region, created_at"
+      "id, manufacturer, contact_type, rep_kind, company, first_name, last_name, full_name, email, phone, cell, title, territory, region, anchor_commission, created_at"
     )
     .order("manufacturer", { ascending: true, nullsFirst: false })
     .order("last_name", { ascending: true });
@@ -166,11 +166,11 @@ export async function GET() {
     const email = (c.email || "").toLowerCase();
     const profile = email ? profileByEmail.get(email) ?? null : null;
     const activity = profile ? activityByUserId.get(profile.id) ?? null : null;
-    // A rep's OEM is their `manufacturer` column; a consultant's OEMs come from
-    // the link table. `manufacturers` is the unified list used for filtering.
+    // OEMs come from the link table for everyone (reps & consultants). Reps
+    // also keep a primary in the `manufacturer` column, used as a fallback for
+    // older records that predate multi-OEM rep links.
     const linked = linksByContact.get(c.id) ?? [];
-    const manufacturers =
-      c.contact_type === "consultant" ? linked : c.manufacturer ? [c.manufacturer] : [];
+    const manufacturers = linked.length ? linked : c.manufacturer ? [c.manufacturer] : [];
     return {
       ...c,
       manufacturers,
@@ -281,10 +281,15 @@ export async function POST(req: NextRequest) {
 
   const manufacturers = pickManufacturers(body) ?? [];
 
+  // Reps now support multiple OEMs via the link table (like consultants). The
+  // `manufacturer` column keeps the primary (first) OEM for back-compat.
+  let repOems: string[] = [];
   if (isRep) {
-    if (!fields.manufacturer) {
-      return NextResponse.json({ error: "Manufacturer is required for a rep." }, { status: 400 });
+    repOems = manufacturers.length ? manufacturers : (fields.manufacturer ? [fields.manufacturer] : []);
+    if (repOems.length === 0) {
+      return NextResponse.json({ error: "At least one manufacturer is required for a rep." }, { status: 400 });
     }
+    fields.manufacturer = repOems[0];
   } else {
     if (!fields.company) {
       return NextResponse.json({ error: "Company is required for this contact type." }, { status: 400 });
@@ -299,17 +304,17 @@ export async function POST(req: NextRequest) {
     if (composed) fields.full_name = composed;
   }
 
+  const anchorCommission = typeof body.anchor_commission === "boolean" ? body.anchor_commission : false;
+
   const { data, error } = await supabaseAdmin
     .from("manufacturer_contacts")
-    .insert(fields)
+    .insert({ ...fields, anchor_commission: anchorCommission })
     .select()
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (!isRep) {
-    await syncManufacturerLinks((data as { id: string }).id, manufacturers);
-  }
+  await syncManufacturerLinks((data as { id: string }).id, isRep ? repOems : manufacturers);
 
   return NextResponse.json({ contact: data });
 }

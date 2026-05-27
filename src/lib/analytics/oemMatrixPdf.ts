@@ -1,29 +1,27 @@
-"use client";
-
 import jsPDF from "jspdf";
 
-// Full analytics report PDF: the per-manufacturer matrix (Sales/Tech/Consultant,
-// leads and reports broken out — notable projects excluded) plus detailed
-// last-30-day logs of every event and every project, with who did each.
-// Honours optional manufacturer + group filters.
+// OEM matrix PDF: the full per-manufacturer matrix (Sales/Tech/Consultant, all
+// six on-screen columns) plus, for every OEM, the people behind each cell — the
+// same drill-down you get by expanding a row — followed by detailed logs of
+// every event and every project, with who did each. Everything reflects the
+// caller's selected time window (passed as windowLabel).
 
 export type MatrixCellPerson = {
   name: string;
   email: string | null;
   signedUp: boolean;
-  uses30: number;
-  leads30: number;
-  reports30: number;
+  uses: number;
+  leads: number;
+  reports: number;
 };
 
 export type MatrixCell = {
   downloaded: number;
   notDownloaded: number;
-  usesPerWeek: number;
-  uses30: number;
+  uses: number;
   notReporting: number;
-  leads30: number;
-  reports30: number;
+  leads: number;
+  reports: number;
   people: MatrixCellPerson[];
 };
 
@@ -40,31 +38,24 @@ export type MatrixPdfPayload = {
   projects: ProjectDetail[];
 };
 
-export type MatrixPdfFilters = { manufacturer: string; group: string };
-
 const GROUP_LABEL: Record<MatrixGroup, string> = { sales: "Sales Reps", tech: "Tech Reps", consultant: "Consultants" };
 const ALL_GROUPS: MatrixGroup[] = ["sales", "tech", "consultant"];
+
+// Mirror the on-screen matrix columns exactly.
 const SUB_COLS = [
   { key: "downloaded", label: "Down" },
   { key: "notDownloaded", label: "Not" },
-  { key: "uses30", label: "Uses" },
-  { key: "leads30", label: "Leads" },
-  { key: "reports30", label: "Reps" },
+  { key: "uses", label: "Uses" },
+  { key: "notReporting", label: "No proj" },
+  { key: "leads", label: "Leads" },
+  { key: "reports", label: "Reps" },
 ] as const;
 
 function emptyCell(): MatrixCell {
-  return { downloaded: 0, notDownloaded: 0, usesPerWeek: 0, uses30: 0, notReporting: 0, leads30: 0, reports30: 0, people: [] };
+  return { downloaded: 0, notDownloaded: 0, uses: 0, notReporting: 0, leads: 0, reports: 0, people: [] };
 }
 
-function matchesFilters(group: string, manufacturers: string[], f: MatrixPdfFilters): boolean {
-  if (f.group !== "all" && group !== f.group) return false;
-  if (f.manufacturer !== "all" && !manufacturers.includes(f.manufacturer)) return false;
-  return true;
-}
-
-function resolve(payload: MatrixPdfPayload, filters: MatrixPdfFilters) {
-  const groups: MatrixGroup[] = filters.group === "all" ? ALL_GROUPS : [filters.group as MatrixGroup];
-  const rows = filters.manufacturer === "all" ? payload.rows : payload.rows.filter((r) => r.manufacturer === filters.manufacturer);
+export function computeTotals(rows: MatrixRow[]): Record<MatrixGroup, MatrixCell> {
   const totals: Record<MatrixGroup, MatrixCell> = { sales: emptyCell(), tech: emptyCell(), consultant: emptyCell() };
   for (const r of rows) {
     for (const g of ALL_GROUPS) {
@@ -72,24 +63,13 @@ function resolve(payload: MatrixPdfPayload, filters: MatrixPdfFilters) {
       const c = r.groups[g];
       t.downloaded += c.downloaded;
       t.notDownloaded += c.notDownloaded;
-      t.uses30 += c.uses30;
-      t.leads30 += c.leads30;
-      t.reports30 += c.reports30;
+      t.uses += c.uses;
+      t.notReporting += c.notReporting;
+      t.leads += c.leads;
+      t.reports += c.reports;
     }
   }
-  const events = (payload.events ?? []).filter((e) => matchesFilters(e.group, e.manufacturers, filters));
-  const projects = (payload.projects ?? []).filter((p) => matchesFilters(p.group, p.manufacturers, filters));
-  return { groups, rows, totals, events, projects };
-}
-
-function filterSummary(f: MatrixPdfFilters): string {
-  const mfr = f.manufacturer === "all" ? "All manufacturers" : f.manufacturer;
-  const grp = f.group === "all" ? "All types" : GROUP_LABEL[f.group as MatrixGroup] ?? f.group;
-  return `${mfr}  ·  ${grp}`;
-}
-
-function safeName(s: string) {
-  return s.replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "") || "report";
+  return totals;
 }
 
 function fmtAt(iso: string) {
@@ -110,7 +90,7 @@ function ensure(d: Doc, need: number) {
   if (d.y + need > d.H - d.m) { d.doc.addPage(); d.y = 40; }
 }
 
-function header(d: Doc, title: string, f: MatrixPdfFilters) {
+function header(d: Doc, title: string, subtitle: string) {
   d.doc.setFont("helvetica", "bold");
   d.doc.setFontSize(16);
   d.doc.setTextColor(...ANCHOR_DEEP);
@@ -119,7 +99,7 @@ function header(d: Doc, title: string, f: MatrixPdfFilters) {
   d.doc.setFont("helvetica", "normal");
   d.doc.setFontSize(9);
   d.doc.setTextColor(110);
-  d.doc.text(`Last 30 days  ·  ${filterSummary(f)}  ·  Generated ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`, d.m, d.y);
+  d.doc.text(`${subtitle}  ·  Generated ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`, d.m, d.y);
   d.y += 18;
 }
 
@@ -196,7 +176,7 @@ function drawMatrix(d: Doc, groups: MatrixGroup[], rows: MatrixRow[], totals: Re
   d.doc.setFont("helvetica", "normal");
   d.doc.setFontSize(7);
   d.doc.setTextColor(130);
-  d.doc.text("Down = signed up · Not = not signed up · Uses = events (30d) · Leads / Reps = leads / reports submitted (30d)", d.m, d.y);
+  d.doc.text("Down = signed up · Not = not signed up · Uses = events · No proj = signed up but no lead/report · Leads / Reps = leads / reports submitted — all within the selected window", d.m, d.y);
   d.y += 16;
 }
 
@@ -236,10 +216,77 @@ function drawTable(d: Doc, cols: Array<{ label: string; w: number; align?: "left
   d.y += 8;
 }
 
-export function generateFullAnalyticsPdf(payload: MatrixPdfPayload, filters: MatrixPdfFilters) {
+// Per-OEM drill-down: the people behind each cell, exactly like expanding a row
+// on screen. One block per manufacturer, all three groups in one table.
+function drawDrilldown(d: Doc, rows: MatrixRow[], groups: MatrixGroup[]) {
+  sectionTitle(d, "OEM drill-down — people behind each cell");
+  const cols: Array<{ label: string; w: number; align?: "left" | "right" }> = [
+    { label: "Name", w: 220 },
+    { label: "Type", w: 110 },
+    { label: "Signed up", w: 80 },
+    { label: "Uses", w: 70, align: "right" },
+    { label: "Leads", w: 60, align: "right" },
+    { label: "Reps", w: 60, align: "right" },
+  ];
+  for (const r of rows) {
+    const peopleRows: string[][] = [];
+    for (const g of groups) {
+      for (const p of r.groups[g].people) {
+        peopleRows.push([
+          p.name,
+          GROUP_LABEL[g],
+          p.signedUp ? "Yes" : "No",
+          String(p.uses),
+          String(p.leads),
+          String(p.reports),
+        ]);
+      }
+    }
+    // Keep the manufacturer heading with at least its table header + a row.
+    ensure(d, 16 + 13 * 2);
+    d.doc.setFont("helvetica", "bold");
+    d.doc.setFontSize(10);
+    d.doc.setTextColor(...ANCHOR_DEEP);
+    d.doc.text(r.manufacturer, d.m, d.y + 10);
+    d.y += 16;
+    if (peopleRows.length === 0) {
+      d.doc.setFont("helvetica", "normal"); d.doc.setFontSize(8); d.doc.setTextColor(120);
+      d.doc.text("No people associated.", d.m, d.y + 8);
+      d.y += 18;
+    } else {
+      drawTable(d, cols, peopleRows);
+    }
+  }
+}
+
+export type MatrixPdfFilters = {
+  windowLabel: string;
+  manufacturers: string[]; // empty = all
+  groups: MatrixGroup[]; // empty = all
+};
+
+function filterSummary(f: MatrixPdfFilters): string {
+  const m = f.manufacturers.length === 0
+    ? "All manufacturers"
+    : f.manufacturers.length <= 3
+    ? f.manufacturers.join(", ")
+    : `${f.manufacturers.length} manufacturers`;
+  const g = f.groups.length === 0 ? "All types" : f.groups.map((x) => GROUP_LABEL[x]).join(", ");
+  return `${m}  ·  ${g}`;
+}
+
+function renderMatrix(payload: MatrixPdfPayload, filters: MatrixPdfFilters): jsPDF {
   const d = landscapeDoc();
-  const { groups, rows, totals, events, projects } = resolve(payload, filters);
-  header(d, "Analytics Report", filters);
+  const groups = filters.groups.length ? filters.groups : ALL_GROUPS;
+  const mfrSet = new Set(filters.manufacturers);
+  const rows = mfrSet.size ? (payload.rows ?? []).filter((r) => mfrSet.has(r.manufacturer)) : (payload.rows ?? []);
+  const totals = computeTotals(rows);
+  const inScope = (group: string, manufacturers: string[]) =>
+    (groups.length === ALL_GROUPS.length || (groups as string[]).includes(group)) &&
+    (mfrSet.size === 0 || manufacturers.some((m) => mfrSet.has(m)));
+  const events = (payload.events ?? []).filter((e) => inScope(e.group, e.manufacturers));
+  const projects = (payload.projects ?? []).filter((p) => inScope(p.group, p.manufacturers));
+  header(d, "OEM Matrix", `${filters.windowLabel}  ·  ${filterSummary(filters)}`);
 
   // Per-group summary.
   d.doc.setFontSize(9);
@@ -252,18 +299,21 @@ export function generateFullAnalyticsPdf(payload: MatrixPdfPayload, filters: Mat
     d.doc.text(GROUP_LABEL[g], d.m, d.y + 10);
     d.doc.setFont("helvetica", "normal");
     d.doc.setTextColor(70);
-    d.doc.text(`${contacts} contacts · ${t.downloaded} signed up · ${t.uses30} uses · ${t.leads30} leads · ${t.reports30} reports (30d)`, d.m + 110, d.y + 10);
+    d.doc.text(`${contacts} contacts · ${t.downloaded} signed up · ${t.uses} uses · ${t.leads} leads · ${t.reports} reports`, d.m + 110, d.y + 10);
     d.y += 16;
   }
   d.y += 8;
 
-  if (rows.length > 0) drawMatrix(d, groups, rows, totals);
+  if (rows.length > 0) {
+    drawMatrix(d, groups, rows, totals);
+    drawDrilldown(d, rows, groups);
+  }
 
   // Events detail.
-  sectionTitle(d, `Events — last 30 days (${events.length})`);
+  sectionTitle(d, `Events — ${filters.windowLabel.toLowerCase()} (${events.length})`);
   if (events.length === 0) {
     d.doc.setFont("helvetica", "normal"); d.doc.setFontSize(8); d.doc.setTextColor(120);
-    d.doc.text("No events in range for this selection.", d.m, d.y + 8); d.y += 18;
+    d.doc.text("No events in range.", d.m, d.y + 8); d.y += 18;
   } else {
     drawTable(
       d,
@@ -279,10 +329,10 @@ export function generateFullAnalyticsPdf(payload: MatrixPdfPayload, filters: Mat
   }
 
   // Projects detail (leads + reports, separated by the Kind column).
-  sectionTitle(d, `Projects — last 30 days (${projects.length})`);
+  sectionTitle(d, `Projects — ${filters.windowLabel.toLowerCase()} (${projects.length})`);
   if (projects.length === 0) {
     d.doc.setFont("helvetica", "normal"); d.doc.setFontSize(8); d.doc.setTextColor(120);
-    d.doc.text("No projects in range for this selection.", d.m, d.y + 8); d.y += 18;
+    d.doc.text("No projects in range.", d.m, d.y + 8); d.y += 18;
   } else {
     drawTable(
       d,
@@ -297,5 +347,19 @@ export function generateFullAnalyticsPdf(payload: MatrixPdfPayload, filters: Mat
     );
   }
 
-  d.doc.save(`analytics-report_${safeName(filterSummary(filters))}_30d.pdf`);
+  return d.doc;
+}
+
+function matrixFilename(filters: MatrixPdfFilters) {
+  return `oem-matrix_${filters.windowLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;
+}
+
+// Browser: trigger a download.
+export function generateFullAnalyticsPdf(payload: MatrixPdfPayload, filters: MatrixPdfFilters) {
+  renderMatrix(payload, filters).save(matrixFilename(filters));
+}
+
+// Server: return the PDF bytes (e.g. to attach to the weekly report email).
+export function buildOemMatrixPdf(payload: MatrixPdfPayload, filters: MatrixPdfFilters): Buffer {
+  return Buffer.from(renderMatrix(payload, filters).output("arraybuffer"));
 }
