@@ -445,7 +445,7 @@ export default function LeadForm() {
           </div>
         )}
 
-        <div className="mt-4 grid gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-4">
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">Project Name *</span>
             <Input
@@ -501,7 +501,7 @@ export default function LeadForm() {
             <MultiSelect options={ROOF_BRANDS} value={form.roof_brand} onChange={(v) => update("roof_brand", v)} placeholder={t("selectBrands")} />
           </label>
 
-          <div className="grid gap-2 text-sm">
+          <div className="grid grid-cols-1 gap-2 text-sm">
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold">{t("projectTimeline")}</span>
               <span className="shrink-0 font-semibold text-[var(--anchor-green)]">
@@ -540,7 +540,7 @@ export default function LeadForm() {
               Pick a solution type, attach a picture, and add notes. Add another for each solution on the project.
             </div>
 
-            <div className="mt-3 grid gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3">
               {solutions.map((entry, idx) => (
                 <div key={entry.id} className="rounded-xl border border-black/10 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between">
@@ -552,7 +552,7 @@ export default function LeadForm() {
                     )}
                   </div>
 
-                  <div className="grid gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <SolutionTypeSelect
                       value={entry.solution_label}
                       onChange={(label) => {
@@ -643,14 +643,14 @@ export default function LeadForm() {
             </div>
 
             {contractors.length > 0 && (
-              <div className="mt-3 grid gap-3">
+              <div className="mt-3 grid grid-cols-1 gap-3">
                 {contractors.map((contractor, index) => (
                   <div key={index} className="rounded-xl border border-black/10 bg-white p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="text-sm font-semibold text-black">{t("contractor")} {index + 1}</div>
                       <Button onClick={() => removeContractor(index)} className="px-3 py-1.5 text-[12px]" variant="secondary">{t("remove")}</Button>
                     </div>
-                    <div className="grid gap-3">
+                    <div className="grid grid-cols-1 gap-3">
                       <label className="grid gap-1.5 text-sm">
                         <span className="font-semibold">{t("fullName")}</span>
                         <Input value={contractor.name} onChange={(e) => updateContractor(index, "name", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("fullNamePlain")} />
@@ -710,7 +710,7 @@ export default function LeadForm() {
             </label>
 
             {fileCommission && (
-              <div className="mt-4 grid gap-5">
+              <div className="mt-4 grid grid-cols-1 gap-5">
                 <label className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-black/10 bg-white p-4">
                   <input type="checkbox" checked={claim.certified} onChange={(e) => updateClaim("certified", e.target.checked)} className="mt-0.5 shrink-0" />
                   <span className="text-sm">{t("certifyText")}</span>
