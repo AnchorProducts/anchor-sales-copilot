@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
     const user = auth.user;
     const profile = await getProfile(user.id);
-    if (!profile || profile.role !== "external_rep") {
+    if (!profile || (profile.role !== "external_rep" && profile.role !== "admin")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

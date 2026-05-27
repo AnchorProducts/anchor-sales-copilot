@@ -271,7 +271,8 @@ export async function POST(req: Request) {
 
     const user = auth.user;
     const role = await getRole(user.id);
-    if (!isExternalRole(role)) {
+    // Admins can use every user option, so they may submit consults too.
+    if (!isExternalRole(role) && role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

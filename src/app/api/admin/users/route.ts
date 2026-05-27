@@ -36,13 +36,16 @@ export async function GET() {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("id, email, full_name, phone, company, role, user_type, service_state, created_at")
-    .order("created_at", { ascending: false });
+  const COLS = "id, email, full_name, phone, company, role, user_type, service_state, anchor_commission, created_at";
+  const COLS_NO_AC = "id, email, full_name, phone, company, role, user_type, service_state, created_at";
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ users: data || [] });
+  const first = await supabaseAdmin.from("profiles").select(COLS).order("created_at", { ascending: false });
+  // Tolerate the anchor_commission column not being migrated yet.
+  const result = first.error
+    ? await supabaseAdmin.from("profiles").select(COLS_NO_AC).order("created_at", { ascending: false })
+    : first;
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+  return NextResponse.json({ users: (result.data as unknown[]) || [] });
 }
 
 export async function PATCH(req: Request) {
@@ -107,6 +110,10 @@ export async function PATCH(req: Request) {
   if (Object.prototype.hasOwnProperty.call(body, "service_state")) {
     update.service_state = clean(body.service_state) || null;
   }
+  const wantAnchorCommission = Object.prototype.hasOwnProperty.call(body, "anchor_commission");
+  if (wantAnchorCommission) {
+    update.anchor_commission = body.anchor_commission === true;
+  }
   if (wantEmailChange) {
     update.email = nextEmail;
   }
@@ -120,7 +127,13 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true, noop: true });
   }
 
-  const { error: profErr } = await supabaseAdmin.from("profiles").update(update).eq("id", id);
+  let { error: profErr } = await supabaseAdmin.from("profiles").update(update).eq("id", id);
+  // Tolerate the anchor_commission column not being migrated yet — retry without it.
+  if (profErr && wantAnchorCommission && /anchor_commission/.test(profErr.message)) {
+    const { anchor_commission: _ac, ...rest } = update;
+    void _ac;
+    ({ error: profErr } = await supabaseAdmin.from("profiles").update(rest).eq("id", id));
+  }
   if (profErr) {
     return NextResponse.json({ error: profErr.message }, { status: 500 });
   }

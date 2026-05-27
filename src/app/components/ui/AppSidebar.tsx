@@ -126,9 +126,9 @@ export function AppSidebar() {
         <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} />
         <NavLink href="/chat" kind="sparkles" label="Copilot" active={isPath("/chat")} />
         <NavLink href="/assets" kind="library" label="Assets" active={isPath("/assets")} />
-        {isExternal && (
+        {(isExternal || isAdmin) && (
           <>
-            <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isPath("/dashboard/opportunities")} />
+            <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isExternal && isPath("/dashboard/opportunities")} />
             <NavLink href="/dashboard/notable-projects/new" kind="camera" label="Notable Project" active={isPath("/dashboard/notable-projects")} />
             <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission Claim Form" active={isPath("/dashboard/commission")} />
           </>
