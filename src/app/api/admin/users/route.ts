@@ -104,6 +104,9 @@ export async function PATCH(req: Request) {
   if (Object.prototype.hasOwnProperty.call(body, "company")) {
     update.company = clean(body.company) || null;
   }
+  if (Object.prototype.hasOwnProperty.call(body, "service_state")) {
+    update.service_state = clean(body.service_state) || null;
+  }
   if (wantEmailChange) {
     update.email = nextEmail;
   }
