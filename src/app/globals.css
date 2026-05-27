@@ -301,6 +301,24 @@ h2,
   color: var(--text-secondary);
 }
 
+/* iOS Safari renders date/time inputs with an intrinsic content width that can
+   push them past width:100% inside a grid/flex track. Reset the native
+   appearance and pin the inner field box so they stay inside their wrapper. */
+.ds-input[type="date"],
+.ds-input[type="time"],
+.ds-input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ds-input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  max-width: 100%;
+}
+
 .ds-input:hover,
 .ds-select:hover,
 .ds-textarea:hover {
