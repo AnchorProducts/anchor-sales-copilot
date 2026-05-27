@@ -12,6 +12,14 @@ function parseCategory(value: string | null): ActivityCategory {
   return "external";
 }
 
+// Time window (in days) for the event-driven aggregates. Defaults to 30 so
+// existing callers are unaffected.
+const ALLOWED_DAYS = [7, 14, 30, 90] as const;
+function parseDays(value: string | null): number {
+  const n = Number(value);
+  return (ALLOWED_DAYS as readonly number[]).includes(n) ? n : 30;
+}
+
 async function requireAdmin() {
   const supabase = await supabaseRoute();
   const { data: auth, error } = await supabase.auth.getUser();
@@ -88,6 +96,7 @@ export async function GET(req: NextRequest) {
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   const category = parseCategory(req.nextUrl.searchParams.get("category"));
+  const days = parseDays(req.nextUrl.searchParams.get("days"));
 
   // Contacts (reps + consultants) all live in manufacturer_contacts now.
   //  - manufacturerByEmail: rep's single OEM, for scorecard tagging.
@@ -187,7 +196,7 @@ export async function GET(req: NextRequest) {
 
   const userIds = users.map((u) => u.id);
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const windowCutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const [convRes, leadRes, reportRes, eventRes] = await Promise.all([
     userIds.length
@@ -209,7 +218,7 @@ export async function GET(req: NextRequest) {
           .from("user_events")
           .select("user_id,event_type,page_path,metadata,created_at")
           .in("user_id", userIds)
-          .gte("created_at", thirtyDaysAgo)
+          .gte("created_at", windowCutoff)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as EventRow[], error: null }),
   ]);
@@ -303,7 +312,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Aggregate daily series and overall event-type mix for the dashboard charts.
-  const daysBack = 30;
+  const daysBack = days;
   const dailyCounts: Record<string, number> = {};
   const todayUTC = new Date();
   todayUTC.setUTCHours(0, 0, 0, 0);
@@ -342,6 +351,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     category,
+    days,
     users: rows,
     charts: { dailyEvents, eventsByType: overallByType },
     oemContactCounts: category === "all" ? oemContactCounts : undefined,

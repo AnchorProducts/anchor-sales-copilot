@@ -26,6 +26,7 @@ export type OemContactFormValues = {
   title: string;
   territory: string;
   region: string;
+  anchor_commission: boolean;
 };
 
 export type OemContactRecord = OemContactFormValues & { id: string };
@@ -44,6 +45,7 @@ const EMPTY: OemContactFormValues = {
   title: "",
   territory: "",
   region: "",
+  anchor_commission: false,
 };
 
 type Mode = "add" | "edit";
@@ -122,8 +124,8 @@ export function OemContactModal({
           setError("Company is required for this contact type.");
           return;
         }
-      } else if (!values.manufacturer.trim()) {
-        setError("Manufacturer is required.");
+      } else if (values.manufacturers.length === 0) {
+        setError("Pick at least one manufacturer for this rep.");
         return;
       }
       const url = mode === "edit" && contactId
@@ -258,9 +260,7 @@ export function OemContactModal({
                 />
               )}
               <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
-                {isMultiOem
-                  ? "Can work with multiple manufacturers (selected below)."
-                  : "Tied to a single manufacturer."}
+                Can cover multiple manufacturers (selected below).
               </p>
             </div>
 
@@ -294,15 +294,24 @@ export function OemContactModal({
               </>
             ) : (
               <>
-                <FieldInput
-                  label="Manufacturer"
-                  required
-                  value={values.manufacturer}
-                  onChange={(v) => setField("manufacturer", v)}
-                  listId="oem-list"
-                  suggestions={knownManufacturers}
-                  placeholder="e.g. Unirac"
-                />
+                <div>
+                  <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                    Manufacturers they cover
+                  </span>
+                  <ManufacturerMultiSelect
+                    selected={values.manufacturers}
+                    known={knownManufacturers}
+                    onToggle={toggleManufacturer}
+                    onAdd={(m) => {
+                      if (!values.manufacturers.includes(m)) {
+                        setField("manufacturers", [...values.manufacturers, m]);
+                      }
+                    }}
+                    onRemove={(m) =>
+                      setField("manufacturers", values.manufacturers.filter((x) => x !== m))
+                    }
+                  />
+                </div>
                 <div>
                   <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
                     Rep kind
@@ -357,6 +366,18 @@ export function OemContactModal({
               <FieldInput label="Region" value={values.region} onChange={(v) => setField("region", v)} />
               <FieldInput label="Territory" value={values.territory} onChange={(v) => setField("territory", v)} />
             </div>
+            <label className="flex items-start gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-soft)]/40 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={values.anchor_commission}
+                onChange={(e) => setField("anchor_commission", e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--anchor-green)]"
+              />
+              <span>
+                <span className="font-semibold text-[var(--anchor-deep)]">Anchor commission</span>
+                <span className="block text-[11px] text-[var(--anchor-gray)]">On an Anchor commission arrangement.</span>
+              </span>
+            </label>
           </div>
         </div>
 

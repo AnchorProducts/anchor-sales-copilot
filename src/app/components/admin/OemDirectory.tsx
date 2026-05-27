@@ -35,6 +35,7 @@ type Contact = {
   title: string | null;
   territory: string | null;
   region: string | null;
+  anchor_commission: boolean | null;
   signed_up: boolean;
   profile_id: string | null;
   profile_role: string | null;
@@ -133,6 +134,7 @@ export function OemDirectory() {
       title: c.title || "",
       territory: c.territory || "",
       region: c.region || "",
+      anchor_commission: !!c.anchor_commission,
     };
   }
 

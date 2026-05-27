@@ -720,7 +720,7 @@ export default function ReportsPage() {
         subtitle={meta.subtitle}
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
-          { label: "Analytics", href: "/admin/analytics" },
+          { label: "OEM Analytics", href: "/admin/analytics" },
         ]}
       />
       <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">

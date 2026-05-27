@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import { buildWeeklyOemMatrixPdf, buildWeeklyUserAnalyticsPdf } from "@/lib/analytics/weeklyReportPdfs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,42 +13,21 @@ function mustGetEnv(name: string) {
 }
 
 function parseRecipients(v: string) {
-  return v
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function startOfWeekUTC(d: Date) {
-  // Monday 00:00:00 UTC
-  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = date.getUTCDay(); // 0=Sun,1=Mon...
-  const diffToMonday = (day + 6) % 7; // Monday->0, Sunday->6
-  date.setUTCDate(date.getUTCDate() - diffToMonday);
-  date.setUTCHours(0, 0, 0, 0);
-  return date;
-}
-
-function fmtISO(d: Date) {
-  return d.toISOString();
+  return v.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export async function GET(req: Request) {
   try {
     // --- protect this endpoint (cron only) ---
     const secret = mustGetEnv("CRON_SECRET");
-    const url = new URL(req.url);
-    const provided = url.searchParams.get("secret") || "";
+    const provided = new URL(req.url).searchParams.get("secret") || "";
     if (provided !== secret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Tolerate emails-disabled mode: if either env is missing, do the
-    // analytics aggregation + retention cleanup but skip the email.
     const resendKey = (process.env.RESEND_API_KEY || "").trim();
 
-    // Prefer recipients from admin-managed notification_settings table.
-    // Fall back to WEEKLY_REPORT_TO env var for legacy deployments.
+    // Recipients: admin-managed table, falling back to the env var.
     let recipients: string[] = [];
     try {
       const { data } = await supabaseAdmin
@@ -65,149 +45,39 @@ export async function GET(req: Request) {
     }
 
     const emailsEnabled = !!resendKey && recipients.length > 0;
-    const resend = emailsEnabled ? new Resend(resendKey) : null;
-    const to = recipients;
-
-    // Report window: previous full week (Mon->Mon UTC)
-    const now = new Date();
-    const thisWeekStart = startOfWeekUTC(now);
-    const lastWeekStart = new Date(thisWeekStart);
-    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
-
-    const start = fmtISO(lastWeekStart);
-    const end = fmtISO(thisWeekStart);
 
     // Retention: keep user_events for 90 days, prune older rows.
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     await supabaseAdmin.from("user_events").delete().lt("created_at", ninetyDaysAgo);
 
-    // -----------------------------
-    // Messages (your existing table)
-    // -----------------------------
-    // Assumes: public.messages has columns: user_id, conversation_id, role, content, created_at
-    const { data: msgRows, error: msgErr } = await supabaseAdmin
-      .from("messages")
-      .select("user_id, conversation_id, role, content, created_at")
-      .gte("created_at", start)
-      .lt("created_at", end);
-
-    if (msgErr) throw msgErr;
-
-    const msgs = msgRows || [];
-    const userMsgs = msgs.filter((m) => m.role === "user");
-    const assistantMsgs = msgs.filter((m) => m.role === "assistant");
-
-    const uniqueUsers = new Set(msgs.map((m) => m.user_id).filter(Boolean));
-    const uniqueConvos = new Set(msgs.map((m) => m.conversation_id).filter(Boolean));
-
-    // Top “questions” (very simple: most recent distinct user messages, capped)
-    const topUserTexts = Array.from(
-      new Map(
-        userMsgs
-          .slice()
-          .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))
-          .map((m) => [String(m.content || "").trim().toLowerCase(), m])
-      ).values()
-    )
-      .map((m) => String(m.content || "").trim())
-      .filter(Boolean)
-      .slice(0, 10);
-
-    // -----------------------------
-    // Doc opens (from doc-event)
-    // -----------------------------
-    // Assumes: public.doc_events has columns like:
-    // user_id, conversation_id, doc_path, doc_title, doc_type, doc_url, created_at
-    const { data: docRows, error: docErr } = await supabaseAdmin
-      .from("doc_events")
-      .select("user_id, conversation_id, doc_path, doc_title, doc_type, created_at")
-      .gte("created_at", start)
-      .lt("created_at", end);
-
-    // If table doesn’t exist yet, don’t hard-fail the whole report
-    const docEvents = docErr ? [] : (docRows || []);
-
-    const docOpens = docEvents.length;
-    const uniqueDocs = new Set(docEvents.map((d) => d.doc_path).filter(Boolean));
-
-    // Top opened docs
-    const docCounts = new Map<string, { title: string; type: string; count: number }>();
-    for (const d of docEvents) {
-      const key = d.doc_path || "—";
-      const prev = docCounts.get(key) || {
-        title: d.doc_title || d.doc_path || "—",
-        type: d.doc_type || "doc",
-        count: 0,
-      };
-      prev.count += 1;
-      docCounts.set(key, prev);
-    }
-    const topDocs = Array.from(docCounts.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 10);
-
-    // Format email (keep it readable)
-    const subject = `Anchor Sales Co-Pilot — Weekly Usage Report (${start.slice(0, 10)} → ${end.slice(0, 10)})`;
-
-    const lines: string[] = [];
-    lines.push(`Weekly Usage Report`);
-    lines.push(`Window: ${start} → ${end}`);
-    lines.push(``);
-    lines.push(`MESSAGES`);
-    lines.push(`• Total messages: ${msgs.length}`);
-    lines.push(`• User messages: ${userMsgs.length}`);
-    lines.push(`• Assistant messages: ${assistantMsgs.length}`);
-    lines.push(`• Unique users: ${uniqueUsers.size}`);
-    lines.push(`• Active conversations: ${uniqueConvos.size}`);
-    lines.push(``);
-    lines.push(`DOC OPENS`);
-    lines.push(`• Doc opens: ${docOpens}`);
-    lines.push(`• Unique docs opened: ${uniqueDocs.size}`);
-    lines.push(``);
-
-    if (topDocs.length) {
-      lines.push(`TOP OPENED DOCS`);
-      for (const [path, meta] of topDocs) {
-        lines.push(`• (${meta.count}x) ${meta.title} — ${meta.type} — ${path}`);
-      }
-      lines.push(``);
-    }
-
-    if (topUserTexts.length) {
-      lines.push(`RECENT UNIQUE USER QUESTIONS (sample)`);
-      for (const t of topUserTexts) lines.push(`• ${t}`);
-      lines.push(``);
-    }
-
-    if (docErr) {
-      lines.push(`NOTE`);
-      lines.push(`• doc_events query error: ${String((docErr as any)?.message || docErr)}`);
-      lines.push(``);
-    }
-
-    const text = lines.join("\n");
-
-    if (resend && to.length > 0) {
+    if (emailsEnabled) {
+      // The report is the two analytics PDFs over the last 7 days, no filters.
+      const [matrixPdf, userPdf] = await Promise.all([
+        buildWeeklyOemMatrixPdf(),
+        buildWeeklyUserAnalyticsPdf(),
+      ]);
+      const resend = new Resend(resendKey);
+      const today = new Date().toISOString().slice(0, 10);
       await resend.emails.send({
         from: "Anchor Co-Pilot <reports@anchorp.com>",
-        to,
-        subject,
-        text,
+        to: recipients,
+        subject: `Anchor Sales Co-Pilot — Weekly Analytics (last 7 days, ${today})`,
+        text:
+          "Attached are this week's analytics, covering the last 7 days:\n\n" +
+          "• OEM Matrix — manufacturer rep & consultant engagement\n" +
+          "• User Analytics — internal staff & other app users\n",
+        attachments: [
+          { filename: `oem-matrix_last-7-days_${today}.pdf`, content: matrixPdf },
+          { filename: `user-analytics_last-7-days_${today}.pdf`, content: userPdf },
+        ],
       });
     }
 
     return NextResponse.json(
-      {
-        ok: true,
-        start,
-        end,
-        sentTo: emailsEnabled ? to : [],
-        emailSent: emailsEnabled,
-        totals: { msgs: msgs.length, docOpens },
-      },
-      { status: 200 }
+      { ok: true, sentTo: emailsEnabled ? recipients : [], emailSent: emailsEnabled },
+      { status: 200 },
     );
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
 }
