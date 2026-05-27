@@ -420,13 +420,8 @@ export default function LeadForm() {
   return (
     <form onSubmit={submit}>
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
-        <div className="text-sm font-semibold text-black">{t("projectIdentifierTitle")}</div>
-        <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-          Share project opportunities, contacts to follow up with, notes and photos and an Anchor Products representative will handle the rest. Next steps, sit back while a team of rooftop equipment experts increase your commissions, customer satisfaction and ensures your customers are secure during the storms ahead.
-        </div>
-
         {profile && (
-          <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
+          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
             <button
               type="button"
               onClick={() => setSubmittedByExpanded((v) => !v)}
