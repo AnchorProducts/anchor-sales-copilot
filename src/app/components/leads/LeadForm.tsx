@@ -81,6 +81,36 @@ const SOLUTION_SECTIONS_WITH_OTHER = [
   { heading: "Other", options: ["Other"] },
 ];
 
+// Commission-claim-only options (mirrors CommissionForm) for the optional
+// "also file my Anchor commission claim" section.
+const U_ANCHOR_OPTIONS = [
+  "U2000 KEE", "U2000 PVC", "U2000 TPO", "U2200 Plate", "U2400 EPDM", "U2400 KEE",
+  "U2400 PVC", "U2400 TPO", "U2600 APP", "U2600 SBS", "U2600 SBS Torch", "U2800 Coatings",
+  "U3200 Plate", "U3400 EPDM", "U3400 KEE", "U3400 PVC", "U3400 TPO", "U3600 APP",
+  "U3600 SBS", "U3600 SBS Torch", "U3800 Coatings",
+];
+const OTHER_ITEMS = SOLUTION_CATALOG.map((s) => s.label);
+
+type ClaimState = {
+  certified: boolean;
+  disclosure: "" | "correct" | "multiple";
+  additional_salespeople: string;
+  estimated_order_date: string;
+  u_anchors_ordered: string[];
+  qty: string;
+  other_items: string[];
+};
+
+const INITIAL_CLAIM: ClaimState = {
+  certified: false,
+  disclosure: "",
+  additional_salespeople: "",
+  estimated_order_date: "",
+  u_anchors_ordered: [],
+  qty: "",
+  other_items: [],
+};
+
 function clean(v: string) {
   return v.trim();
 }
@@ -123,12 +153,13 @@ export default function LeadForm() {
         .select("full_name,company,phone,email")
         .eq("id", user.id)
         .maybeSingle();
-      const resolved: UserProfile = data
+      const row = data as { full_name?: string | null; company?: string | null; phone?: string | null; email?: string | null } | null;
+      const resolved: UserProfile = row
         ? {
-            full_name: (data as any).full_name || null,
-            company: (data as any).company || null,
-            phone: (data as any).phone || null,
-            email: (data as any).email || user.email || null,
+            full_name: row.full_name || null,
+            company: row.company || null,
+            phone: row.phone || null,
+            email: row.email || user.email || null,
           }
         : { full_name: null, company: null, phone: null, email: user.email || null };
       setProfile(resolved);
@@ -156,6 +187,14 @@ export default function LeadForm() {
   const [timelinePos, setTimelinePos] = useState(50);
   const timelineIdx = Math.min(TIMELINE_OPTIONS.length - 1, Math.floor(timelinePos / 100));
   const timelineSlug = TIMELINE_OPTIONS[timelineIdx].value;
+
+  // Anchor commission: any user can file a commission claim with this consult.
+  const [fileCommission, setFileCommission] = useState(false);
+  const [claim, setClaim] = useState<ClaimState>(INITIAL_CLAIM);
+
+  function updateClaim<K extends keyof ClaimState>(key: K, value: ClaimState[K]) {
+    setClaim((c) => ({ ...c, [key]: value }));
+  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -221,6 +260,11 @@ export default function LeadForm() {
         const label = entry.solution_key === "other" ? (clean(entry.other_label) || "Other") : entry.solution_label;
         return `Add at least one photo or video for ${label}.`;
       }
+    }
+
+    if (fileCommission) {
+      if (!claim.certified) return "Please certify the commission claim before submitting.";
+      if (!claim.disclosure) return "Confirm the salesperson disclosure for the commission claim.";
     }
 
     return null;
@@ -305,7 +349,51 @@ export default function LeadForm() {
         // aggregation (analytics phase 2 will populate this).
         oem: null,
       });
-      setSuccess("Consult submitted. Thanks!");
+
+      // Anchor commission: file the claim alongside the consult, reusing the
+      // REC's project/roof/address fields and the inline claim-only inputs.
+      let claimNote = "";
+      if (fileCommission) {
+        try {
+          const cRes = await fetch("/api/commission", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              certified: claim.certified,
+              unaware_other_salesperson:
+                claim.disclosure === "correct" ? "yes" : claim.disclosure === "multiple" ? "no" : null,
+              additional_salespeople: claim.disclosure === "multiple" ? claim.additional_salespeople : null,
+              estimated_order_date: claim.estimated_order_date || null,
+              job_name: form.project_name,
+              company_placing_order: form.project_name, // reused from the REC
+              order_city: form.city,
+              order_state: form.state,
+              u_anchors_ordered: claim.u_anchors_ordered.join(", "),
+              qty: claim.qty,
+              roof_type: form.roof_type.join(", "),
+              roof_brand: form.roof_brand.join(", "),
+              other_items: claim.other_items.join(", "),
+              ship_to_address: form.project_address,
+              ship_city: form.city,
+              ship_state: form.state,
+              ship_zip: form.zip,
+              project_description: followUp,
+            }),
+          });
+          const cJson = await cRes.json().catch(() => ({}));
+          if (!cRes.ok) {
+            claimNote = ` Note: the consult saved, but the commission claim failed (${cJson?.error || "unknown error"}). You can file it from the Commission Claim form.`;
+          } else if (cJson?.emailStatus === "failed" || cJson?.emailStatus === "skipped") {
+            claimNote = " Commission claim filed (recipient email pending).";
+          } else {
+            claimNote = " Commission claim filed.";
+          }
+        } catch {
+          claimNote = " Note: the consult saved, but the commission claim could not be filed. You can file it from the Commission Claim form.";
+        }
+      }
+
+      setSuccess("Consult submitted. Thanks!" + claimNote);
       setForm({
         project_name: "",
         project_address: "",
@@ -320,9 +408,11 @@ export default function LeadForm() {
       setContractors([]);
       setFollowUp("");
       setTimelinePos(50);
+      setFileCommission(false);
+      setClaim(INITIAL_CLAIM);
       setSubmitting(false);
-    } catch (e: any) {
-      setError(e?.message || "Failed to submit consult.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to submit consult.");
       setSubmitting(false);
     }
   }
@@ -608,8 +698,76 @@ export default function LeadForm() {
           </div>
         </div>
 
+        <div className="mt-5 rounded-[14px] border border-[var(--anchor-green)]/40 bg-[var(--anchor-mint)]/20 p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={fileCommission}
+                onChange={(e) => setFileCommission(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span className="text-sm">
+                <span className="font-semibold text-[var(--anchor-deep)]">Also file my Anchor commission claim</span>
+                <span className="mt-0.5 block text-xs text-[var(--anchor-gray)]">
+                  We&apos;ll reuse this consult&apos;s project, roof, and address details — just add the few claim-specific fields below.
+                </span>
+              </span>
+            </label>
+
+            {fileCommission && (
+              <div className="mt-4 grid gap-5">
+                <label className="flex cursor-pointer items-start gap-3 rounded-[14px] border border-black/10 bg-white p-4">
+                  <input type="checkbox" checked={claim.certified} onChange={(e) => updateClaim("certified", e.target.checked)} className="mt-0.5 shrink-0" />
+                  <span className="text-sm">{t("certifyText")}</span>
+                </label>
+
+                <div className="rounded-[14px] border border-black/10 bg-white p-4">
+                  <div className="text-sm">I am not aware of any additional salesperson or entity that had a role in securing this sale.</div>
+                  <div className="mt-3 grid gap-2 text-sm">
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input type="radio" name="rec_disclosure" className="mt-1" checked={claim.disclosure === "correct"} onChange={() => updateClaim("disclosure", "correct")} />
+                      <span>Correct</span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input type="radio" name="rec_disclosure" className="mt-1" checked={claim.disclosure === "multiple"} onChange={() => updateClaim("disclosure", "multiple")} />
+                      <span>There were multiple salespeople involved – List Additional Salespeople</span>
+                    </label>
+                    {claim.disclosure === "multiple" && (
+                      <Textarea
+                        value={claim.additional_salespeople}
+                        onChange={(e) => updateClaim("additional_salespeople", e.target.value)}
+                        className="min-h-[80px] px-3 py-2 text-sm"
+                        placeholder="List the additional salesperson(s) or entities that had a role in securing this sale."
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold">{t("estimatedOrderDate")}</span>
+                  <Input type="date" value={claim.estimated_order_date} onChange={(e) => updateClaim("estimated_order_date", e.target.value)} className="block min-h-[44px] w-full min-w-0 max-w-full px-3 py-2 text-sm" />
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold">{t("uAnchorsOrdered")}</span>
+                  <MultiSelect options={U_ANCHOR_OPTIONS} value={claim.u_anchors_ordered} onChange={(v) => updateClaim("u_anchors_ordered", v)} placeholder={t("selectUAnchors")} />
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold">Approximate Quantity Ordered</span>
+                  <Input value={claim.qty} onChange={(e) => updateClaim("qty", e.target.value)} className="h-10 px-3 text-sm" placeholder="Approximate quantity ordered" />
+                </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="font-semibold">Other Items</span>
+                  <MultiSelect options={OTHER_ITEMS} value={claim.other_items} onChange={(v) => updateClaim("other_items", v)} placeholder="Select other items" />
+                </label>
+              </div>
+            )}
+          </div>
+
         {error && <Alert className="mt-4" tone="error">{error}</Alert>}
-        {success && <Alert className="mt-4" tone="success">{t("leadSubmittedThanks")}</Alert>}
+        {success && <Alert className="mt-4" tone="success">{success}</Alert>}
 
         <div className="mt-5">
           <Button type="submit" disabled={submitting} className="w-full py-3 text-sm sm:w-auto sm:px-6" variant="primary">
