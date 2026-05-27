@@ -18,6 +18,7 @@ type ProfileRow = {
   company: string | null;
   role: string | null;
   service_state: string | null;
+  anchor_commission?: boolean | null;
 };
 
 type ContactRow = {
@@ -157,7 +158,7 @@ export default function AdminUsersPage() {
         title: c.title ?? "",
         territory: c.territory ?? "",
         region: c.region ?? "",
-        anchorCommission: !!c.anchor_commission,
+        anchorCommission: !!c.anchor_commission || !!prof?.anchor_commission,
         role: prof?.role ?? c.profile_role ?? null,
         serviceState: prof?.service_state ?? null,
         signedUp: c.signed_up,
@@ -184,7 +185,7 @@ export default function AdminUsersPage() {
         title: "",
         territory: "",
         region: "",
-        anchorCommission: false,
+        anchorCommission: !!p.anchor_commission,
         role: p.role ?? null,
         serviceState: p.service_state ?? null,
         signedUp: true,

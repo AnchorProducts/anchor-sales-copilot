@@ -513,8 +513,12 @@ export default function DashboardPage() {
     }
 
     if (roleReady && isAdmin) {
-      actions.push({ key: "admin",    href: "/admin",                  label: "Admin Console",      desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield",  badge: "Admin"   });
-      actions.push({ key: "reports",  href: "/admin/rooftop-reports",  label: "Assessment Reports", desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
+      // Admins get every user-facing option in addition to the admin tools.
+      actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"), desc: t("projectIdentifierDesc"),                 icon: "clipboard", badge: "Projects"   });
+      actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),   desc: t("commissionClaimDesc"),                   icon: "wallet",    badge: "Commission" });
+      actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),  desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
+      actions.push({ key: "admin",      href: "/admin",                        label: "Admin Console",        desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield", badge: "Admin" });
+      actions.push({ key: "reports",    href: "/admin/rooftop-reports",        label: "Assessment Reports",   desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
     }
   }
 
