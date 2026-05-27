@@ -2,41 +2,24 @@
 
 import { useEffect } from "react";
 
-export type DetailUserRow = {
-  id: string;
-  full_name: string | null;
-  email: string;
-  role?: string | null;
-  manufacturer?: string | null;
-  events: {
-    total7: number;
-    total30: number;
-    lastSeen: string | null;
-  };
+export type OemPerson = {
+  key: string;
+  name: string;
+  email: string | null;
+  type: string; // Sales rep / Tech rep / Consultant
+  oems: string[];
+  signedUp: boolean;
+  uses: number;
+  leads: number;
+  reports: number;
+  profileId: string | null;
 };
 
-function fmtRelative(iso: string | null): string {
-  if (!iso) return "Never";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.floor(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return `${Math.floor(d / 7)}w ago`;
-}
-
-function isInternal(u: DetailUserRow) {
-  return u.role === "anchor_rep" || u.role === "admin";
-}
-
-export function HeadlineDetailModal({
+export function OemPeopleModal({
   open,
   title,
   subtitle,
-  users,
+  people,
   emptyMessage,
   onClose,
   onDownloadPdf,
@@ -44,10 +27,10 @@ export function HeadlineDetailModal({
   open: boolean;
   title: string;
   subtitle?: string;
-  users: DetailUserRow[];
+  people: OemPerson[];
   emptyMessage: string;
   onClose: () => void;
-  onDownloadPdf?: (id: string) => void;
+  onDownloadPdf?: (p: OemPerson) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -74,13 +57,10 @@ export function HeadlineDetailModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:max-w-2xl sm:rounded-3xl">
-        {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border-default)] px-5 py-4 sm:px-6">
           <div>
             <h3 className="text-lg font-bold text-[var(--anchor-deep)] sm:text-xl">{title}</h3>
-            {subtitle && (
-              <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">{subtitle}</p>
-            )}
+            {subtitle && <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">{subtitle}</p>}
           </div>
           <button
             type="button"
@@ -95,51 +75,50 @@ export function HeadlineDetailModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
-          {users.length === 0 ? (
+          {people.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-[var(--border-default)] p-8 text-center text-sm text-[var(--anchor-gray)]">
               {emptyMessage}
             </div>
           ) : (
             <ul className="divide-y divide-[var(--border-default)]">
-              {users.map((u) => (
-                <li key={u.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
+              {people.map((p) => (
+                <li key={p.key} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <span className="truncate text-sm font-semibold text-[var(--anchor-deep)] sm:text-base">
-                        {u.full_name || u.email}
+                        {p.name}
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                          isInternal(u)
-                            ? "bg-[var(--anchor-mint)]/50 text-[var(--anchor-deep)]"
-                            : "bg-[var(--surface-soft)] text-[var(--anchor-gray)]"
-                        }`}
-                      >
-                        {isInternal(u) ? "Internal" : "External"}
+                      <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#1e3a8a]">
+                        {p.type}
                       </span>
-                      {u.manufacturer && (
-                        <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
-                          {u.manufacturer}
+                      {p.oems.slice(0, 3).map((o) => (
+                        <span key={o} className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
+                          {o}
+                        </span>
+                      ))}
+                      {p.oems.length > 3 && (
+                        <span className="text-[10px] text-[var(--anchor-gray)]">+{p.oems.length - 3}</span>
+                      )}
+                      {!p.signedUp && (
+                        <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black/55">
+                          Not signed up
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 truncate text-xs text-[var(--anchor-gray)]">
-                      {u.email}
-                      {u.events.lastSeen && ` · last seen ${fmtRelative(u.events.lastSeen)}`}
-                    </div>
+                    <div className="mt-0.5 truncate text-xs text-[var(--anchor-gray)]">{p.email || "no email"}</div>
                   </div>
                   <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
                     <div className="flex shrink-0 items-center gap-4 text-center">
-                      <Stat label="7d" value={u.events.total7} />
-                      <Stat label="30d" value={u.events.total30} />
+                      <Stat label="uses" value={p.uses} />
+                      <Stat label="leads" value={p.leads} />
+                      <Stat label="reps" value={p.reports} />
                     </div>
-                    {onDownloadPdf && (
+                    {onDownloadPdf && p.signedUp && p.profileId && (
                       <button
                         type="button"
-                        data-track-id="headline-detail-pdf"
-                        onClick={() => onDownloadPdf(u.id)}
+                        data-track-id="oem-people-modal-pdf"
+                        onClick={() => onDownloadPdf(p)}
                         className="shrink-0 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] hover:bg-[var(--anchor-green)] hover:text-white"
                       >
                         PDF
@@ -152,8 +131,8 @@ export function HeadlineDetailModal({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-5 py-3 sm:px-6">
+        <div className="flex items-center justify-between border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-5 py-3 sm:px-6">
+          <span className="text-xs text-[var(--anchor-gray)]">{people.length} {people.length === 1 ? "person" : "people"}</span>
           <button
             type="button"
             onClick={onClose}
@@ -170,9 +149,7 @@ export function HeadlineDetailModal({
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <div className="text-sm font-bold tabular-nums text-[var(--anchor-deep)]">
-        {value.toLocaleString()}
-      </div>
+      <div className="text-sm font-bold tabular-nums text-[var(--anchor-deep)]">{value.toLocaleString()}</div>
       <div className="text-[10px] uppercase tracking-wide text-[var(--anchor-gray)]">{label}</div>
     </div>
   );

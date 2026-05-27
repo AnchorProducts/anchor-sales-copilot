@@ -26,19 +26,19 @@ type AdminCard = {
 
 const CARDS: AdminCard[] = [
   {
-    title: "Analytics",
-    description: "One-stop dashboard for internal, external, and manufacturer user activity. Download summary or per-user PDFs.",
+    title: "OEM Analytics",
+    description: "Manufacturer rep & consultant engagement: the OEM matrix, adoption and usage by OEM, with a matrix PDF export.",
     badge: "Analytics",
     href: "/admin/analytics",
     icon: "chart",
     featured: true,
   },
   {
-    title: "OEM Matrix",
-    description: "Per-manufacturer engagement split by sales reps, tech reps, and consultants — downloads, weekly usage, and projects submitted.",
+    title: "User Analytics",
+    description: "Everyone who isn't an OEM rep or consultant — internal Anchor staff and other signed-up users, with per-user activity PDFs.",
     badge: "Analytics",
-    href: "/admin/oem-matrix",
-    icon: "grid",
+    href: "/admin/user-analytics",
+    icon: "users",
   },
   {
     title: "Users",
@@ -53,13 +53,6 @@ const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/sales-reps",
     icon: "phone",
-  },
-  {
-    title: "Contacts",
-    description: "Manufacturer reps and independent consultants in one directory. Filter by type or OEM, see who's signed up, and export activity.",
-    badge: "Analytics",
-    href: "/admin/manufacturer-contacts",
-    icon: "briefcase",
   },
   {
     title: "Notifications",

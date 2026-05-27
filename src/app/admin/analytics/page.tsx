@@ -1,31 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
-import { OemScorecard } from "@/app/components/admin/OemScorecard";
-import { DormantUsersPanel } from "@/app/components/admin/DormantUsersPanel";
-import { OemHeadToHead } from "@/app/components/admin/OemHeadToHead";
-import { PeopleDirectory } from "@/app/components/admin/PeopleDirectory";
-import { OemMatrixBars, type MatrixBarRow } from "@/app/components/admin/OemMatrixBars";
+import { generateUserEventLogPdf } from "@/lib/analytics/userEventLogPdf";
+import { OemMatrixTable } from "@/app/components/admin/OemMatrixTable";
+import { MatrixFilterMenu, dayLabel } from "@/app/components/admin/MatrixFilterMenu";
+import { PeopleDirectory, type DirectoryPdfTarget } from "@/app/components/admin/PeopleDirectory";
+import { OemPeopleModal, type OemPerson } from "@/app/components/admin/OemPeopleModal";
 import {
+  computeTotals,
   generateFullAnalyticsPdf,
+  type MatrixGroup,
   type MatrixPdfPayload,
-  type MatrixPdfFilters,
 } from "@/lib/analytics/oemMatrixPdf";
-import {
-  HeadlineDetailModal,
-  type DetailUserRow,
-} from "@/app/components/admin/HeadlineDetailModal";
-import {
-  generateAllOemsReportPdf,
-  generateSingleOemReportPdf,
-  type OemReportPayload,
-} from "@/lib/analytics/oemReportPdf";
+
+const PEOPLE_DAY_OPTIONS = [7, 14, 30, 90].map((value) => ({ value, label: dayLabel(value) }));
+const GROUP_LABEL: Record<MatrixGroup, string> = { sales: "Sales rep", tech: "Tech rep", consultant: "Consultant" };
+const ALL_GROUPS: MatrixGroup[] = ["sales", "tech", "consultant"];
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +38,7 @@ type UserRow = {
   created_at: string | null;
   role: string | null;
   manufacturer: string | null;
+  contact_type: string | null; // set only for OEM roster members (rep/consultant)
   conversationCount: number;
   leadCount: number;
   reports: Array<{ id: string; flags_count: number | null }>;
@@ -71,15 +67,19 @@ export default function AdminAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [oemContactCounts, setOemContactCounts] = useState<Record<string, number>>({});
   const [matrix, setMatrix] = useState<MatrixPdfPayload | null>(null);
-  const [exportManufacturer, setExportManufacturer] = useState<string>("all");
-  const [exportGroup, setExportGroup] = useState<string>("all");
+  const [matrixManufacturers, setMatrixManufacturers] = useState<string[]>([]);
+  const [matrixGroups, setMatrixGroups] = useState<MatrixGroup[]>([]);
+  const [matrixDays, setMatrixDays] = useState<number>(30);
+  // Time window for the Reps & consultants directory + its PDF exports. Kept
+  // separate from the matrix window so changing it doesn't reload the matrix.
+  const [peopleDays, setPeopleDays] = useState<number>(30);
+  const usersLoadedRef = useRef(false);
 
   const [detail, setDetail] = useState<
-    | { kind: "contributors" }
-    | { kind: "active" }
-    | { kind: "dormant" }
+    | { kind: "activity" }
+    | { kind: "signedup" }
+    | { kind: "noprojects" }
     | null
   >(null);
 
@@ -103,14 +103,16 @@ export default function AdminAnalyticsPage() {
     return () => { alive = false; };
   }, [router, supabase]);
 
-  // Fetch unified user-activity payload.
+  // Fetch unified user-activity payload, windowed by the people directory's
+  // time selection. Only blank the page on the first load — later window
+  // changes swap data in place so the matrix doesn't flicker.
   useEffect(() => {
     if (!ready || accessError) return;
     let alive = true;
     (async () => {
-      setLoading(true);
+      if (!usersLoadedRef.current) setLoading(true);
       setLoadErr(null);
-      const res = await fetch("/api/admin/user-activity?category=all", {
+      const res = await fetch(`/api/admin/user-activity?category=all&days=${peopleDays}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -122,18 +124,19 @@ export default function AdminAnalyticsPage() {
         return;
       }
       setUsers((body?.users ?? []) as UserRow[]);
-      setOemContactCounts((body?.oemContactCounts ?? {}) as Record<string, number>);
+      usersLoadedRef.current = true;
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, [ready, accessError]);
+  }, [ready, accessError, peopleDays]);
 
-  // Per-manufacturer matrix (sales/tech/consultant) for the CEO graphs.
+  // Per-manufacturer matrix (sales/tech/consultant), recomputed by the server
+  // over the selected time window.
   useEffect(() => {
     if (!ready || accessError) return;
     let alive = true;
     (async () => {
-      const res = await fetch("/api/admin/oem-matrix", { credentials: "include", cache: "no-store" });
+      const res = await fetch(`/api/admin/oem-matrix?days=${matrixDays}`, { credentials: "include", cache: "no-store" });
       const body = await res.json().catch(() => ({}));
       if (!alive || !res.ok) return;
       setMatrix({
@@ -144,121 +147,115 @@ export default function AdminAnalyticsPage() {
       } as MatrixPdfPayload);
     })();
     return () => { alive = false; };
-  }, [ready, accessError]);
+  }, [ready, accessError, matrixDays]);
 
-  // Shape the matrix into per-metric bar datasets, segmented by group.
-  const matrixBars = useMemo(() => {
-    const rows = matrix?.rows ?? [];
-    const build = (pick: (c: { downloaded: number; usesPerWeek: number; leads30: number; reports30: number }) => number): MatrixBarRow[] =>
-      rows.map((r) => ({
-        manufacturer: r.manufacturer,
-        vals: { sales: pick(r.groups.sales), tech: pick(r.groups.tech), consultant: pick(r.groups.consultant) },
-      }));
-    return {
-      adoption: build((c) => c.downloaded),
-      usage: build((c) => c.usesPerWeek),
-      leads: build((c) => c.leads30),
-      reports: build((c) => c.reports30),
-    };
-  }, [matrix]);
+  // Matrix narrowed to the selected manufacturers (empty = all). The Type filter
+  // is applied at render time (column subset), so totals stay correct per group.
+  const filteredMatrix = useMemo(() => {
+    if (!matrix) return null;
+    const rows =
+      matrixManufacturers.length === 0
+        ? matrix.rows
+        : matrix.rows.filter((r) => matrixManufacturers.includes(r.manufacturer));
+    return { rows, totals: computeTotals(rows) };
+  }, [matrix, matrixManufacturers]);
 
-  function exportFilters(): MatrixPdfFilters {
-    return { manufacturer: exportManufacturer, group: exportGroup };
+  // Headline metrics summarise the matrix as currently filtered (manufacturers,
+  // types, and time window), so the KPI strip is a live readout of the matrix.
+  const matrixSummary = useMemo(() => {
+    const t = filteredMatrix?.totals;
+    const groups: MatrixGroup[] = matrixGroups.length ? matrixGroups : ["sales", "tech", "consultant"];
+    let signedUp = 0, notSignedUp = 0, uses = 0, notReporting = 0, leads = 0, reports = 0;
+    if (t) {
+      for (const g of groups) {
+        const c = t[g];
+        if (!c) continue;
+        signedUp += c.downloaded;
+        notSignedUp += c.notDownloaded;
+        uses += c.uses;
+        notReporting += c.notReporting;
+        leads += c.leads;
+        reports += c.reports;
+      }
+    }
+    const contacts = signedUp + notSignedUp;
+    const activationPct = contacts > 0 ? Math.round((signedUp / contacts) * 100) : 0;
+    return { signedUp, notSignedUp, contacts, uses, notReporting, leads, reports, projects: leads + reports, activationPct };
+  }, [filteredMatrix, matrixGroups]);
+
+  const profileIdByEmail = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of users) if (u.email) m.set(u.email.toLowerCase(), u.id);
+    return m;
+  }, [users]);
+
+  // The people behind the matrix cards — deduped across the filtered rows and
+  // selected groups, so the KPI cards drill into exactly who they count.
+  const matrixPeople = useMemo<OemPerson[]>(() => {
+    const groups = matrixGroups.length ? matrixGroups : ALL_GROUPS;
+    const map = new Map<string, OemPerson>();
+    for (const r of filteredMatrix?.rows ?? []) {
+      for (const g of groups) {
+        for (const p of r.groups[g].people) {
+          const key = `${(p.email || p.name).toLowerCase()}|${g}`;
+          const existing = map.get(key);
+          if (existing) {
+            if (!existing.oems.includes(r.manufacturer)) existing.oems.push(r.manufacturer);
+          } else {
+            map.set(key, {
+              key,
+              name: p.name,
+              email: p.email,
+              type: GROUP_LABEL[g],
+              oems: [r.manufacturer],
+              signedUp: p.signedUp,
+              uses: p.uses,
+              leads: p.leads,
+              reports: p.reports,
+              profileId: p.email ? profileIdByEmail.get(p.email.toLowerCase()) ?? null : null,
+            });
+          }
+        }
+      }
+    }
+    return [...map.values()];
+  }, [filteredMatrix, matrixGroups, profileIdByEmail]);
+
+  const detailPeople = useMemo<OemPerson[]>(() => {
+    if (detail?.kind === "activity") return matrixPeople.filter((p) => p.signedUp && p.uses > 0).sort((a, b) => b.uses - a.uses);
+    if (detail?.kind === "signedup") return matrixPeople.filter((p) => p.signedUp).sort((a, b) => b.uses - a.uses);
+    if (detail?.kind === "noprojects") return matrixPeople.filter((p) => p.signedUp && p.leads + p.reports === 0).sort((a, b) => b.uses - a.uses);
+    return [];
+  }, [detail, matrixPeople]);
+
+  // Load a rep/consultant's events in the current window for the inline drill-down.
+  async function loadUserEvents(profileId: string): Promise<Array<{ at: string; type: string; detail: string }>> {
+    const res = await fetch(`/api/admin/user-events?userId=${profileId}&days=${peopleDays}`, { credentials: "include", cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return [];
+    return (body?.events ?? []) as Array<{ at: string; type: string; detail: string }>;
   }
 
-  // Headline metrics. Compare this-week totals to a baseline made from the
-  // prior 3 weeks (days 8-30). Gives a single +/-% delta that reads naturally.
-  const headline = useMemo(() => {
-    const total7 = users.reduce((s, u) => s + u.events.total7, 0);
-    const total30 = users.reduce((s, u) => s + u.events.total30, 0);
-    const priorWeeklyAvg = (total30 - total7) / 3;
-    const deltaPct =
-      priorWeeklyAvg > 0
-        ? Math.round(((total7 - priorWeeklyAvg) / priorWeeklyAvg) * 100)
-        : total7 > 0
-        ? 100
-        : 0;
-    const active7 = users.filter((u) => u.events.total7 > 0).length;
-    const totalSignedUp = users.length;
-    const activeRate = totalSignedUp > 0 ? Math.round((active7 / totalSignedUp) * 100) : 0;
-    // Dormant = signed-up users with no events in 14+ days OR never seen.
-    const dormant = users.filter((u) => {
-      if (!u.events.lastSeen) return true;
-      const days = (Date.now() - new Date(u.events.lastSeen).getTime()) / (1000 * 60 * 60 * 24);
-      return days > 14;
-    }).length;
-    return { total7, priorWeeklyAvg, deltaPct, active7, totalSignedUp, activeRate, dormant };
-  }, [users]);
-
-  // Per-detail-mode user lists. Computed lazily via memo so each panel only
-  // recomputes when relevant data changes.
-  const contributorsUsers = useMemo<DetailUserRow[]>(() => {
-    return [...users]
-      .filter((u) => u.events.total7 > 0)
-      .sort((a, b) => b.events.total7 - a.events.total7)
-      .slice(0, 15)
-      .map((u) => ({
-        id: u.id,
-        full_name: u.full_name,
-        email: u.email,
-        role: u.role,
-        manufacturer: u.manufacturer,
-        events: { total7: u.events.total7, total30: u.events.total30, lastSeen: u.events.lastSeen },
-      }));
-  }, [users]);
-
-  const activeUsers = useMemo<DetailUserRow[]>(() => {
-    return users
-      .filter((u) => u.events.total7 > 0)
-      .map((u) => ({
-        id: u.id,
-        full_name: u.full_name,
-        email: u.email,
-        role: u.role,
-        manufacturer: u.manufacturer,
-        events: { total7: u.events.total7, total30: u.events.total30, lastSeen: u.events.lastSeen },
-      }));
-  }, [users]);
-
-  function downloadUserPdf(u: UserRow) {
-    generateUserActivityPdf({
-      full_name: u.full_name,
-      email: u.email,
-      company: u.company,
-      phone: u.phone,
-      created_at: u.created_at,
-      conversationCount: u.conversationCount,
-      leadCount: u.leadCount,
-      reportCount: u.reports.length,
-      events: u.events,
+  // Per-user PDF: every event a rep/consultant made in the given window
+  // (defaults to the directory window; the matrix cards pass the matrix window).
+  // Works for unsigned contacts too (they simply have no activity).
+  async function downloadUserEventLog(target: DirectoryPdfTarget, windowDays: number = peopleDays) {
+    let events: Array<{ at: string; type: string; detail: string }> = [];
+    let truncated = false;
+    if (target.signedUp && target.profileId) {
+      const res = await fetch(`/api/admin/user-events?userId=${target.profileId}&days=${windowDays}`, { credentials: "include", cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) { events = (body?.events ?? []) as typeof events; truncated = !!body?.truncated; }
+    }
+    generateUserEventLogPdf({
+      name: target.name,
+      email: target.email ?? "—",
+      windowLabel: dayLabel(windowDays),
+      lastSeen: target.lastSeen,
+      signedUp: target.signedUp,
+      truncated,
+      events,
     });
-  }
-
-  function buildOemReportPayload(): OemReportPayload {
-    return {
-      users: users.map((u) => ({
-        id: u.id,
-        full_name: u.full_name,
-        email: u.email,
-        manufacturer: u.manufacturer,
-        leadCount: u.leadCount,
-        events: {
-          total7: u.events.total7,
-          total30: u.events.total30,
-          lastSeen: u.events.lastSeen,
-          byType: u.events.byType,
-        },
-      })),
-      oemContactCounts,
-    };
-  }
-
-  function downloadAllOemsPdf() {
-    generateAllOemsReportPdf(buildOemReportPayload());
-  }
-
-  function downloadOemPdf(oem: string) {
-    generateSingleOemReportPdf(oem, buildOemReportPayload());
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -266,13 +263,13 @@ export default function AdminAnalyticsPage() {
   return (
     <main className="ds-page">
       <AppNavbar
-        title="Analytics"
-        subtitle="Compare users, OEMs, and categories"
+        title="OEM Analytics"
+        subtitle="Manufacturer rep & consultant engagement"
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
           { label: "Admin Console", href: "/admin" },
+          { label: "User Analytics", href: "/admin/user-analytics" },
           { label: "Contacts", href: "/admin/manufacturer-contacts" },
-          { label: "OEM Matrix", href: "/admin/oem-matrix" },
         ]}
       />
 
@@ -286,57 +283,11 @@ export default function AdminAnalyticsPage() {
         ) : (
           <>
             {/* Page heading */}
-            <header className="mb-6 flex flex-col gap-4 sm:mb-8 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Analytics</h1>
-                <p className="mt-1 text-sm text-[var(--anchor-gray)] sm:text-base">
-                  See who’s using the app, how often, and what they’re actually doing.
-                </p>
-              </div>
-              {!loading && (
-                <div className="grid w-full grid-cols-2 items-end gap-2 lg:flex lg:w-auto lg:flex-wrap">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Manufacturer</span>
-                    <select
-                      value={exportManufacturer}
-                      onChange={(e) => setExportManufacturer(e.target.value)}
-                      className="ds-input h-9 w-full lg:w-44"
-                    >
-                      <option value="all">All manufacturers</option>
-                      {(matrix?.rows ?? []).map((r) => (
-                        <option key={r.manufacturer} value={r.manufacturer}>{r.manufacturer}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Type</span>
-                    <select
-                      value={exportGroup}
-                      onChange={(e) => setExportGroup(e.target.value)}
-                      className="ds-input h-9 w-full lg:w-40"
-                    >
-                      <option value="all">All types</option>
-                      <option value="sales">Sales reps</option>
-                      <option value="tech">Tech reps</option>
-                      <option value="consultant">Consultants</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    data-track-id="analytics-export-full"
-                    disabled={!matrix || matrix.rows.length === 0}
-                    onClick={() => matrix && generateFullAnalyticsPdf(matrix, exportFilters())}
-                    className="col-span-2 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50 lg:col-span-1"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Report PDF
-                  </button>
-                </div>
-              )}
+            <header className="mb-6 sm:mb-8">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">OEM Analytics</h1>
+              <p className="mt-1 text-sm text-[var(--anchor-gray)] sm:text-base">
+                How manufacturer reps and consultants are adopting and using the app.
+              </p>
             </header>
 
             {loadErr && (
@@ -348,195 +299,140 @@ export default function AdminAnalyticsPage() {
             ) : (
               <div className="space-y-6 sm:space-y-8">
 
-                {/* ─── Headline KPI strip ─────────────────────────────────── */}
+                {/* ─── Headline KPI strip — a live readout of the matrix ──── */}
                 <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
                   <div className="sm:col-span-2">
                     <HeadlineHero
-                      total7={headline.total7}
-                      deltaPct={headline.deltaPct}
-                      onClick={() => setDetail({ kind: "contributors" })}
+                      title={`OEM activity · ${dayLabel(matrixDays).toLowerCase()}`}
+                      value={matrixSummary.uses}
+                      unit="events from signed-up reps"
+                      chip={`${matrixSummary.leads.toLocaleString()} leads · ${matrixSummary.reports.toLocaleString()} reports submitted`}
+                      onClick={() => setDetail({ kind: "activity" })}
                     />
                   </div>
                   <StatPairCard
-                    label="Active users this week"
-                    value={headline.active7}
-                    hint={`of ${headline.totalSignedUp} signed up`}
-                    accent={headline.activeRate >= 30 ? "good" : headline.activeRate >= 10 ? "neutral" : "bad"}
-                    footer={`${headline.activeRate}% activation`}
-                    onClick={() => setDetail({ kind: "active" })}
+                    label="Reps signed up"
+                    value={matrixSummary.signedUp}
+                    hint={`of ${matrixSummary.contacts.toLocaleString()} contacts`}
+                    accent={matrixSummary.activationPct >= 50 ? "good" : matrixSummary.activationPct >= 25 ? "neutral" : "bad"}
+                    footer={`${matrixSummary.activationPct}% activation`}
+                    onClick={() => setDetail({ kind: "signedup" })}
                   />
                   <StatPairCard
-                    label="Dormant users"
-                    value={headline.dormant}
-                    hint="no activity in 14+ days"
-                    accent={headline.dormant === 0 ? "good" : "bad"}
-                    footer={headline.dormant > 0 ? "Needs outreach" : "Nobody dormant"}
-                    onClick={() => setDetail({ kind: "dormant" })}
+                    label="No projects yet"
+                    value={matrixSummary.notReporting}
+                    hint={`signed up, nothing submitted ${dayLabel(matrixDays).toLowerCase()}`}
+                    accent={matrixSummary.signedUp === 0 ? "neutral" : matrixSummary.notReporting === 0 ? "good" : "bad"}
+                    footer={
+                      matrixSummary.signedUp === 0
+                        ? "No reps signed up yet"
+                        : matrixSummary.notReporting > 0
+                        ? "Needs outreach"
+                        : "All reps active"
+                    }
+                    onClick={() => setDetail({ kind: "noprojects" })}
                   />
                 </section>
 
-                {/* ─── OEM engagement: charts (at a glance) + scorecard (detail) ─── */}
+                {/* ─── OEM matrix ─────────────────────────────────────────── */}
                 <section>
-                  <SectionHeader
-                    title="OEM engagement"
-                    description="How each manufacturer's sales reps, tech reps, and consultants are adopting and using the app — summarized in the charts, detailed in the scorecard below."
-                  />
-                  <div className="space-y-4 sm:space-y-5">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5 xl:grid-cols-4">
-                      <MatrixChartCard
-                        title="Adoption"
-                        subtitle="Signed-up contacts per OEM"
-                        data={matrixBars.adoption}
-                      />
-                      <MatrixChartCard
-                        title="Weekly usage"
-                        subtitle="Uses per week (events, last 7d)"
-                        data={matrixBars.usage}
-                        valueSuffix="/wk"
-                      />
-                      <MatrixChartCard
-                        title="Leads"
-                        subtitle="Leads submitted per OEM (last 30d)"
-                        data={matrixBars.leads}
-                      />
-                      <MatrixChartCard
-                        title="Reports"
-                        subtitle="Reports submitted per OEM (last 30d)"
-                        data={matrixBars.reports}
-                      />
+                  <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">OEM matrix</h2>
+                      <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
+                        One row per OEM, split by sales reps, tech reps, and consultants — adoption, usage, and projects submitted over the window set in <span className="font-semibold">Filters</span>. Click a row to drill into the people behind each number.
+                      </p>
                     </div>
-                    <Card className="p-4 sm:p-5">
-                      <div className="mb-3">
-                        <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">OEM scorecard</h3>
-                        <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
-                          One row per OEM. Sort by any column; click a row to drill into top users.
-                        </p>
-                      </div>
-                      <OemScorecard
-                        users={users.map((u) => ({
-                          id: u.id,
-                          full_name: u.full_name,
-                          email: u.email,
-                          manufacturer: u.manufacturer,
-                          conversationCount: u.conversationCount,
-                          leadCount: u.leadCount,
-                          reports: u.reports,
-                          events: {
-                            total7: u.events.total7,
-                            total30: u.events.total30,
-                            lastSeen: u.events.lastSeen,
-                          },
-                        }))}
-                        oemContactCounts={oemContactCounts}
-                        onDownloadUserPdf={(id) => {
-                          const u = users.find((x) => x.id === id);
-                          if (u) downloadUserPdf(u);
-                        }}
-                        onDownloadAllOems={downloadAllOemsPdf}
-                        onDownloadOemPdf={downloadOemPdf}
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <MatrixFilterMenu
+                        manufacturers={(matrix?.rows ?? []).map((r) => r.manufacturer)}
+                        selectedManufacturers={matrixManufacturers}
+                        onManufacturers={setMatrixManufacturers}
+                        selectedGroups={matrixGroups}
+                        onGroups={setMatrixGroups}
+                        days={matrixDays}
+                        onDays={setMatrixDays}
                       />
-                    </Card>
+                      <button
+                        type="button"
+                        data-track-id="matrix-export-pdf"
+                        disabled={!filteredMatrix || filteredMatrix.rows.length === 0}
+                        onClick={() => matrix && generateFullAnalyticsPdf(matrix, {
+                          windowLabel: dayLabel(matrixDays),
+                          manufacturers: matrixManufacturers,
+                          groups: matrixGroups,
+                        })}
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export PDF
+                      </button>
+                    </div>
                   </div>
-                </section>
-
-                {/* ─── Compare two OEMs (focused tool) ───────────────────── */}
-                <section>
-                  <SectionHeader
-                    title="Compare two OEMs"
-                    description="Pick any two manufacturers to see them side-by-side. The summary sentence tells you exactly how they stack up."
-                  />
-                  <Card className="p-4 sm:p-5">
-                    <OemHeadToHead
-                      users={users.map((u) => ({
-                        id: u.id,
-                        full_name: u.full_name,
-                        email: u.email,
-                        manufacturer: u.manufacturer,
-                        leadCount: u.leadCount,
-                        events: {
-                          total7: u.events.total7,
-                          total30: u.events.total30,
-                          lastSeen: u.events.lastSeen,
-                        },
-                      }))}
-                      oemContactCounts={oemContactCounts}
-                      onDownloadUserPdf={(id) => {
-                        const u = users.find((x) => x.id === id);
-                        if (u) downloadUserPdf(u);
-                      }}
-                      onDownloadOemPdf={downloadOemPdf}
+                  {filteredMatrix && (
+                    <OemMatrixTable
+                      rows={filteredMatrix.rows}
+                      totals={filteredMatrix.totals}
+                      groups={matrixGroups.length ? matrixGroups : undefined}
                     />
-                  </Card>
+                  )}
                 </section>
 
-                {/* ─── Section 3: Everyone in the system ─────────────────── */}
+                {/* ─── Section 3: OEM reps & consultants directory ───────── */}
                 <section>
-                  <SectionHeader
-                    title="Everyone in the system"
-                    description="Manufacturer reps and independent consultants show up here once they sign up — filter by type or OEM and export any contact's activity."
-                  />
-                <Card className="overflow-hidden p-0">
-                  <div className="border-b border-[var(--border-default)] px-4 py-3 sm:px-6">
-                    <h2 className="text-base font-semibold">Everyone</h2>
-                    <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
-                      App users and contacts in one list — pick a type to filter down.
+                  <div className="mb-4 sm:mb-5">
+                    <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">Reps &amp; consultants</h2>
+                    <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
+                      Every rep, tech rep, and consultant on the roster — set the window in Filters, then pull any one person&apos;s full event log with their PDF button. Internal staff live in User Analytics.
                     </p>
                   </div>
+                <Card className="overflow-hidden p-0">
                   <PeopleDirectory
+                    scope="oem"
                     appUsers={users}
-                    onDownloadUserPdf={(id) => {
-                      const u = users.find((x) => x.id === id);
-                      if (u) downloadUserPdf(u);
-                    }}
+                    days={peopleDays}
+                    onDays={setPeopleDays}
+                    dayOptions={PEOPLE_DAY_OPTIONS}
+                    onLoadEvents={loadUserEvents}
+                    onDownloadUserPdf={downloadUserEventLog}
                   />
                 </Card>
                 </section>
               </div>
             )}
 
-            {/* Detail modal: dormant gets the rich DormantUsersPanel (OEM filter +
-                never-used toggle); contributors/active use the simpler list modal. */}
-            <HeadlineDetailModal
-              open={detail?.kind === "contributors" || detail?.kind === "active"}
+            {/* KPI-card drill-down: the matrix people behind each number. */}
+            <OemPeopleModal
+              open={detail !== null}
               title={
-                detail?.kind === "contributors"
-                  ? "Top contributors this week"
-                  : "Active users this week"
+                detail?.kind === "activity"
+                  ? `OEM activity · ${dayLabel(matrixDays).toLowerCase()}`
+                  : detail?.kind === "signedup"
+                  ? "Reps signed up"
+                  : "No projects yet"
               }
               subtitle={
-                detail?.kind === "contributors"
-                  ? "Top 15 by 7-day event count"
-                  : "Users with any activity in the last 7 days"
+                detail?.kind === "activity"
+                  ? "Signed-up reps & consultants, by events"
+                  : detail?.kind === "signedup"
+                  ? "Reps & consultants who have signed up"
+                  : `Signed up, nothing submitted ${dayLabel(matrixDays).toLowerCase()}`
               }
-              users={
-                detail?.kind === "contributors"
-                  ? contributorsUsers
-                  : detail?.kind === "active"
-                  ? activeUsers
-                  : []
-              }
+              people={detailPeople}
               emptyMessage={
-                detail?.kind === "contributors"
-                  ? "No activity in the last 7 days."
-                  : "Nobody has been active this week."
+                detail?.kind === "noprojects"
+                  ? "Everyone signed up has submitted something."
+                  : "No one matches the current filters."
               }
               onClose={() => setDetail(null)}
-              onDownloadPdf={(id) => {
-                const u = users.find((x) => x.id === id);
-                if (u) downloadUserPdf(u);
-              }}
+              onDownloadPdf={(p) =>
+                downloadUserEventLog({ name: p.name, email: p.email, profileId: p.profileId, signedUp: p.signedUp, lastSeen: null }, matrixDays)
+              }
             />
-
-            {detail?.kind === "dormant" && (
-              <DormantUsersModal
-                users={users}
-                onClose={() => setDetail(null)}
-                onDownloadPdf={(id) => {
-                  const u = users.find((x) => x.id === id);
-                  if (u) downloadUserPdf(u);
-                }}
-              />
-            )}
           </>
         )}
       </div>
@@ -544,155 +440,21 @@ export default function AdminAnalyticsPage() {
   );
 }
 
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-4 sm:mb-5">
-      <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">{title}</h2>
-      <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">{description}</p>
-    </div>
-  );
-}
-
-function MatrixChartCard({
-  title,
-  subtitle,
-  data,
-  valueSuffix,
-}: {
-  title: string;
-  subtitle: string;
-  data: MatrixBarRow[];
-  valueSuffix?: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-[var(--border-default)] bg-white p-4 shadow-sm sm:p-6">
-      <div className="mb-3 sm:mb-4">
-        <h3 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">{title}</h3>
-        <p className="text-xs text-[var(--anchor-gray)]">{subtitle}</p>
-      </div>
-      <OemMatrixBars data={data} valueSuffix={valueSuffix} />
-    </div>
-  );
-}
-
-// ── Dormant users modal — wraps DormantUsersPanel in modal chrome ─────────
-
-function DormantUsersModal({
-  users,
-  onClose,
-  onDownloadPdf,
-}: {
-  users: UserRow[];
-  onClose: () => void;
-  onDownloadPdf?: (id: string) => void;
-}) {
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Dormant users"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:max-w-3xl sm:rounded-3xl">
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-default)] px-5 py-4 sm:px-6">
-          <div>
-            <h3 className="text-lg font-bold text-[var(--anchor-deep)] sm:text-xl">Who isn’t using the app</h3>
-            <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
-              Signed up but no activity in 14+ days. Filter by OEM to build a call list.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-1.5 text-[var(--anchor-gray)] hover:bg-[var(--surface-soft)] hover:text-[var(--anchor-deep)]"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <line x1="6" y1="6" x2="18" y2="18" />
-              <line x1="6" y1="18" x2="18" y2="6" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">
-          <DormantUsersPanel
-            users={users.map((u) => ({
-              id: u.id,
-              full_name: u.full_name,
-              email: u.email,
-              manufacturer: u.manufacturer,
-              role: u.role,
-              created_at: u.created_at,
-              lastSeen: u.events.lastSeen,
-            }))}
-            onDownloadPdf={onDownloadPdf}
-          />
-        </div>
-
-        <div className="flex items-center justify-end border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-5 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-gray)] hover:text-[var(--anchor-deep)]"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Headline components ─────────────────────────────────────────────────────
 
 function HeadlineHero({
-  total7,
-  deltaPct,
+  title,
+  value,
+  unit,
+  chip,
   onClick,
 }: {
-  total7: number;
-  deltaPct: number;
+  title: string;
+  value: number;
+  unit: string;
+  chip: string;
   onClick?: () => void;
 }) {
-  const direction = deltaPct > 0 ? "up" : deltaPct < 0 ? "down" : "flat";
-  const arrow =
-    direction === "up" ? (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-        <polyline points="17 6 23 6 23 12" />
-      </svg>
-    ) : direction === "down" ? (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
-        <polyline points="17 18 23 18 23 12" />
-      </svg>
-    ) : (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-    );
-
-  const headlineText =
-    direction === "up"
-      ? `Activity up ${Math.abs(deltaPct)}% this week`
-      : direction === "down"
-      ? `Activity down ${Math.abs(deltaPct)}% this week`
-      : "Activity flat this week";
-
   return (
     <button
       type="button"
@@ -706,30 +468,20 @@ function HeadlineHero({
         className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[var(--anchor-green)] opacity-20 blur-2xl"
       />
 
-      <h2 className="relative text-2xl font-bold leading-tight tracking-tight !text-white sm:text-3xl">
-        {headlineText}
+      <h2 className="relative text-xs font-semibold uppercase tracking-widest !text-white/70 sm:text-sm">
+        {title}
       </h2>
 
-      <div className="relative mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div className="relative mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-4xl font-bold tabular-nums !text-white sm:text-5xl">
-          {total7.toLocaleString()}
+          {value.toLocaleString()}
         </span>
-        <span className="text-sm text-white/70 sm:text-base">events in the last 7 days</span>
+        <span className="text-sm text-white/70 sm:text-base">{unit}</span>
       </div>
 
       <div className="relative mt-4">
-        <span
-          className={
-            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold " +
-            (direction === "up"
-              ? "bg-[var(--anchor-green)] text-[var(--anchor-deep)]"
-              : direction === "down"
-              ? "bg-red-200 text-red-900"
-              : "bg-white/15 text-white")
-          }
-        >
-          {arrow}
-          {direction === "flat" ? "no change" : `${Math.abs(deltaPct)}% vs prior 3-week avg`}
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--anchor-green)] px-2.5 py-1 text-xs font-bold text-[var(--anchor-deep)]">
+          {chip}
         </span>
       </div>
     </button>
