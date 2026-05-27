@@ -114,7 +114,7 @@ export function PersonEditorModal({
     try {
       // 1) Profile (login) — only if this person has an account.
       if (person.profileId) {
-        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_state: serviceState };
+        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_state: serviceState, anchor_commission: anchorCommission };
         if (email.trim().toLowerCase() !== person.email.trim().toLowerCase()) patch.email = email.trim();
         if (!isSelf) patch.role = role;
         const res = await fetch("/api/admin/users", {
@@ -286,21 +286,24 @@ export function PersonEditorModal({
                 <Text label="Title" value={title} onChange={setTitle} />
                 <Text label="Territory" value={territory} onChange={setTerritory} />
                 <Text label="Region" value={region} onChange={setRegion} />
-                <label className="flex items-start gap-2 text-sm sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={anchorCommission}
-                    onChange={(e) => setAnchorCommission(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-[var(--anchor-green)]"
-                  />
-                  <span>
-                    <span className="font-semibold text-[var(--anchor-deep)]">Anchor commission</span>
-                    <span className="block text-[11px] text-[var(--anchor-gray)]">Tag this rep/consultant as on an Anchor commission arrangement.</span>
-                  </span>
-                </label>
               </div>
             </Section>
           )}
+
+          <Section title="Commission">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={anchorCommission}
+                onChange={(e) => setAnchorCommission(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--anchor-green)]"
+              />
+              <span>
+                <span className="font-semibold text-[var(--anchor-deep)]">Anchor commission</span>
+                <span className="block text-[11px] text-[var(--anchor-gray)]">Tag this person as on an Anchor commission arrangement.</span>
+              </span>
+            </label>
+          </Section>
 
           {/* Role & account — only for people with a login. */}
           {hasLogin && (
