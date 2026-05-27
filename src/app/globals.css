@@ -130,6 +130,10 @@ h2,
   min-height: 100dvh;
   background: transparent;
   color: var(--text-primary);
+  /* Never let a page render wider than the viewport on mobile. `clip` (not
+     `hidden`) leaves the vertical axis and any inner scroll container — e.g.
+     the horizontally-scrollable OEM matrix — working normally. */
+  overflow-x: clip;
   /* Push content below the iOS status bar / notch on mobile */
   padding-top: calc(env(safe-area-inset-top) + 3rem);
   /* Clear space on mobile so the floating bottom nav (~80px) doesn't cover content */
