@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
+import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
 
 function catalogDisplayName(rawName: string | undefined | null): string {
   if (!rawName) return "";
@@ -211,65 +212,10 @@ function typeFromPath(path: string) {
 }
 
 /* ---------------------------------------------
-   ✅ Routing rules (you already tuned these for solutions)
-   NOTE: for anchors, you’ll likely use SPECIAL_PREFIXES_BY_NAME (best)
-   or SERIES_ROOTS_BY_SERIES mapping that points to anchor/... roots.
+   Routing rules (SPECIAL_PREFIXES_BY_NAME / SERIES_ROOTS_BY_SERIES /
+   prefixCandidatesForProduct) now live in @/lib/assets/storagePrefixes so the
+   browse-page file-count badge stays in sync with the tackle box.
 --------------------------------------------- */
-
-const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
-  // Solutions (examples)
-  "2-Pipe Snow Fence": ["solutions/snow-retention/2-pipe-snow-fence"],
-  "Unitized Snow Fence": ["2pipe/snow-fence", "solutions/snow-retention/unitized-snow-fence"],
-  "Existing Mechanical Tie-Down": ["solutions/hvac"],
-  "Roof-Mounted Elevated Stack Securement": ["solutions/elevated-stack/roof-stack"],
-  "Wall-Mounted Elevated Stack Securement": ["solutions/elevated-stack/wall-stack"],
-  "Tower/Stack Securement - 2000 Series U-Anchor": ["solutions/elevated-stack/Tower"],
-  "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor": ["solutions/elevated-stack/wall-stack"],
-  "Roof Mounted Box": ["solutions/roof-box"],
-  "Attached Pipe Frame": ["pipe-frame/attached", "solutions/pipe-frame/attached", "attached"],
-  "Existing Pipe Frame": ["solutions/pipe-frame/exisiting"],
-  "Roof Mounted Guardrail": ["solutions/roof-guardrail"],
-  "Wall Mounted Guardrail": ["solutions/wall-guardrail"],
-  "Wall Mounted Box": ["solutions/wall-box"],
-  "Weather Stations": ["solutions/weather-station"],
-
-  // ✅ Anchors (add these if your Product names match exactly)
-  "U2000 KEE": ["anchor/u-anchors/u2000/kee"],
-  "U2000 PVC": ["anchor/u-anchors/u2000/pvc"],
-  "U2000 TPO": ["anchor/u-anchors/u2000/tpo"],
-  "U2200 Plate": ["anchor/u-anchors/u2200/plate"],
-  "U2400 EDPM": ["anchor/u-anchors/u2400/epdm"],
-  "U2400 KEE": ["anchor/u-anchors/u2400/kee"],
-  "U2400 PVC": ["anchor/u-anchors/u2400/pvc"],
-  "U2400 TPO": ["anchor/u-anchors/u2400/tpo"],
-  "U2600 APP": ["anchor/u-anchors/u2600/app"],
-  "U2600 SBS": ["anchor/u-anchors/u2600/sbs"],
-  "U2600 SBS Torch": ["anchor/u-anchors/u2600/sbs-torch"],
-  "U2800 Coatings": ["anchor/u-anchors/u2800/coatings"],
-  "U3200 Plate": ["anchor/u-anchors/u3200/plate"],
-  "U3400 EDPM": ["anchor/u-anchors/u3400/epdm"],
-  "U3400 KEE": ["anchor/u-anchors/u3400/kee"],
-  "U3400 PVC": ["anchor/u-anchors/u3400/pvc"],
-  "U3400 TPO": ["anchor/u-anchors/u3400/tpo"],
-  "U3600 APP": ["anchor/u-anchors/u3600/app"],
-  "U3600 SBS": ["anchor/u-anchors/u3600/sbs"],
-  "U3600 SBS Torch": ["anchor/u-anchors/u3600/sbs-torch"],
-  "U3800 Coatings": ["anchor/u-anchors/u3800/coatings"],
-};
-
-const SERIES_ROOTS_BY_SERIES: Record<string, string[]> = {
-  // Solutions
-  HVAC: ["solutions/hvac"],
-  "HVAC Solutions": ["solutions/hvac"],
-  "Snow Retention": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
-  "Snow Retention Solutions": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
-  "2 Pipe": ["2pipe", "solutions/snow-retention", "solutions/2pipe"],
-
-  // Anchors (optional series mapping if you use series = "U-Anchors" etc.)
-  "U-Anchors": ["anchor/u-anchors"],
-  "U Anchors": ["anchor/u-anchors"],
-  Anchors: ["anchor"],
-};
 
 /* ---------------------------------------------
    Tabs (auto-detect from filenames/folders)
@@ -380,55 +326,9 @@ async function fetchKnowledgePaths(supabase: ReturnType<typeof supabaseBrowser>,
 
 
 /* ---------------------------------------------
-   Prefix probing
+   Prefix probing — prefixCandidatesForProduct imported from
+   @/lib/assets/storagePrefixes (shared with the browse-page count badge)
 --------------------------------------------- */
-
-function prefixCandidatesForProduct(p: ProductRow): string[] {
-  const out: string[] = [];
-  const push = (x: string) => {
-    const clean = normalizePrefix(x);
-    if (clean) out.push(clean);
-  };
-
-  // 1) Exact overrides (best for anchors)
-  const specials = SPECIAL_PREFIXES_BY_NAME[p.name];
-  if (specials?.length) return Array.from(new Set(specials.map(normalizePrefix)));
-
-  const slug = slugifyName(p.name);
-  const seriesKey = String(p.series || "").trim();
-  const section = String(p.section || "").toLowerCase().trim();
-
-  // 2) Series roots
-  const roots = SERIES_ROOTS_BY_SERIES[seriesKey] || [];
-  for (const root of roots) {
-    // typical: root/<slug>/*
-    push(`${root}/${slug}`);
-    push(`${root}/${slug}/${slug}`);
-  }
-
-  // 3) Generic layouts
-  if (section === "solution" || section === "solutions") {
-    push(`solutions/${slug}`);
-    push(`solutions/${slug}/${slug}`);
-  }
-
-  if (section === "anchor" || section === "anchors") {
-    // NOTE: your bucket uses "anchor/..." not "anchors/..."
-    push(`anchor/${slug}`);
-    push(`anchor/${slug}/${slug}`);
-  }
-
-  if (section === "internal" || section === "internal_assets") {
-    push(`internal/${slug}`);
-    push(`internal/${slug}/${slug}`);
-  }
-
-  // 4) Extra fallbacks
-  push(`${slug}`);
-  push(`${slug}/${slug}`);
-
-  return Array.from(new Set(out));
-}
 
 /* ---------------------------------------------
    Component
@@ -466,6 +366,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [adding, setAdding] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [deletingBox, setDeletingBox] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
   const [form, setForm] = useState({
     title: "",
     category_key: "data_sheet",
@@ -781,6 +683,67 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
   }
 
+  async function toggleActive() {
+    if (!isAdmin || !product || togglingActive) return;
+    const next = !product.active;
+    setTogglingActive(true);
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, active: next }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFormMsg(json?.error || "Update failed.");
+        setTimeout(() => setFormMsg(null), 3000);
+        setTogglingActive(false);
+        return;
+      }
+      setProduct((p) => (p ? { ...p, active: next } : p));
+      setFormMsg(next ? "Tacklebox is active." : "Tacklebox deactivated — hidden from the resource library.");
+      setTimeout(() => setFormMsg(null), 2500);
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : "Update failed.");
+      setTimeout(() => setFormMsg(null), 3000);
+    } finally {
+      setTogglingActive(false);
+    }
+  }
+
+  async function deleteTacklebox() {
+    if (!isAdmin || !product) return;
+    const name = catalogDisplayName(product.name) || product.name;
+    const folder = storagePrefix ? `\n\nThis will also permanently delete every file in the "${storagePrefix}" folder of the knowledge bucket.` : "";
+    const ok = window.confirm(
+      `Delete the entire "${name}" tackle box?\n\nThis removes the tacklebox and all its asset records from the database.${folder}\n\nThis cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingBox(true);
+    setFormMsg(null);
+    try {
+      const res = await fetch(`/api/admin/products?id=${encodeURIComponent(productId)}&purge=1`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFormMsg(json?.error || "Delete failed.");
+        setTimeout(() => setFormMsg(null), 4000);
+        setDeletingBox(false);
+        return;
+      }
+      // Gone — leave the page.
+      router.push("/assets");
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : "Delete failed.");
+      setTimeout(() => setFormMsg(null), 4000);
+      setDeletingBox(false);
+    }
+  }
+
   async function uploadImages() {
     if (!imageFiles.length || !product) return;
     setUploadingImages(true);
@@ -965,13 +928,34 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
               </div>
 
               <div className="shrink-0 flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-[12px] font-semibold ${
-                    product?.active ? "bg-[#9CE2BB] text-[#11500F]" : "bg-black/5 text-black/55"
-                  }`}
-                >
-                  {product?.active ? t("active") : t("inactive")}
-                </span>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={toggleActive}
+                    disabled={togglingActive}
+                    role="switch"
+                    aria-checked={!!product?.active}
+                    title={product?.active ? "Active in the resource library — click to deactivate" : "Hidden from the resource library — click to activate"}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold transition disabled:opacity-60 ${
+                      product?.active
+                        ? "bg-[#9CE2BB] text-[#11500F] hover:bg-[#8ad9ad]"
+                        : "bg-black/5 text-black/55 hover:bg-black/10"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${product?.active ? "bg-[#11500F]" : "bg-black/40"}`}
+                    />
+                    {togglingActive ? "Saving…" : product?.active ? t("active") : t("inactive")}
+                  </button>
+                ) : (
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-[12px] font-semibold ${
+                      product?.active ? "bg-[#9CE2BB] text-[#11500F]" : "bg-black/5 text-black/55"
+                    }`}
+                  >
+                    {product?.active ? t("active") : t("inactive")}
+                  </span>
+                )}
 
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
                   {counts.pub} {t("showingPublic").replace("Showing: ", "")}{isInternalUser ? ` • ${counts.internal} ${t("internal").toLowerCase()}` : ""}
@@ -980,6 +964,18 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
                   {isInternalUser ? t("showingPublicInternal") : t("showingPublic")}
                 </span>
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={deleteTacklebox}
+                    disabled={deletingBox}
+                    title="Delete this entire tackle box (database + files)"
+                    className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[12px] font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    {deletingBox ? "Deleting…" : "Delete tacklebox"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

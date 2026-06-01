@@ -1,9 +1,54 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { prefixCandidatesForProduct, GLOBAL_SPEC_PATH } from "@/lib/assets/storagePrefixes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const KNOWLEDGE_BUCKET = "knowledge";
+const STORAGE_PAGE_SIZE = 1000;
+
+// Recursively list every file (not folders) under a prefix in the knowledge bucket.
+async function listFilesRecursive(prefix: string): Promise<string[]> {
+  const root = String(prefix || "").trim().replace(/^\/+|\/+$/g, "");
+  if (!root) return [];
+
+  const out: string[] = [];
+  const queue: string[] = [root];
+  const seen = new Set<string>();
+
+  while (queue.length) {
+    const dir = queue.shift()!;
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await supabaseAdmin.storage
+        .from(KNOWLEDGE_BUCKET)
+        .list(dir, { limit: STORAGE_PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" } });
+      if (error) break;
+      const items = data || [];
+      if (items.length === 0) break;
+
+      for (const item of items as Array<{ name?: string; id?: string | null; metadata?: unknown }>) {
+        const name = String(item?.name || "").trim();
+        if (!name) continue;
+        const hasExt = name.includes(".");
+        const isFolder = item.id === null || (!hasExt && item.metadata == null);
+        const fullPath = dir ? `${dir}/${name}` : name;
+        if (isFolder) queue.push(fullPath);
+        else out.push(fullPath);
+      }
+
+      if (items.length < STORAGE_PAGE_SIZE) break;
+      offset += STORAGE_PAGE_SIZE;
+    }
+  }
+
+  return Array.from(new Set(out));
+}
 
 async function requireAdmin() {
   const supabase = await supabaseRoute();
@@ -77,4 +122,128 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ id: data.id, created: true });
+}
+
+// Update a tacklebox — currently the admin "Active" switch (and optional
+// name/series/sku edits). Setting active=false hides it from the resource
+// library (it falls back to a coming-soon placeholder for catalog items).
+export async function PATCH(req: Request) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — admin updates cannot bypass RLS." },
+      { status: 500 }
+    );
+  }
+
+  const gate = await requireAdmin();
+  if ("error" in gate) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const id = clean(body.id);
+  if (!id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (typeof body.active === "boolean") patch.active = body.active;
+  if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
+  if ("series" in body) patch.series = clean(body.series) || null;
+  if ("sku" in body) patch.sku = clean(body.sku) || null;
+
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "no fields to update" }, { status: 400 });
+  }
+
+  const { data, error: updErr } = await supabaseAdmin
+    .from("products")
+    .update(patch)
+    .eq("id", id)
+    .select("id,active")
+    .single();
+
+  if (updErr || !data?.id) {
+    return NextResponse.json({ error: updErr?.message || "Update failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ updated: true, id: data.id, active: data.active });
+}
+
+// Delete an entire tacklebox: its DB record, its asset/pending rows, and
+// (when purge=1) the files under its resolved knowledge-bucket folder.
+export async function DELETE(req: Request) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json(
+      { error: "Server is missing SUPABASE_SERVICE_ROLE_KEY — admin deletes cannot bypass RLS." },
+      { status: 500 }
+    );
+  }
+
+  const gate = await requireAdmin();
+  if ("error" in gate) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  const url = new URL(req.url);
+  const id = clean(url.searchParams.get("id"));
+  const purgeStorage = url.searchParams.get("purge") === "1";
+  if (!id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
+  }
+
+  const { data: product, error: loadErr } = await supabaseAdmin
+    .from("products")
+    .select("id,name,section,series")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (loadErr) {
+    return NextResponse.json({ error: loadErr.message }, { status: 500 });
+  }
+  if (!product) {
+    return NextResponse.json({ error: "Tacklebox not found" }, { status: 404 });
+  }
+
+  // Optionally purge the underlying storage files. We resolve the folder the
+  // same way the tacklebox does (first non-empty candidate prefix) and never
+  // delete the shared global spec.
+  let removedFiles = 0;
+  if (purgeStorage) {
+    const candidates = prefixCandidatesForProduct(product as { name: string; series?: string | null; section?: string | null });
+    let files: string[] = [];
+    for (const candidate of candidates) {
+      const got = await listFilesRecursive(candidate);
+      if (got.length > 0) {
+        files = got;
+        break;
+      }
+    }
+    const toRemove = files.filter((p) => p !== GLOBAL_SPEC_PATH);
+    if (toRemove.length > 0) {
+      // Supabase storage caps removes per call; chunk to be safe.
+      for (let i = 0; i < toRemove.length; i += 100) {
+        const chunk = toRemove.slice(i, i + 100);
+        const { error: rmErr } = await supabaseAdmin.storage.from(KNOWLEDGE_BUCKET).remove(chunk);
+        if (rmErr) {
+          return NextResponse.json(
+            { error: `Failed to delete files: ${rmErr.message}` },
+            { status: 500 }
+          );
+        }
+        removedFiles += chunk.length;
+      }
+    }
+  }
+
+  // Remove child rows first (explicit, regardless of FK cascade), then product.
+  await supabaseAdmin.from("assets").delete().eq("product_id", id);
+  await supabaseAdmin.from("pending_uploads").delete().eq("product_id", id);
+
+  const { error: delErr } = await supabaseAdmin.from("products").delete().eq("id", id);
+  if (delErr) {
+    return NextResponse.json({ error: delErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ deleted: true, removedFiles });
 }
