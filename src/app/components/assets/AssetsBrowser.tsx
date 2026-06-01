@@ -14,6 +14,11 @@ import {
   type CatalogSolution,
   type SolutionCategory,
 } from "@/lib/solutions/solutionCatalog";
+import {
+  prefixCandidatesForProduct,
+  isFolderLike,
+  GLOBAL_SPEC_PATH,
+} from "@/lib/assets/storagePrefixes";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -80,73 +85,39 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function ensureTrailingSlash(prefix: string) {
-  const p = String(prefix || "").trim();
-  if (!p) return "";
-  return p.endsWith("/") ? p : `${p}/`;
-}
+// Count the public files inside a product's tackle box, using the SAME resolver
+// the tackle box itself uses (prefixCandidatesForProduct + first non-empty
+// prefix + the always-included global spec). This keeps the per-card badge in
+// lock-step with the "N Public" chip shown once the tackle box is opened.
+// (/api/knowledge-list returns public paths only, so this is the public count.)
+async function fetchTackleBoxFileCount(product: ProductRow, accessToken: string): Promise<number> {
+  const candidates = prefixCandidatesForProduct(product);
 
-function storagePrefixForProduct(p: ProductRow) {
-  const slug = slugify(p.name);
-  if (p.section === "solution") return ensureTrailingSlash(`solutions/${slug}`);
-  if (p.section === "anchor") return ensureTrailingSlash(`anchor/${slug}`);
-  return ensureTrailingSlash(`internal/${slug}`);
-}
-
-function specPrefixForSection(section: ProductSection) {
-  if (section === "solution") return ensureTrailingSlash("spec/solutions");
-  if (section === "anchor") return ensureTrailingSlash("spec/anchor");
-  return ensureTrailingSlash("spec/internal");
-}
-
-function parseCounts(payload: any): { public: number; internal: number } {
-  const p = payload ?? {};
-  const pub =
-    Number(
-      p.public ??
-        p.publicCount ??
-        p.public_count ??
-        p.count_public ??
-        p.counts?.public ??
-        p.counts?.publicCount ??
-        0
-    ) || 0;
-
-  const internal =
-    Number(
-      p.internal ??
-        p.internalCount ??
-        p.internal_count ??
-        p.count_internal ??
-        p.counts?.internal ??
-        p.counts?.internalCount ??
-        0
-    ) || 0;
-
-  const total = Number(p.total ?? p.count ?? p.totalCount ?? 0) || 0;
-
-  if (pub === 0 && internal === 0 && total > 0) {
-    return { public: total, internal: 0 };
+  let paths: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(`/api/knowledge-list?prefix=${encodeURIComponent(candidate)}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+      if (!res.ok) continue;
+      const json = await res.json().catch(() => ({}));
+      const got = ((json?.paths as string[]) || []).filter((p) => !isFolderLike(p));
+      if (got.length > 0) {
+        paths = got;
+        break;
+      }
+    } catch {
+      // try next candidate
+    }
   }
 
-  return { public: pub, internal };
-}
-
-async function fetchKnowledgeCounts(prefix: string) {
-  const pref = ensureTrailingSlash(prefix);
-
-  const res = await fetch(`/api/knowledge-counts?prefix=${encodeURIComponent(pref)}`, {
-    method: "GET",
-    credentials: "include",
-    headers: { "cache-control": "no-store" },
-  });
-
-  if (!res.ok) {
-    return { public: 0, internal: 0 };
-  }
-
-  const json = await res.json().catch(() => ({}));
-  return parseCounts(json);
+  // The global spec is always shown inside every tackle box.
+  const unique = new Set<string>(paths);
+  unique.add(GLOBAL_SPEC_PATH);
+  return unique.size;
 }
 
 async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -180,7 +151,8 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [error, setError] = useState<string | null>(null);
 
   const [products, setProducts] = useState<ProductRow[]>([]);
-  const [counts, setCounts] = useState<Record<string, { public: number; internal: number }>>({});
+  // product.id -> number of files inside its tackle box (public files + global spec)
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
   const [q, setQ] = useState("");
   const [activeOnly] = useState(true);
@@ -190,6 +162,17 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [isInternalUser, setIsInternalUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
+
+  // Admin "New tacklebox" inline form
+  const [showNewBox, setShowNewBox] = useState(false);
+  const [creatingBox, setCreatingBox] = useState(false);
+  const [newBoxMsg, setNewBoxMsg] = useState<string | null>(null);
+  const [newBox, setNewBox] = useState<{ name: string; section: ProductSection; series: string; sku: string }>({
+    name: "",
+    section: "solution",
+    series: "",
+    sku: "",
+  });
 
   const router = useRouter();
 
@@ -225,6 +208,41 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     } catch (e: any) {
       setError(e?.message || "Could not create product row.");
       setCreatingKey(null);
+    }
+  }
+
+  async function createTacklebox() {
+    if (!isAdmin || creatingBox) return;
+    const name = newBox.name.trim();
+    if (!name) {
+      setNewBoxMsg("Name is required.");
+      return;
+    }
+    setCreatingBox(true);
+    setNewBoxMsg(null);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          section: newBox.section,
+          series: newBox.series.trim() || null,
+          sku: newBox.sku.trim() || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.id) {
+        setNewBoxMsg(json?.error || "Could not create tacklebox.");
+        setCreatingBox(false);
+        return;
+      }
+      // Land on the new (or existing) tacklebox.
+      router.push(`/assets/${encodeURIComponent(json.id)}`);
+    } catch (e) {
+      setNewBoxMsg(e instanceof Error ? e.message : "Could not create tacklebox.");
+      setCreatingBox(false);
     }
   }
 
@@ -311,35 +329,26 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         const list = (prodRows || []) as ProductRow[];
         setProducts(list);
 
-        const sectionsInList = Array.from(new Set(list.map((p) => p.section)));
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token || "";
 
-        const specBySection: Record<string, { public: number; internal: number }> = {};
-        await Promise.all(
-          sectionsInList.map(async (sec) => {
-            specBySection[sec] = await fetchKnowledgeCounts(specPrefixForSection(sec));
-          })
-        );
+        // Only solutions & anchors get a file-count badge. Internal-assets
+        // products live behind internal/* paths that /api/knowledge-list hides,
+        // and they render in their own docs/contacts pages anyway.
+        const countable = list.filter((p) => p.section === "solution" || p.section === "anchor");
 
         const perProduct = await mapWithLimit(
-          list,
+          countable,
           6,
-          async (p): Promise<[string, { public: number; internal: number }]> => {
-            const folderCounts = await fetchKnowledgeCounts(storagePrefixForProduct(p));
-            const specCounts = specBySection[p.section] || { public: 0, internal: 0 };
-
-            return [
-              p.id,
-              {
-                public: folderCounts.public + specCounts.public,
-                internal: folderCounts.internal + specCounts.internal,
-              },
-            ];
+          async (p): Promise<[string, number]> => {
+            const total = await fetchTackleBoxFileCount(p, accessToken);
+            return [p.id, total];
           }
         );
 
         if (!alive) return;
 
-        const map: Record<string, { public: number; internal: number }> = {};
+        const map: Record<string, number> = {};
         for (const [id, c] of perProduct) map[id] = c;
         setCounts(map);
 
@@ -392,6 +401,19 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
           productBySlug.get(slugify(item.legacyName))
         : undefined)
     );
+  }
+
+  // A catalog item is "live" (renders as a clickable card, not a coming-soon
+  // placeholder) when it has an active DB row AND either the catalog already
+  // launched it OR its tacklebox actually contains files. counts[id] includes
+  // the always-present global spec, so > 1 means it has real content.
+  // (Inactive products are filtered out of `products`, so an admin can hide a
+  // tacklebox with the Active switch and it reverts to a placeholder here.)
+  function isItemLive(item: CatalogSolution): boolean {
+    const product = findProductForCatalog(item);
+    if (!product) return false;
+    if (!item.comingSoon) return true;
+    return (counts[product.id] ?? 0) > 1;
   }
 
   const nonSolutionProducts = useMemo(
@@ -476,8 +498,81 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
             placeholder={t("search")}
             className="h-10 w-full bg-[var(--surface-soft)] px-4 text-sm sm:w-[280px]"
           />
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setNewBoxMsg(null);
+                setShowNewBox((v) => !v);
+              }}
+              className="h-10 shrink-0 rounded-full border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-4 text-[12px] font-semibold text-white transition hover:opacity-90"
+            >
+              {showNewBox ? "Close" : "+ New tacklebox"}
+            </button>
+          )}
         </div>
       </div>
+
+      {isAdmin && showNewBox && (
+        <div className="mt-4 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div className="text-sm font-semibold text-black">New tacklebox</div>
+          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            Creates a product record. Add files inside it afterward, or link a knowledge-bucket folder.
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="grid gap-1">
+              <span className="text-[12px] font-semibold text-black/70">Name</span>
+              <input
+                value={newBox.name}
+                onChange={(e) => setNewBox((s) => ({ ...s, name: e.target.value }))}
+                placeholder="e.g. Roof Pipe Securement"
+                className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[12px] font-semibold text-black/70">Section</span>
+              <select
+                value={newBox.section}
+                onChange={(e) => setNewBox((s) => ({ ...s, section: e.target.value as ProductSection }))}
+                className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+              >
+                <option value="solution">Solution</option>
+                <option value="anchor">Anchor</option>
+                <option value="internal_assets">Internal assets</option>
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[12px] font-semibold text-black/70">Series (optional)</span>
+              <input
+                value={newBox.series}
+                onChange={(e) => setNewBox((s) => ({ ...s, series: e.target.value }))}
+                placeholder="e.g. Solutions"
+                className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[12px] font-semibold text-black/70">SKU (optional)</span>
+              <input
+                value={newBox.sku}
+                onChange={(e) => setNewBox((s) => ({ ...s, sku: e.target.value }))}
+                placeholder="e.g. RPS-0310"
+                className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={createTacklebox}
+              disabled={creatingBox || !newBox.name.trim()}
+              className="inline-flex items-center justify-center rounded-[10px] bg-[var(--anchor-green)] px-4 py-2 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {creatingBox ? "Creating…" : "Create & open"}
+            </button>
+            {newBoxMsg && <span className="text-[12px] text-red-600">{newBoxMsg}</span>}
+          </div>
+        </div>
+      )}
 
       {!solutionsOnly && (
         <div className="mt-4 flex flex-col gap-2">
@@ -512,9 +607,9 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
               catalogGroups.map(({ category, items }) => {
                 // Auto-expand when searching so matches aren't hidden behind collapsed sections.
                 const isCollapsed = q.trim() ? false : collapsed[category.key] ?? true;
-                // "Coming soon" badge applies only when every item in the
-                // category is flagged comingSoon — independent of DB state.
-                const activeCount = items.filter((it) => !it.comingSoon).length;
+                // "Coming soon" badge applies only when nothing in the category
+                // is live (launched in the catalog, or content-bearing).
+                const activeCount = items.filter((it) => isItemLive(it)).length;
                 return (
                   <section key={category.key} className="grid gap-2">
                     <button
@@ -539,41 +634,32 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                     {!isCollapsed && (
                       <div className="grid gap-2">
                         {items.map((item) => {
-                          if (item.comingSoon) {
-                            return (
-                              <ComingSoonCard
-                                key={item.key}
-                                label={item.label}
-                                isAdmin={isAdmin}
-                                pending={creatingKey === item.key}
-                                onAdminOpen={() => adminOpenComingSoon(item)}
-                              />
-                            );
-                          }
                           // Prefer a direct DB row with the new label; fall back to
-                          // the legacy DB row so existing tackle box / docs surface
-                          // until the new row is seeded. Slug-based matching
-                          // tolerates hyphen / spacing variants between catalog
-                          // names and stored DB names.
+                          // the legacy DB row so existing tackle box / docs surface.
+                          // Slug-based matching tolerates hyphen / spacing variants
+                          // between catalog names and stored DB names.
                           const product = findProductForCatalog(item);
-                          if (!product) {
+                          // Render as a live card when the catalog launched it OR it
+                          // actually contains files — even if still flagged comingSoon.
+                          if (product && isItemLive(item)) {
                             return (
-                              <ComingSoonCard
+                              <SolutionCard
                                 key={item.key}
-                                label={item.label}
-                                isAdmin={isAdmin}
-                                pending={creatingKey === item.key}
-                                onAdminOpen={() => adminOpenComingSoon(item)}
+                                product={product}
+                                displayName={item.label}
+                                openLabel={t("open")}
+                                title={t("openTackleBox")}
+                                fileCount={counts[product.id]}
                               />
                             );
                           }
                           return (
-                            <SolutionCard
+                            <ComingSoonCard
                               key={item.key}
-                              product={product}
-                              displayName={item.label}
-                              openLabel={t("open")}
-                              title={t("openTackleBox")}
+                              label={item.label}
+                              isAdmin={isAdmin}
+                              pending={creatingKey === item.key}
+                              onAdminOpen={() => adminOpenComingSoon(item)}
                             />
                           );
                         })}
@@ -625,6 +711,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                                   product={p}
                                   openLabel={t("open")}
                                   title={t("openTackleBox")}
+                                  fileCount={counts[p.id]}
                                 />
                               ))
                             ) : (
@@ -646,6 +733,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                           product={p}
                           openLabel={t("open")}
                           title={t("openTackleBox")}
+                          fileCount={counts[p.id]}
                         />
                       ))}
                     </div>
@@ -683,29 +771,39 @@ function SolutionCard({
   openLabel,
   title,
   displayName,
+  fileCount,
 }: {
   product: ProductRow;
   openLabel: string;
   title: string;
   displayName?: string;
+  fileCount?: number;
 }) {
   return (
     <Link
       href={productHref(product)}
       title={title}
-      className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-white p-4 transition duration-200 hover:bg-[var(--surface-soft)]"
+      className="block w-full overflow-hidden rounded-[12px] border border-black/10 bg-white px-4 py-2.5 transition duration-200 hover:bg-[var(--surface-soft)]"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-black break-words">{displayName || product.name}</div>
-          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-            {product.series ? ` Series: ${product.series}` : ""}
+          <div className="mt-0.5 text-[12px] text-[var(--anchor-gray)] truncate">
+            {product.series ? `Series: ${product.series}` : ""}
             {product.section ? ` • ${product.section}` : ""}
           </div>
         </div>
 
-        <div className="w-full sm:w-auto sm:shrink-0">
-          <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+        <div className="flex shrink-0 items-center gap-2.5">
+          {typeof fileCount === "number" && (
+            <span
+              className="inline-flex items-center rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/60 whitespace-nowrap"
+              title={`${fileCount} file${fileCount === 1 ? "" : "s"} in this tackle box`}
+            >
+              {fileCount} {fileCount === 1 ? "file" : "files"}
+            </span>
+          )}
+          <div className="inline-flex items-center justify-center rounded-[10px] bg-[var(--anchor-green)] px-3 py-1.5 text-[12px] font-semibold text-white whitespace-nowrap">
             {openLabel}
           </div>
         </div>
@@ -731,18 +829,18 @@ function ComingSoonCard({
         type="button"
         onClick={onAdminOpen}
         disabled={pending}
-        className="block w-full overflow-hidden rounded-[14px] border border-dashed border-[var(--anchor-green)]/60 bg-[var(--surface-soft)] p-4 text-left transition duration-200 hover:bg-white disabled:opacity-60"
+        className="block w-full overflow-hidden rounded-[12px] border border-dashed border-[var(--anchor-green)]/60 bg-[var(--surface-soft)] px-4 py-2.5 text-left transition duration-200 hover:bg-white disabled:opacity-60"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-black break-words">{label}</div>
-            <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            <div className="mt-0.5 text-[12px] text-[var(--anchor-gray)] truncate">
               Coming soon — click to add content
             </div>
           </div>
 
-          <div className="w-full sm:w-auto sm:shrink-0">
-            <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-[var(--anchor-green)] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+          <div className="shrink-0">
+            <div className="inline-flex items-center justify-center rounded-[10px] bg-[var(--anchor-green)] px-3 py-1.5 text-[12px] font-semibold text-white whitespace-nowrap">
               {pending ? "Opening…" : "Add content"}
             </div>
           </div>
@@ -754,18 +852,18 @@ function ComingSoonCard({
   return (
     <div
       aria-disabled="true"
-      className="block w-full overflow-hidden rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 opacity-60 cursor-not-allowed select-none"
+      className="block w-full overflow-hidden rounded-[12px] border border-black/10 bg-[var(--surface-soft)] px-4 py-2.5 opacity-60 cursor-not-allowed select-none"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-black/60 break-words">{label}</div>
-          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+          <div className="mt-0.5 text-[12px] text-[var(--anchor-gray)] truncate">
             Solution materials in development
           </div>
         </div>
 
-        <div className="w-full sm:w-auto sm:shrink-0">
-          <div className="inline-flex w-full items-center justify-center rounded-[12px] bg-black/10 px-3 py-2 text-[12px] font-semibold text-black/50 whitespace-nowrap sm:w-auto">
+        <div className="shrink-0">
+          <div className="inline-flex items-center justify-center rounded-[10px] bg-black/10 px-3 py-1.5 text-[12px] font-semibold text-black/50 whitespace-nowrap">
             Coming soon
           </div>
         </div>
