@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type IconName =
   | "users" | "chart" | "phone" | "clipboard" | "wallet"
-  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid";
+  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy";
 
 type AdminCard = {
   title: string;
@@ -60,6 +60,13 @@ const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/notifications",
     icon: "mail",
+  },
+  {
+    title: "Support Queue",
+    description: "In-app help requests filed by external and internal reps — read, reply, and close threads.",
+    badge: "Config",
+    href: "/admin/support",
+    icon: "lifebuoy",
   },
   {
     title: "Projects",
@@ -213,6 +220,17 @@ function TileIcon({ name, className }: { name: IconName; className?: string }) {
           <rect x="14" y="3" width="7" height="7" rx="1" />
           <rect x="3" y="14" width="7" height="7" rx="1" />
           <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      );
+    case "lifebuoy":
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="4" />
+          <line x1="4.93" y1="4.93" x2="9.17" y2="9.17" />
+          <line x1="14.83" y1="14.83" x2="19.07" y2="19.07" />
+          <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" />
+          <line x1="4.93" y1="19.07" x2="9.17" y2="14.83" />
         </svg>
       );
   }
