@@ -126,7 +126,7 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "lightning-cable-securement", label: "Lightning Cable Securement", category: "lightning-protection", comingSoon: true, legacyFolder: "solutions/lightning" },
 
   // Security, Monitoring, & Communication (all coming soon)
-  { key: "camera-mounting-plate", label: "Camera w/ Mounting Plate", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/camera-mount" },
+  { key: "camera-mounting-plate", label: "Camera w/ Mounting Plate", category: "security-monitoring-communication", legacyFolder: "solutions/camera-mount" },
   { key: "roof-wall-mount-light-no-plate", label: "Roof Mount & Wall Mount Light w/o Mounting Plate", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/light-mount" },
   { key: "satellite-dish-mount-roof-wall", label: "Satellite Dish Mount - Roof or Wall", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/satellite-dish" },
   { key: "radio-tower-securement", label: "Radio Tower Securement", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
