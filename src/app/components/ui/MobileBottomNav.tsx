@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useEffectiveRole } from "@/lib/role/viewAs";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 const HIDE_PREFIXES = ["/auth", "/chat"];
@@ -12,7 +14,7 @@ function shouldHide(pathname: string) {
   return HIDE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-type IconKind = "grid" | "sparkles" | "library" | "clipboard" | "camera" | "wallet" | "shield" | "settings";
+type IconKind = "grid" | "sparkles" | "library" | "clipboard" | "camera" | "wallet" | "shield" | "settings" | "lifebuoy";
 
 // Sections the bottom nav can surface as a recent. The Dashboard is fixed and
 // intentionally excluded. Order matters only for prefix matching (more specific
@@ -28,12 +30,19 @@ const CATALOG: Section[] = [
   { key: "assets", prefix: "/internal-assets", label: "Assets", kind: "library", href: "/assets" },
   { key: "chat", prefix: "/chat", label: "Copilot", kind: "sparkles", href: "/chat" },
   { key: "admin", prefix: "/admin", label: "Admin", kind: "shield", href: "/admin" },
+  // Two prefixes map to the same `support` section key — visiting either the
+  // user-facing list or the admin queue counts as touching Support, so the
+  // bottom-nav recents slot will pick it up either way.
+  { key: "support", prefix: "/dashboard/support", label: "Support", kind: "lifebuoy", href: "/dashboard/support" },
+  { key: "support", prefix: "/admin/support", label: "Support", kind: "lifebuoy", href: "/admin/support" },
 ];
 
 const SECTION_BY_KEY = new Map(CATALOG.map((s) => [s.key, s]));
-// Dashboard + 2 recents + pinned Settings = 4 buttons. Settings is never a recent.
+// Dashboard + 2 recents + pinned Support + pinned Settings = 5 buttons.
+// Settings/Support are never surfaced as recents (excluded below).
 const RECENT_SLOTS = 2;
 const DEFAULT_KEYS = ["chat", "assets"]; // fill when there aren't enough recents yet
+const NEVER_AS_RECENT = new Set(["settings", "support"]);
 const STORE_KEY = "anchor:recent-nav";
 
 function matchSection(pathname: string): Section | null {
@@ -65,6 +74,8 @@ function NavIcon({ kind }: { kind: IconKind }) {
       return (<svg viewBox="0 0 24 24" className={cn} {...c}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>);
     case "settings":
       return (<svg viewBox="0 0 24 24" className={cn} {...c}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>);
+    case "lifebuoy":
+      return (<svg viewBox="0 0 24 24" className={cn} {...c}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="4.93" y1="4.93" x2="9.17" y2="9.17" /><line x1="14.83" y1="14.83" x2="19.07" y2="19.07" /><line x1="14.83" y1="9.17" x2="19.07" y2="4.93" /><line x1="4.93" y1="19.07" x2="9.17" y2="14.83" /></svg>);
   }
 }
 
@@ -87,7 +98,30 @@ function NavItem({ href, active, ariaLabel, kind, tutorialKey }: { href: string;
 
 export function MobileBottomNav() {
   const pathname = usePathname() || "";
+  const supabase = useMemo(() => supabaseBrowser(), []);
   const [recents, setRecents] = useState<Recent[]>([]);
+  const [actualRole, setActualRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user || !alive) return;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", u.user.id)
+        .maybeSingle();
+      if (!alive) return;
+      setActualRole((prof as { role?: string } | null)?.role || null);
+    })();
+    return () => { alive = false; };
+  }, [supabase]);
+
+  // Honor View-As: an admin previewing the external/internal experience
+  // should see the user-facing support link, not the admin queue.
+  const effectiveRole = useEffectiveRole(actualRole);
+  const isAdmin = effectiveRole === "admin";
 
   // Load stored recents once, then record the current section. Done in an async
   // task so the state update isn't a synchronous effect-body setState.
@@ -119,12 +153,12 @@ export function MobileBottomNav() {
   const currentKey = matchSection(pathname)?.key ?? null;
   const dashboardActive = currentKey === null && (pathname === "/dashboard" || pathname.startsWith("/dashboard") || pathname.startsWith("/admin"));
 
-  // Middle buttons: the most-recent sections (Settings is pinned and so excluded
-  // here), padded with defaults for new users.
+  // Middle buttons: the most-recent sections (Settings + Support are pinned
+  // and so excluded here), padded with defaults for new users.
   const keys: string[] = [];
   for (const r of recents) {
     if (keys.length >= RECENT_SLOTS) break;
-    if (r.key !== "settings" && !keys.includes(r.key) && SECTION_BY_KEY.has(r.key)) keys.push(r.key);
+    if (!NEVER_AS_RECENT.has(r.key) && !keys.includes(r.key) && SECTION_BY_KEY.has(r.key)) keys.push(r.key);
   }
   for (const k of DEFAULT_KEYS) {
     if (keys.length >= RECENT_SLOTS) break;
@@ -167,6 +201,12 @@ export function MobileBottomNav() {
             />
           );
         })}
+        <NavItem
+          href={isAdmin ? "/admin/support" : "/dashboard/support"}
+          kind="lifebuoy"
+          ariaLabel="Support"
+          active={currentKey === "support"}
+        />
         <NavItem href="/dashboard/settings" kind="settings" ariaLabel="Settings" active={currentKey === "settings"} tutorialKey="settings-mobile" />
       </div>
     </nav>

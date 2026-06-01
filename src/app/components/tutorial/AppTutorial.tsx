@@ -479,17 +479,33 @@ export function AppTutorial() {
   } else {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const placeBelow = rect.top + rect.height + 12 + 160 < vh;
-    const top = placeBelow ? rect.top + rect.height + TIP_GUTTER : Math.max(12, rect.top - 160 - TIP_GUTTER);
+    // Rough card-height estimate used only to decide above-vs-below. The
+    // actual placement below uses `top` (anchors at the top edge) or
+    // `bottom` (anchors at the bottom edge), so the card growing past the
+    // estimate never causes it to overlap the spotlight.
+    const TIP_H_EST = 200;
+    const placeBelow = rect.top + rect.height + TIP_GUTTER + TIP_H_EST < vh;
     let left = rect.left + rect.width / 2 - TIP_W / 2;
     left = Math.max(12, Math.min(left, vw - TIP_W - 12));
-    tipStyle = {
-      position: "fixed",
-      top,
-      left,
-      width: `min(${TIP_W}px, calc(100vw - 24px))`,
-      zIndex: 110,
-    };
+    if (placeBelow) {
+      tipStyle = {
+        position: "fixed",
+        top: rect.top + rect.height + TIP_GUTTER,
+        left,
+        width: `min(${TIP_W}px, calc(100vw - 24px))`,
+        zIndex: 110,
+      };
+    } else {
+      // Anchor by `bottom` so the card grows upward from a fixed point just
+      // above the spotlight — guarantees no overlap regardless of card height.
+      tipStyle = {
+        position: "fixed",
+        bottom: Math.max(12, vh - rect.top + TIP_GUTTER),
+        left,
+        width: `min(${TIP_W}px, calc(100vw - 24px))`,
+        zIndex: 110,
+      };
+    }
   }
 
   return (
