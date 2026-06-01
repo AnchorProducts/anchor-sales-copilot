@@ -122,7 +122,7 @@ export function AppSidebar() {
         </div>
       </Link>
 
-      <nav className="mt-8 flex flex-1 flex-col gap-1">
+      <nav data-tutorial="primary-nav" className="mt-8 flex flex-1 flex-col gap-1">
         <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} />
         <NavLink href="/chat" kind="sparkles" label="Copilot" active={isPath("/chat")} />
         <NavLink href="/assets" kind="library" label="Assets" active={isPath("/assets")} />
@@ -149,7 +149,7 @@ export function AppSidebar() {
         )}
       </nav>
 
-      <div className="space-y-1">
+      <div data-tutorial="settings-signout" className="space-y-1">
         <NavLink href="/dashboard/settings" kind="settings" label="Settings" active={isPath("/dashboard/settings")} />
         <button
           type="button"
