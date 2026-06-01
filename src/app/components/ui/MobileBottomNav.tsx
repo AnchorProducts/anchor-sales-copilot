@@ -68,12 +68,13 @@ function NavIcon({ kind }: { kind: IconKind }) {
   }
 }
 
-function NavItem({ href, active, ariaLabel, kind }: { href: string; active: boolean; ariaLabel: string; kind: IconKind }) {
+function NavItem({ href, active, ariaLabel, kind, tutorialKey }: { href: string; active: boolean; ariaLabel: string; kind: IconKind; tutorialKey?: string }) {
   return (
     <Link
       href={href}
       aria-label={ariaLabel}
       aria-current={active ? "page" : undefined}
+      data-tutorial={tutorialKey}
       className={
         "flex h-12 items-center justify-center rounded-full transition " +
         (active ? "bg-[var(--anchor-mint)] px-6 text-[var(--anchor-deep)]" : "w-12 text-white/70 hover:text-white")
@@ -135,6 +136,7 @@ export function MobileBottomNav() {
   return (
     <nav
       aria-label="Primary"
+      data-tutorial="primary-nav"
       style={{
         position: "fixed",
         left: 0,
@@ -143,11 +145,13 @@ export function MobileBottomNav() {
         paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))",
         paddingTop: "0.5rem",
         zIndex: 100,
-        display: "flex",
         justifyContent: "center",
         pointerEvents: "none",
       }}
-      className="lg:hidden"
+      // `flex lg:hidden` — inline `display` would clobber the `lg:hidden`
+      // utility (inline styles beat utility classes), which is why this lives
+      // in className instead of the style prop.
+      className="flex lg:hidden"
     >
       <div className="pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--anchor-deep)] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
         <NavItem href="/dashboard" kind="grid" ariaLabel="Dashboard" active={dashboardActive} />
@@ -163,7 +167,7 @@ export function MobileBottomNav() {
             />
           );
         })}
-        <NavItem href="/dashboard/settings" kind="settings" ariaLabel="Settings" active={currentKey === "settings"} />
+        <NavItem href="/dashboard/settings" kind="settings" ariaLabel="Settings" active={currentKey === "settings"} tutorialKey="settings-mobile" />
       </div>
     </nav>
   );
