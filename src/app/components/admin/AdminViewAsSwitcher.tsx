@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppRole, getViewAs, setViewAs, useViewAs } from "@/lib/role/viewAs";
+import { startTutorial, tutorialDoneKey, TUTORIAL_PENDING_KEY } from "@/app/components/tutorial/AppTutorial";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 const HIDE_PREFIXES = ["/auth"];
@@ -72,6 +73,21 @@ export function AdminViewAsSwitcher() {
     if (typeof window !== "undefined") window.location.reload();
   }
 
+  function replayTutorial() {
+    setOpen(false);
+    // Run the tour for whichever view we're currently in. Also clear the
+    // "done" flag for that role so the flow matches a true first-time user.
+    try { window.localStorage.removeItem(tutorialDoneKey(current)); } catch { /* ignore */ }
+    // Tour expects to start on the dashboard. If we're not there, set a
+    // pending-replay flag and navigate; the tutorial picks it up on mount.
+    if (pathname !== "/dashboard") {
+      try { window.sessionStorage.setItem(TUTORIAL_PENDING_KEY, current); } catch { /* ignore */ }
+      window.location.assign("/dashboard");
+    } else {
+      startTutorial(current);
+    }
+  }
+
   // Tiny role badge for the compact mobile button (so admins can tell at a
   // glance which view they're previewing without opening the popover).
   const shortLabel = current === "external_rep" ? "EXT" : current === "anchor_rep" ? "INT" : "ADM";
@@ -92,6 +108,7 @@ export function AdminViewAsSwitcher() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Switch role view"
+        data-tutorial="view-as-button"
         className={
           "flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold shadow-[0_6px_18px_rgba(0,0,0,0.18)] transition lg:gap-2 lg:px-3.5 lg:py-2 lg:text-[12px] " +
           (overriding
@@ -151,6 +168,23 @@ export function AdminViewAsSwitcher() {
               );
             })}
           </ul>
+          <div className="border-t border-black/5">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={replayTutorial}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[var(--anchor-deep)] transition hover:bg-black/[0.04]"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M10 8l6 4-6 4z" fill="currentColor" stroke="none" />
+              </svg>
+              <span>
+                <span className="block font-semibold">Replay walkthrough</span>
+                <span className="block text-[11px] text-black/55">Run the tour for the current view</span>
+              </span>
+            </button>
+          </div>
         </div>
       )}
     </div>
