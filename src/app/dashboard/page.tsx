@@ -472,24 +472,22 @@ export default function DashboardPage() {
     ? "Jump into Copilot, manage assets, or check rooftop reports."
     : "Jump into Copilot, manage assets, or talk to your rep.";
 
-  // Stat cards: contextual to role, always 2 up
+  // Stat cards: contextual to role, always 2 up. `tutorialKey` is what the
+  // walkthrough overlay uses to highlight each circle one at a time — keep it
+  // unique per role/stat.
   const stat1 = isAdmin
-    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "shield" as IconName }
+    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "shield" as IconName, tutorialKey: "stat-reps" }
     : isInternal
-    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName }
-    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || undefined };
+    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
+    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || undefined, tutorialKey: "stat-service-state" };
 
   const stat2 = isAdmin
-    ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName }
+    ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
     : isInternal
-    ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName }
-    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link, icon: "phone" as IconName };
+    ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName, tutorialKey: "stat-copilot" }
+    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link, icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
 
-  const stat3 = isExternal
-    ? { label: t("notableProject"), value: "Submit", trend: "", href: "/dashboard/notable-projects/new", icon: "camera" as IconName }
-    : null;
-
-  const stats = stat3 ? [stat1, stat2, stat3] : [stat1, stat2];
+  const stats = [stat1, stat2];
 
   // Quick actions list (role-gated)
   type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
@@ -668,6 +666,7 @@ export default function DashboardPage() {
         <Link
           href={heroLink}
           data-track-id="dashboard-hero-tap"
+          data-tutorial="dashboard-hero"
           aria-label={heroTitle}
           className="group relative flex min-h-[124px] items-center overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md"
         >
@@ -688,7 +687,7 @@ export default function DashboardPage() {
         </Link>
 
         {/* ── Quick actions bento — tile width scales with how much you use each app ── */}
-        <div>
+        <div data-tutorial="quick-actions">
           <h2 className="px-1 text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 [grid-auto-flow:dense]">
             {(() => {
@@ -708,11 +707,12 @@ export default function DashboardPage() {
               return actions.map((a) => {
                 const isTopUsed = topKeys.has(a.key);
                 const span = isTopUsed ? "col-span-2" : "col-span-1";
+                const tutorialKey = `qa-${a.key}`;
                 const Wrap = (props: { children: React.ReactNode; className: string }) =>
                   a.external ? (
-                    <a href={a.href} target="_blank" rel="noopener noreferrer" className={props.className}>{props.children}</a>
+                    <a href={a.href} target="_blank" rel="noopener noreferrer" data-tutorial={tutorialKey} className={props.className}>{props.children}</a>
                   ) : (
-                    <Link href={a.href} className={props.className}>{props.children}</Link>
+                    <Link href={a.href} data-tutorial={tutorialKey} className={props.className}>{props.children}</Link>
                   );
 
                 return (
@@ -735,17 +735,18 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Stat icon buttons (below Quick Actions) ────────────────────── */}
-        <div className={`grid ${stats.length === 3 ? "grid-cols-3 gap-3" : "grid-cols-2 gap-4"}`}>
+        <div data-tutorial="stat-buttons" className="grid grid-cols-2 gap-4">
           {stats.map((s, i) => {
             const isExt = "external" in s && (s as { external?: boolean }).external;
+            const tKey = (s as { tutorialKey?: string }).tutorialKey;
             const Wrap = isExt
               ? ({ children }: { children: React.ReactNode }) => (
-                  <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">
+                  <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">
                     {children}
                   </a>
                 )
               : ({ children }: { children: React.ReactNode }) => (
-                  <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
+                  <Link href={s.href} aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</Link>
                 );
             const sText = "text" in s ? (s as { text?: string }).text : undefined;
             return (
@@ -836,6 +837,7 @@ export default function DashboardPage() {
             <Link
               href={heroLink}
               data-track-id="dashboard-hero-tap"
+              data-tutorial="dashboard-hero"
               aria-label={heroTitle}
               className="group relative flex min-h-[168px] items-center overflow-hidden rounded-3xl bg-[var(--anchor-deep)] p-7 text-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md"
             >
@@ -856,7 +858,7 @@ export default function DashboardPage() {
             </Link>
 
             {/* Quick Actions bento — tile width scales with how much you use each app */}
-            <div className="mt-5">
+            <div className="mt-5" data-tutorial="quick-actions">
               <h2 className="px-1 text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
               {/* Top 2 actions by 30-day usage count get col-span-2; rest 1-wide.
                   Falls back to first action only when no usage data yet. */}
@@ -876,11 +878,12 @@ export default function DashboardPage() {
                   return actions.map((a) => {
                     const isTopUsed = topKeys.has(a.key);
                     const span = isTopUsed ? "lg:col-span-2" : "lg:col-span-1";
+                    const tutorialKey = `qa-${a.key}`;
                   const Wrap = (props: { children: React.ReactNode; className: string }) =>
                     a.external ? (
-                      <a href={a.href} target="_blank" rel="noopener noreferrer" className={props.className}>{props.children}</a>
+                      <a href={a.href} target="_blank" rel="noopener noreferrer" data-tutorial={tutorialKey} className={props.className}>{props.children}</a>
                     ) : (
-                      <Link href={a.href} className={props.className}>{props.children}</Link>
+                      <Link href={a.href} data-tutorial={tutorialKey} className={props.className}>{props.children}</Link>
                     );
 
                   return (
@@ -908,15 +911,16 @@ export default function DashboardPage() {
             </div>
 
             {/* Stat icon buttons (below Quick Actions) */}
-            <div className="mt-6 flex flex-wrap items-start gap-8">
+            <div data-tutorial="stat-buttons" className="mt-6 flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
+                const tKey = (s as { tutorialKey?: string }).tutorialKey;
                 const Wrap = isExt
                   ? ({ children }: { children: React.ReactNode }) => (
-                      <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</a>
+                      <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</a>
                     )
                   : ({ children }: { children: React.ReactNode }) => (
-                      <Link href={s.href} aria-label={s.label} className="group flex flex-col items-center gap-2">{children}</Link>
+                      <Link href={s.href} aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</Link>
                     );
                 const sText = "text" in s ? (s as { text?: string }).text : undefined;
                 return (
