@@ -429,6 +429,16 @@ export default function DashboardPage() {
     }
   }
 
+  // The hero "green block" already features your top tool — drop it from the
+  // Quick Actions below so the same tool isn't shown twice. (`project` is the
+  // action key for the "consults" feature.)
+  if (resolvedFeature) {
+    for (let i = actions.length - 1; i >= 0; i--) {
+      const featureKey = actions[i].key === "project" ? "consults" : actions[i].key;
+      if (featureKey === resolvedFeature) actions.splice(i, 1);
+    }
+  }
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQ.trim()) return;
