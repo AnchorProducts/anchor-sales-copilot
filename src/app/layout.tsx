@@ -7,6 +7,7 @@ import { AppSidebar } from "@/app/components/ui/AppSidebar";
 import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
+import { PageHelpButton } from "@/app/components/tutorial/PageHelpButton";
 
 export const metadata: Metadata = {
   title: {
@@ -65,6 +66,7 @@ export default function RootLayout({
         <MobileBottomNav />
         <AdminViewAsSwitcher />
         <AppTutorial />
+        <PageHelpButton />
         <UserEventTracker />
       </body>
     </html>

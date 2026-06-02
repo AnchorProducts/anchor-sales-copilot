@@ -216,9 +216,29 @@ const STEPS_ADMIN: Step[] = [
     path: "/dashboard",
   },
   {
-    target: '[data-tutorial="quick-actions"]',
-    title: "Quick Actions",
-    body: "You see every user-facing action plus the admin tools — Admin Console for reps and activity, Assessment Reports for rooftop audits.",
+    target: '[data-tutorial="qa-assets"]',
+    title: "Resource Library",
+    body: "Photos, spec sheets, and sales tools for every Anchor solution.",
+  },
+  {
+    target: '[data-tutorial="qa-chat"]',
+    title: "Sales Copilot",
+    body: "Ask product, install, or pricing questions — answers cite Anchor's docs.",
+  },
+  {
+    target: '[data-tutorial="qa-project"]',
+    title: "Rooftop Equipment Consult",
+    body: "Send a new rooftop opportunity straight to inside sales.",
+  },
+  {
+    target: '[data-tutorial="qa-commission"]',
+    title: "Commission Claim",
+    body: "File a claim so an order lands with the right rep's name on it.",
+  },
+  {
+    target: '[data-tutorial="qa-notable"]',
+    title: "Notable Project",
+    body: "Submit a standout rooftop project for the showcase.",
   },
   {
     target: '[data-tutorial="qa-admin"]',
@@ -287,6 +307,125 @@ export function startTutorial(role?: Role) {
   window.dispatchEvent(new CustomEvent(TUTORIAL_START_EVENT, { detail: { role } }));
 }
 
+// ─── Per-page tours ────────────────────────────────────────────────────────
+// Short, self-contained walkthroughs launched by the floating "?" button on
+// each page (see PageHelpButton). Each starts with a centered intro card, then
+// spotlights that page's key sections. Unlike the role tour these never touch
+// the per-role "done" flag.
+export const TUTORIAL_PAGE_START_EVENT = "anchor:tutorial:page-start";
+
+export function startPageTutorial(key: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(TUTORIAL_PAGE_START_EVENT, { detail: { key } }));
+}
+
+const pageIntro = (title: string, body: string): Step => ({ title, body });
+
+const PAGE_TOURS: Record<string, Step[]> = {
+  chat: [
+    pageIntro("Sales Copilot", "Ask anything — product fit, install steps, pricing. Copilot answers from Anchor's docs and links its sources."),
+    { target: '[data-tutorial="chat-composer"]', title: "Ask a question", body: "Type here and press Enter (Shift+Enter for a new line). Each answer cites the docs it came from." },
+    { target: '[data-tutorial="chat-history"]', title: "Your conversations", body: "Past chats live here — open one to pick up where you left off, or start a New Chat." },
+  ],
+  assets: [
+    pageIntro("Resource Library", "Photos, spec sheets, and sales tools for every Anchor solution."),
+    { target: '[data-tutorial="assets-search"]', title: "Search everything", body: "Find any asset across the whole library — search by product, category, or keyword." },
+    { target: '[data-tutorial="assets-intro"]', title: "Browse by solution", body: "Scroll down to browse assets grouped by Anchor solution and category." },
+  ],
+  support: [
+    pageIntro("Support", "Get help from an Anchor admin without leaving the app."),
+    { target: '[data-tutorial="support-form"]', title: "Send a request", body: "Describe what you need. Admins read every request and reply in the app — you'll get an email when there's an answer." },
+    { target: '[data-tutorial="support-list"]', title: "Your requests", body: "Past requests and their replies live here. Open one to read the thread or follow up." },
+  ],
+  settings: [
+    pageIntro("Settings", "Manage your profile, appearance, and account."),
+    { target: '[data-tutorial="settings-profile"]', title: "Your profile", body: "Update your name, company, phone, and service area. Your service area decides which inside rep gets your consults." },
+    { target: '[data-tutorial="settings-appearance"]', title: "Appearance", body: "Switch between light, dark, or system theme." },
+    { target: '[data-tutorial="settings-signout"]', title: "Sign out", body: "Sign out of the app here." },
+  ],
+  admin: [
+    pageIntro("Admin Console", "Everything you manage as an admin. Here's each tool, one at a time."),
+    { target: '[data-tutorial="admin-tile-oem-analytics"]', title: "OEM Analytics", body: "Manufacturer rep & consultant engagement — the OEM matrix, adoption and usage by OEM, with a matrix PDF export." },
+    { target: '[data-tutorial="admin-tile-user-analytics"]', title: "User Analytics", body: "Everyone who isn't an OEM rep or consultant — internal staff and other users, with per-user activity PDFs." },
+    { target: '[data-tutorial="admin-tile-users"]', title: "Users", body: "Edit names, emails, phone numbers, and roles for every user." },
+    { target: '[data-tutorial="admin-tile-sales-reps"]', title: "Sales Reps", body: "Configure inside/outside sales reps, regions, Teams links, and contact info." },
+    { target: '[data-tutorial="admin-tile-notifications"]', title: "Notifications", body: "Choose who gets commission claim emails and who receives the Friday analytics report." },
+    { target: '[data-tutorial="admin-tile-support-queue"]', title: "Support Queue", body: "In-app help requests filed by reps — read, reply, and close threads." },
+    { target: '[data-tutorial="admin-tile-projects"]', title: "Projects", body: "All submitted opportunities across users and regions." },
+    { target: '[data-tutorial="admin-tile-commission-claims"]', title: "Commission Claims", body: "Every commission claim submitted by external reps, with rep info and order details." },
+    { target: '[data-tutorial="admin-tile-rooftop-reports"]', title: "Rooftop Reports", body: "All OSHA-guided rooftop equipment audit submissions, with PDFs and flag counts." },
+    { target: '[data-tutorial="admin-tile-notable-projects"]', title: "Notable Projects", body: "Submitted notable installations with photos and brief writeups from external reps." },
+    { target: '[data-tutorial="admin-tile-knowledge"]', title: "Knowledge", body: "Curate Copilot knowledge sources, corrections, and indexed content." },
+    { target: '[data-tutorial="admin-tile-asset-reviews"]', title: "Asset Reviews", body: "Approve or reject photos submitted by internal reps for solution tackle boxes." },
+    { target: '[data-tutorial="admin-tile-walkthroughs"]', title: "Walkthroughs", body: "Preview the guided page tours users see when they tap the “?” button — including this one." },
+  ],
+  reports: [
+    pageIntro("Reports", "Activity analytics across your users."),
+    { target: '[data-tutorial="reports-search"]', title: "Find a user", body: "Search by name, email, or company to jump to anyone." },
+    { target: '[data-tutorial="reports-sort"]', title: "Sort the list", body: "Re-rank by most active, newest, top leads, or top sessions." },
+    { target: '[data-tutorial="reports-list"]', title: "Drill in", body: "Open any row for that user's event breakdown, top pages, and submissions." },
+  ],
+  commission: [
+    pageIntro("Commission Claim", "File a claim so an order lands with your name on it. File it before the order ships."),
+    { target: '[data-tutorial="commission-certify"]', title: "Certify first", body: "Confirm you're the rep behind this order — this ties the commission to you." },
+    { target: '[data-tutorial="commission-order"]', title: "Order details", body: "Fill in the order date, company, ship-to address, U-Anchors ordered, and a short project description." },
+    { target: '[data-tutorial="commission-submit"]', title: "Submit the claim", body: "Send it in — your inside team is notified and the claim lands with your name on it." },
+  ],
+  notable: [
+    pageIntro("Notable Project", "Submit a standout rooftop project for the showcase."),
+    { target: '[data-tutorial="notable-intro"]', title: "What to include", body: "Add the project details, location, photos, and the Anchor solutions used, then submit." },
+  ],
+  "consult-new": [
+    pageIntro("Rooftop Equipment Consult", "Send a new opportunity to your inside sales team — they take it from there."),
+    { target: '[data-tutorial="rec-project"]', title: "Project & site", body: "Start with the project name and site address, then roof type, brand, and timeline." },
+    { target: '[data-tutorial="rec-solutions"]', title: "Solution types", body: "Add a solution for each one on the project — pick the type, attach photos, and add notes. Add as many as you need." },
+    { target: '[data-tutorial="rec-contractors"]', title: "Contractors", body: "Add any contractors involved. Follow-up goes to the contractor, not the submitter." },
+    { target: '[data-tutorial="rec-submit"]', title: "Send it in", body: "Submit and your assigned inside rep picks it up from here." },
+  ],
+};
+
+// Map the current route to a tour. The "dashboard" key is special — its
+// walkthrough is the role tour, launched via startTutorial() instead.
+export function pageTourForPath(pathname: string): string | null {
+  if (pathname === "/dashboard") return "dashboard";
+  if (pathname.startsWith("/chat")) return "chat";
+  if (pathname.startsWith("/assets")) return "assets";
+  if (pathname.startsWith("/dashboard/opportunities/new")) return "consult-new";
+  if (pathname.startsWith("/dashboard/commission")) return "commission";
+  if (pathname.startsWith("/dashboard/notable-projects")) return "notable";
+  if (pathname.startsWith("/dashboard/support")) return "support";
+  if (pathname.startsWith("/dashboard/settings")) return "settings";
+  if (pathname.startsWith("/dashboard/reports")) return "reports";
+  if (pathname === "/admin") return "admin";
+  return null;
+}
+
+// Catalog of every walkthrough, used by the admin preview page. "dashboard"
+// runs the role tour; the rest are page tours keyed in PAGE_TOURS.
+export const PAGE_TOUR_LIST: { key: string; label: string; route: string }[] = [
+  { key: "dashboard", label: "Dashboard", route: "/dashboard" },
+  { key: "chat", label: "Sales Copilot", route: "/chat" },
+  { key: "assets", label: "Resource Library", route: "/assets" },
+  { key: "consult-new", label: "Rooftop Equipment Consult", route: "/dashboard/opportunities/new" },
+  { key: "commission", label: "Commission Claim", route: "/dashboard/commission/new" },
+  { key: "notable", label: "Notable Project", route: "/dashboard/notable-projects/new" },
+  { key: "support", label: "Support", route: "/dashboard/support" },
+  { key: "settings", label: "Settings", route: "/dashboard/settings" },
+  { key: "reports", label: "Reports", route: "/dashboard/reports" },
+  { key: "admin", label: "Admin Console", route: "/admin" },
+];
+
+// Admin preview handoff: stash the tour to run, navigate to its page, and the
+// tour auto-launches on arrival (see the matching effect in AppTutorial).
+const PENDING_PAGE_KEY = "anchor:tutorial:pending-page";
+// Only honor the handoff briefly, so a redirect away from a gated page can't
+// leave a stale request that fires on some unrelated later visit.
+const PENDING_PAGE_TTL_MS = 15000;
+export function setPendingPageTutorial(key: string) {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(PENDING_PAGE_KEY, `${Date.now()}:${key}`); } catch { /* ignore */ }
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 // Hide on auth screens — same convention as the sidebar and View-As switcher.
@@ -312,6 +451,9 @@ export function AppTutorial() {
   const [stepIdx, setStepIdx] = useState(0);
   const [steps, setSteps] = useState<Step[]>([]);
   const [rect, setRect] = useState<Rect | null>(null);
+  // True while a per-page tour is running, so finishing it doesn't mark the
+  // role's first-run walkthrough as done.
+  const [isPageTour, setIsPageTour] = useState(false);
   const tickRef = useRef<number | null>(null);
 
   // Pull the user's actual role once so auto-launch knows what to show.
@@ -340,13 +482,15 @@ export function AppTutorial() {
     setActive(false);
     setStepIdx(0);
     setRect(null);
-    if (markDone) {
+    // Page tours never gate the role's first-run auto-launch.
+    if (markDone && !isPageTour) {
       try {
         const r = effectiveRole || actualRole;
         if (r) window.localStorage.setItem(tutorialDoneKey(r), "1");
       } catch { /* ignore */ }
     }
-  }, [effectiveRole, actualRole]);
+    setIsPageTour(false);
+  }, [effectiveRole, actualRole, isPageTour]);
 
   // Listen for manual start (from View As menu or anywhere else).
   useEffect(() => {
@@ -355,6 +499,7 @@ export function AppTutorial() {
       const requested = detail?.role || effectiveRole || actualRole || "";
       const next = stepsForRole(requested);
       if (next.length === 0) return;
+      setIsPageTour(false);
       setSteps(next);
       setStepIdx(0);
       setActive(true);
@@ -362,6 +507,23 @@ export function AppTutorial() {
     window.addEventListener(TUTORIAL_START_EVENT, onStart);
     return () => window.removeEventListener(TUTORIAL_START_EVENT, onStart);
   }, [effectiveRole, actualRole]);
+
+  // Listen for a per-page tour launch (the floating "?" button).
+  useEffect(() => {
+    function onPageStart(e: Event) {
+      const detail = (e as CustomEvent).detail as { key?: string } | undefined;
+      const tour = detail?.key ? PAGE_TOURS[detail.key] : null;
+      if (!tour || tour.length === 0) return;
+      const next = isDesktopViewport() ? tour.filter((s) => !s.mobileOnly) : tour;
+      if (next.length === 0) return;
+      setIsPageTour(true);
+      setSteps(next);
+      setStepIdx(0);
+      setActive(true);
+    }
+    window.addEventListener(TUTORIAL_PAGE_START_EVENT, onPageStart);
+    return () => window.removeEventListener(TUTORIAL_PAGE_START_EVENT, onPageStart);
+  }, []);
 
   // Auto-launch on first dashboard visit per role. Admin's auto-launch only
   // fires when not previewing another role — otherwise an admin previewing
@@ -401,6 +563,45 @@ export function AppTutorial() {
     setStepIdx(0);
     setActive(true);
   }, [roleLoaded, actualRole, pathname, active]);
+
+  // Admin walkthrough preview: when a preview was requested from the admin
+  // page, launch its tour once we've navigated to the matching page.
+  useEffect(() => {
+    if (!roleLoaded) return;
+    if (shouldHide(pathname)) return;
+    if (active) return;
+    let raw: string | null = null;
+    try { raw = window.sessionStorage.getItem(PENDING_PAGE_KEY); } catch { return; }
+    if (!raw) return;
+    const sep = raw.indexOf(":");
+    const ts = sep > 0 ? Number(raw.slice(0, sep)) : 0;
+    const pendingKey = sep > 0 ? raw.slice(sep + 1) : raw;
+    // Drop an expired or off-page request (the latter once it has expired).
+    if (!ts || Date.now() - ts > PENDING_PAGE_TTL_MS) {
+      try { window.sessionStorage.removeItem(PENDING_PAGE_KEY); } catch { /* ignore */ }
+      return;
+    }
+    if (pageTourForPath(pathname) !== pendingKey) return; // not on the target page yet
+    try { window.sessionStorage.removeItem(PENDING_PAGE_KEY); } catch { /* ignore */ }
+
+    if (pendingKey === "dashboard") {
+      const next = stepsForRole(effectiveRole || actualRole || "");
+      if (next.length === 0) return;
+      setIsPageTour(false);
+      setSteps(next);
+      setStepIdx(0);
+      setActive(true);
+      return;
+    }
+    const tour = PAGE_TOURS[pendingKey];
+    if (!tour) return;
+    const next = isDesktopViewport() ? tour.filter((s) => !s.mobileOnly) : tour;
+    if (next.length === 0) return;
+    setIsPageTour(true);
+    setSteps(next);
+    setStepIdx(0);
+    setActive(true);
+  }, [roleLoaded, pathname, active, effectiveRole, actualRole]);
 
   const step = active ? steps[stepIdx] : null;
 
@@ -530,16 +731,18 @@ export function AppTutorial() {
   const TIP_W = 320;
   const TIP_GUTTER = 12;
 
+  const centeredStyle: React.CSSProperties = {
+    position: "fixed",
+    left: "50%",
+    top: "50%",
+    transform: "translate(-50%, -50%)",
+    width: `min(${TIP_W}px, calc(100vw - 32px))`,
+    zIndex: 110,
+  };
+
   let tipStyle: React.CSSProperties;
   if (!rect) {
-    tipStyle = {
-      position: "fixed",
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-      width: `min(${TIP_W}px, calc(100vw - 32px))`,
-      zIndex: 110,
-    };
+    tipStyle = centeredStyle;
   } else {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -548,10 +751,11 @@ export function AppTutorial() {
     // `bottom` (anchors at the bottom edge), so the card growing past the
     // estimate never causes it to overlap the spotlight.
     const TIP_H_EST = 200;
-    const placeBelow = rect.top + rect.height + TIP_GUTTER + TIP_H_EST < vh;
+    const roomBelow = vh - (rect.top + rect.height) >= TIP_H_EST + TIP_GUTTER;
+    const roomAbove = rect.top >= TIP_H_EST + TIP_GUTTER;
     let left = rect.left + rect.width / 2 - TIP_W / 2;
     left = Math.max(12, Math.min(left, vw - TIP_W - 12));
-    if (placeBelow) {
+    if (roomBelow) {
       tipStyle = {
         position: "fixed",
         top: rect.top + rect.height + TIP_GUTTER,
@@ -559,7 +763,7 @@ export function AppTutorial() {
         width: `min(${TIP_W}px, calc(100vw - 24px))`,
         zIndex: 110,
       };
-    } else {
+    } else if (roomAbove) {
       // Anchor by `bottom` so the card grows upward from a fixed point just
       // above the spotlight — guarantees no overlap regardless of card height.
       tipStyle = {
@@ -569,6 +773,11 @@ export function AppTutorial() {
         width: `min(${TIP_W}px, calc(100vw - 24px))`,
         zIndex: 110,
       };
+    } else {
+      // Target is taller than the viewport (e.g. a full-page grid) — there's
+      // no room above or below, so center the card instead of pushing it
+      // off-screen.
+      tipStyle = centeredStyle;
     }
   }
 

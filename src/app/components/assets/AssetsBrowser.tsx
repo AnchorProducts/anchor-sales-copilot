@@ -491,7 +491,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
           <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("specsNote")}</div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <div data-tutorial="assets-search" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
