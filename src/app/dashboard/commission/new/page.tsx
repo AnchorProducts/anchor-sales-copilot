@@ -39,7 +39,7 @@ export default function CommissionClaimPage() {
       />
 
       <div className="mx-auto max-w-3xl px-4 py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-10">
-        <header className="mb-5 sm:mb-6">
+        <header data-tutorial="commission-intro" className="mb-5 sm:mb-6">
           <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-gray)]">
             {t("independentRepresentative")}
           </div>

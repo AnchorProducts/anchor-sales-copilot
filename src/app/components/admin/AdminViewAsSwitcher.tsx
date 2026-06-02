@@ -185,6 +185,27 @@ export function AdminViewAsSwitcher() {
               </span>
             </button>
           </div>
+          <div className="border-t border-black/5">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); window.location.assign("/admin/walkthroughs"); }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-[var(--anchor-deep)] transition hover:bg-black/[0.04]"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3.5" y1="6" x2="3.51" y2="6" />
+                <line x1="3.5" y1="12" x2="3.51" y2="12" />
+                <line x1="3.5" y1="18" x2="3.51" y2="18" />
+              </svg>
+              <span>
+                <span className="block font-semibold">Preview page tutorials</span>
+                <span className="block text-[11px] text-black/55">See each page&rsquo;s walkthrough</span>
+              </span>
+            </button>
+          </div>
         </div>
       )}
     </div>

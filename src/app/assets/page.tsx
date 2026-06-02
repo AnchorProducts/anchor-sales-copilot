@@ -47,7 +47,7 @@ export default function AssetsPage() {
       />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card data-tutorial="assets-intro" className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="ds-caption">{t("assetLibrary")}</div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">{t("assetLibrary")}</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("browseSolutionsAnchors")}</p>

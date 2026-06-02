@@ -446,7 +446,7 @@ export default function LeadForm() {
         )}
 
         <div className="mt-4 grid grid-cols-1 gap-4">
-          <label className="grid gap-1.5 text-sm">
+          <label data-tutorial="rec-project" className="grid gap-1.5 text-sm">
             <span className="font-semibold">Project Name *</span>
             <Input
               value={form.project_name}
@@ -534,7 +534,7 @@ export default function LeadForm() {
           </div>
 
           {/* ── Solution Types (repeatable) ─────────────────────────────────── */}
-          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div data-tutorial="rec-solutions" className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
             <div className="text-sm font-semibold text-black">Solution Type *</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
               Pick a solution type, attach a picture, and add notes. Add another for each solution on the project.
@@ -636,7 +636,7 @@ export default function LeadForm() {
           </div>
 
           {/* ── Contractors + Project Follow Up ─────────────────────────────── */}
-          <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div data-tutorial="rec-contractors" className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
             <div className="text-sm font-semibold text-black">{t("contractorsOnProject")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
               Add contact info for any contractors involved. Follow-up will be directed to the contractor, not the submitter.
@@ -765,7 +765,7 @@ export default function LeadForm() {
         {success && <Alert className="mt-4" tone="success">{success}</Alert>}
 
         <div className="mt-5">
-          <Button type="submit" disabled={submitting} className="w-full py-3 text-sm sm:w-auto sm:px-6" variant="primary">
+          <Button data-tutorial="rec-submit" type="submit" disabled={submitting} className="w-full py-3 text-sm sm:w-auto sm:px-6" variant="primary">
             {submitting ? t("submitting") : t("submitLead")}
           </Button>
         </div>

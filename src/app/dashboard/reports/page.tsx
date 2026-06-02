@@ -390,7 +390,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
 
             {/* Controls */}
             <section className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative flex-1 sm:max-w-md">
+              <div data-tutorial="reports-search" className="relative flex-1 sm:max-w-md">
                 <svg
                   className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[var(--anchor-gray)]"
                   viewBox="0 0 24 24"
@@ -414,7 +414,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div data-tutorial="reports-sort" className="flex flex-wrap items-center gap-1.5">
                 <SortPill active={sortKey === "active"} onClick={() => setSortKey("active")}>Most active</SortPill>
                 <SortPill active={sortKey === "newest"} onClick={() => setSortKey("newest")}>Newest</SortPill>
                 <SortPill active={sortKey === "leads"} onClick={() => setSortKey("leads")}>Top leads</SortPill>
@@ -423,7 +423,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
             </section>
 
             {/* User list */}
-            <Card className="overflow-hidden p-0">
+            <Card data-tutorial="reports-list" className="overflow-hidden p-0">
               <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3 sm:px-6">
                 <h2 className="text-base font-semibold">
                   Users
