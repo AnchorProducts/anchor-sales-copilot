@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 type IconName =
   | "users" | "chart" | "phone" | "clipboard" | "wallet"
-  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy";
+  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy" | "play";
 
 type AdminCard = {
   title: string;
@@ -109,6 +109,13 @@ const CARDS: AdminCard[] = [
     badge: "Content",
     href: "/admin/asset-reviews",
     icon: "image",
+  },
+  {
+    title: "Walkthroughs",
+    description: "Preview the guided page tours users see when they tap the walkthrough button on each page.",
+    badge: "Content",
+    href: "/admin/walkthroughs",
+    icon: "play",
   },
 ];
 
@@ -222,15 +229,19 @@ function TileIcon({ name, className }: { name: IconName; className?: string }) {
           <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
       );
-    case "lifebuoy":
+    case "lifebuoy": // Support — rendered as a question mark.
       return (
         <svg {...props}>
           <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="4" />
-          <line x1="4.93" y1="4.93" x2="9.17" y2="9.17" />
-          <line x1="14.83" y1="14.83" x2="19.07" y2="19.07" />
-          <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" />
-          <line x1="4.93" y1="19.07" x2="9.17" y2="14.83" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      );
+    case "play": // Walkthroughs — "start the tour".
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M10 8l6 4-6 4z" fill="currentColor" stroke="none" />
         </svg>
       );
   }
@@ -283,7 +294,7 @@ export default function AdminHubPage() {
             {error}
           </Card>
         ) : (
-          <div className="grid grid-cols-2 gap-3 [grid-auto-flow:dense] sm:gap-4 md:gap-5 lg:grid-cols-4">
+          <div data-tutorial="admin-grid" className="grid grid-cols-2 gap-3 [grid-auto-flow:dense] sm:gap-4 md:gap-5 lg:grid-cols-4">
             {CARDS.map((card, i) => (
               <BentoTile key={card.title} card={card} index={i} />
             ))}
@@ -312,15 +323,17 @@ function BentoTile({ card, index }: { card: AdminCard; index: number }) {
   const inner = card.featured ? <FeaturedTileInner card={card} /> : <RegularTileInner card={card} />;
 
   const wrap = `group ${span} ${isLink ? "transition-transform duration-200 hover:-translate-y-0.5" : "cursor-default opacity-80"}`;
+  // Stable per-tile hook so the admin walkthrough can spotlight each tool.
+  const tutorialId = "admin-tile-" + card.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   if (isLink) {
     return (
-      <Link href={card.href!} className={wrap}>
+      <Link href={card.href!} data-tutorial={tutorialId} className={wrap}>
         {inner}
       </Link>
     );
   }
-  return <div className={wrap}>{inner}</div>;
+  return <div data-tutorial={tutorialId} className={wrap}>{inner}</div>;
 }
 
 function FeaturedTileInner({ card }: { card: AdminCard }) {

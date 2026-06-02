@@ -530,7 +530,7 @@ export default function ChatPage() {
           <div className="flex flex-1 gap-4 min-h-0 w-full">
 
             {/* ── Sidebar — desktop (always visible) ───────────────────── */}
-            <aside className="hidden sm:flex w-[260px] shrink-0 flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-md">
+            <aside data-tutorial="chat-history" className="hidden sm:flex w-[260px] shrink-0 flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-md">
               <ChatSidebar
                 conversations={conversations}
                 activeId={conversationId}
@@ -731,7 +731,7 @@ export default function ChatPage() {
                   while keeping the input + send button anchored at the top
                   of it. Desktop retains the safe-area inset. */}
               <div className="shrink-0 border-t border-black/10 bg-[var(--surface-strong)] pb-10 sm:[padding-bottom:max(env(safe-area-inset-bottom),0px)]">
-                <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
+                <div data-tutorial="chat-composer" className="flex items-center gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
                   <Input
                     className="min-w-0 flex-1 px-3 py-2.5 text-[15px] sm:py-3 sm:text-sm disabled:opacity-60"
                     placeholder={inputDisabled ? t("loadingYourChat") : t("messageAnchorCoPilot")}

@@ -130,7 +130,7 @@ export default function SettingsPage() {
         <div className="mx-auto max-w-xl space-y-5">
 
           {/* ── Profile Information ──────────────────────────────── */}
-          <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-profile" className="border-t-4 border-t-[var(--anchor-green)] p-5">
             <div className="text-sm font-semibold text-black">{t("profileInformation")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("profileInformationDesc")}</div>
 
@@ -175,7 +175,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* ── Appearance ───────────────────────────────────────── */}
-          <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-appearance" className="border-t-4 border-t-[var(--anchor-green)] p-5">
             <div className="text-sm font-semibold text-black">{t("appearance")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("appearanceDesc")}</div>
 
@@ -205,7 +205,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* ── Sign Out ─────────────────────────────────────────── */}
-          <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-signout" className="border-t-4 border-t-[var(--anchor-green)] p-5">
             <div className="text-sm font-semibold text-black">{t("signOut")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("signOutDesc")}</div>
             <Button
