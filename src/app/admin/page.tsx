@@ -7,6 +7,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 
 export const dynamic = "force-dynamic";
 
@@ -288,7 +289,7 @@ export default function AdminHubPage() {
 
       <div className="ds-container py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-10">
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+          <ToolLoader feature="admin" label={t("loading")} />
         ) : error ? (
           <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)] p-5 text-sm text-[var(--anchor-deep)]">
             {error}
