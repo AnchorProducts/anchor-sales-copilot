@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import LeadsTable from "@/app/components/leads/LeadsTable";
 import { Card } from "@/app/components/ui/Card";
+import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -67,7 +68,7 @@ export default function LeadsPageClient() {
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("leadQueueDesc")}</p>
         </Card>
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+          <ToolLoader feature="consults" label={t("loading")} />
         ) : error ? (
           <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)] p-5 text-sm text-[var(--anchor-deep)]">
             {t("internalAccessOnly")}

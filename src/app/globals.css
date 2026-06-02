@@ -564,3 +564,24 @@ input[type="datetime-local"] {
   .hero-check { stroke-dashoffset: 0; opacity: 1; }
   .hero-bill, .hero-sparkle, .hero-flash { opacity: 1; }
 }
+
+/* ── Resource Library loader: files dropping into a stack ───────────────── */
+@keyframes anchor-file-stack {
+  0%   { transform: translateY(-34px); opacity: 0; }
+  28%  { transform: translateY(0);     opacity: 1; }
+  82%  { transform: translateY(0);     opacity: 1; }
+  100% { transform: translateY(-34px); opacity: 0; }
+}
+.anchor-stack-loader { position: relative; width: 88px; height: 96px; margin: 0 auto; }
+/* Outer element carries each sheet's static offset + rotation in the pile;
+   the inner <span> runs the drop animation, so the two transforms don't
+   collide. */
+.anchor-stack-sheet { position: absolute; left: 50%; bottom: 6px; margin-left: -30px; }
+.anchor-stack-sheet > span {
+  display: block;
+  animation: anchor-file-stack 1.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anchor-stack-sheet > span { animation: none !important; opacity: 1; }
+}
