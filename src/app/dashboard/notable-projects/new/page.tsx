@@ -41,7 +41,7 @@ export default function NewNotableProjectPage() {
       />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card data-tutorial="notable-intro" className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="ds-caption">{t("notableProject")}</div>
           <h1 className="mt-2 text-2xl">{t("notableProjectTitle")}</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("notableProjectFormDesc")}</p>

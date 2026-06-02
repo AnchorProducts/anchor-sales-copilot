@@ -132,7 +132,7 @@ export default function SupportListPage() {
             Anchor admins read every request. We&rsquo;ll reply in the app and email you when there&rsquo;s an answer.
           </p>
 
-          <form onSubmit={submit} className="mt-5 space-y-4">
+          <form data-tutorial="support-form" onSubmit={submit} className="mt-5 space-y-4">
             <div>
               <label className="block text-sm font-semibold text-[var(--anchor-deep)]">Subject</label>
               <input
@@ -168,7 +168,7 @@ export default function SupportListPage() {
         </Card>
 
         {/* Your past requests */}
-        <div className="mt-8">
+        <div data-tutorial="support-list" className="mt-8">
           <h2 className="px-1 text-lg font-bold text-[var(--anchor-deep)]">Your requests</h2>
           {loading ? (
             <Card className="mt-3 p-5 text-sm text-black/60">Loading…</Card>

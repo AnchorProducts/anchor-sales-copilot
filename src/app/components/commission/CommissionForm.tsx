@@ -306,7 +306,7 @@ export default function CommissionForm() {
         )}
 
         <div className="mt-6 grid gap-5 sm:gap-6">
-          <label className="flex items-start gap-3 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 cursor-pointer">
+          <label data-tutorial="commission-certify" className="flex items-start gap-3 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4 cursor-pointer">
             <input type="checkbox" checked={form.certified} onChange={(e) => update("certified", e.target.checked)} className="mt-0.5 shrink-0" />
             <span className="text-sm">{t("certifyText")}</span>
           </label>
@@ -349,7 +349,7 @@ export default function CommissionForm() {
             </div>
           </div>
 
-          <label className="grid min-w-0 gap-1 text-sm">
+          <label data-tutorial="commission-order" className="grid min-w-0 gap-1 text-sm">
             <span className="font-semibold">{t("estimatedOrderDate")}</span>
             <Input
               type="date"
@@ -458,7 +458,7 @@ export default function CommissionForm() {
         {success && <Alert className="mt-4" tone="success">{t("commissionSubmitted")}</Alert>}
 
         <div className="mt-6 flex gap-2">
-          <Button type="submit" disabled={submitting} className="px-4 py-2 text-[12px]" variant="primary">
+          <Button data-tutorial="commission-submit" type="submit" disabled={submitting} className="px-4 py-2 text-[12px]" variant="primary">
             {submitting ? t("submitting") : t("submitCommissionClaim")}
           </Button>
         </div>
