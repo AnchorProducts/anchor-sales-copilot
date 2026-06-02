@@ -8,6 +8,7 @@ import Button from "@/app/components/ui/Button";
 import { Card } from "@/app/components/ui/Card";
 import { Input } from "@/app/components/ui/Field";
 import { Alert } from "@/app/components/ui/Alert";
+import { APP_NAME } from "@/lib/appMode";
 
 function isEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
@@ -132,7 +133,7 @@ export default function SignupPage() {
             <img src={process.env.NEXT_PUBLIC_APP_MODE === "internal" ? "/internal_anchorplogin.svg" : "/anchorplogin.svg"} alt="Anchor" className="ds-logo shrink-0" />
             <div>
               <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
-                Anchor Sales Co-Pilot
+                {APP_NAME}
               </div>
               <div className="ds-caption">Sales • Assets • Leads</div>
             </div>

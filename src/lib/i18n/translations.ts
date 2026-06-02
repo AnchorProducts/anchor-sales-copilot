@@ -99,7 +99,7 @@ export const translations = {
     languageDesc: "Sets your preferred language for this device.",
 
     // ── Chat ─────────────────────────────────────────────────────────────────
-    anchorSalesCoPilot: "Anchor Sales Co-Pilot",
+    anchorSalesCoPilot: "Anchor App",
     salesAssetsLeads: "Sales · Assets · Consults",
     newChat: "New Chat",
     chatHistory: "Chat History",
@@ -404,7 +404,7 @@ export const translations = {
     language: "Langue",
     languageDesc: "Définit votre langue préférée pour cet appareil.",
 
-    anchorSalesCoPilot: "Anchor Sales Co-Pilot",
+    anchorSalesCoPilot: "Anchor App",
     salesAssetsLeads: "Ventes · Ressources · Projets",
     newChat: "Nouvelle conversation",
     chatHistory: "Historique",
@@ -678,7 +678,7 @@ export const translations = {
     language: "Idioma",
     languageDesc: "Establece tu idioma preferido para este dispositivo.",
 
-    anchorSalesCoPilot: "Anchor Sales Co-Pilot",
+    anchorSalesCoPilot: "Anchor App",
     salesAssetsLeads: "Ventas · Recursos · Proyectos",
     newChat: "Nueva conversación",
     chatHistory: "Historial",
@@ -952,7 +952,7 @@ export const translations = {
     language: "Idioma",
     languageDesc: "Define seu idioma preferido para este dispositivo.",
 
-    anchorSalesCoPilot: "Anchor Sales Co-Pilot",
+    anchorSalesCoPilot: "Anchor App",
     salesAssetsLeads: "Vendas · Ativos · Projetos",
     newChat: "Nova conversa",
     chatHistory: "Histórico",
@@ -1226,7 +1226,7 @@ export const translations = {
     language: "Sprache",
     languageDesc: "Legt Ihre bevorzugte Sprache für dieses Gerät fest.",
 
-    anchorSalesCoPilot: "Anchor Sales Co-Pilot",
+    anchorSalesCoPilot: "Anchor App",
     salesAssetsLeads: "Vertrieb · Assets · Projekte",
     newChat: "Neues Gespräch",
     chatHistory: "Verlauf",
