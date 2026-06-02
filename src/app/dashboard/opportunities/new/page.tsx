@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import LeadForm from "@/app/components/leads/LeadForm";
 import { Card } from "@/app/components/ui/Card";
+import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -68,7 +69,7 @@ export default function NewLeadPage() {
           </p>
         </Card>
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+          <ToolLoader feature="consults" label={t("loading")} />
         ) : (
           <LeadForm />
         )}

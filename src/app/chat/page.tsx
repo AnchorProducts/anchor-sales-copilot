@@ -12,6 +12,7 @@ import ChatSidebar from "@/app/components/ChatSidebar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
 import { APP_NAME } from "@/lib/appMode";
+import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -610,6 +611,9 @@ export default function ChatPage() {
               {/* ── Messages ─────────────────────────────────────────────── */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} overscroll-contain px-3 py-3 sm:px-5 sm:py-4 bg-transparent`}>
                 <div className="space-y-2.5 sm:space-y-3">
+                  {historyLoading && messages.length === 0 && (
+                    <ToolLoader feature="chat" label={t("loadingYourChat")} />
+                  )}
                   {messages.map((m, idx) => {
                     const isInternal = role === "admin" || role === "anchor_rep";
                     const showFeedbackWidget = isInternal && m.role === "assistant" && m.content !== DEFAULT_GREETING.content;

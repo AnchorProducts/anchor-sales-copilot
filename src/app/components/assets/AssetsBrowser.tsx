@@ -8,6 +8,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { StackingFilesLoader } from "@/app/components/assets/StackingFilesLoader";
 import {
   SOLUTION_CATALOG,
   SOLUTION_CATEGORIES,
@@ -598,7 +599,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         {error ? (
           <Alert tone="error">{error}</Alert>
         ) : loading ? (
-          <Alert tone="neutral">{t("loading")}</Alert>
+          <StackingFilesLoader label={t("loading")} />
         ) : !hasAnyResult ? (
           <Alert tone="neutral">{t("noProductsFound")}</Alert>
         ) : (

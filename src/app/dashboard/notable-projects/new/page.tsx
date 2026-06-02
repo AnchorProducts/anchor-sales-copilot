@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import NotableProjectForm from "@/app/components/notable-projects/NotableProjectForm";
 import { Card } from "@/app/components/ui/Card";
+import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -47,7 +48,7 @@ export default function NewNotableProjectPage() {
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("notableProjectFormDesc")}</p>
         </Card>
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+          <ToolLoader feature="notable" label={t("loading")} />
         ) : (
           <NotableProjectForm />
         )}

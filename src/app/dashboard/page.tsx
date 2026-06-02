@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useEffectiveRole } from "@/lib/role/viewAs";
+import { FeatureGraphic } from "@/app/components/visuals/FeatureGraphic";
 
 type SearchProductRow = {
   id: string;
@@ -56,12 +57,12 @@ function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName
     case "grid":     return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>);
     case "trendUp":  return (<svg viewBox="0 0 24 24" className={className} {...c}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>);
     case "trendDown":return (<svg viewBox="0 0 24 24" className={className} {...c}><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>);
-    case "sparkles": return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z"/><path d="M19 14l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z"/></svg>);
-    case "library":  return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>);
+    case "sparkles": return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="8" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1" fill="currentColor" stroke="none"/></svg>);
+    case "library":  return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></svg>);
     case "phone":    return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M22 16.92V21a1 1 0 0 1-1.11 1A19.86 19.86 0 0 1 2 4.11 1 1 0 0 1 3 3h4.09a1 1 0 0 1 1 .75l1 4a1 1 0 0 1-.27 1L7.21 10.21a16 16 0 0 0 6.58 6.58l1.46-1.61a1 1 0 0 1 1-.27l4 1a1 1 0 0 1 .75 1z"/></svg>);
-    case "clipboard":return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>);
+    case "clipboard":return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 14l2 2 4-4"/></svg>);
     case "wallet":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M20 12V8H4a2 2 0 0 1 0-4h14v4"/><rect x="2" y="6" width="20" height="14" rx="2"/><circle cx="16" cy="13" r="1.5"/></svg>);
-    case "shield":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>);
+    case "shield":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M4 4v16h16"/><rect x="7" y="11" width="3" height="6" rx="0.5"/><rect x="12" y="7" width="3" height="10" rx="0.5"/><rect x="17" y="13" width="3" height="4" rx="0.5"/></svg>);
     case "settings": return (<svg viewBox="0 0 24 24" className={className} {...c}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
     case "rocket":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M5 13l4 4-4 4-2-2 2-6z"/><path d="M14 6l4 4-9 9-4-4 9-9z"/><path d="M19 2l3 3-3 3-3-3 3-3z"/></svg>);
     case "camera":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>);
@@ -99,155 +100,63 @@ function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroVisualKey; siz
   const wrap: React.CSSProperties = { width: size, height: size };
   const mint = "var(--anchor-mint)";
 
-  switch (feature) {
-    case "chat":
-      // Animated chat bubble with three "typing" dots — instantly reads as
-      // an AI/copilot conversation interface.
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          {/* Chat bubble body */}
-          <path
-            d="M22 30 H78 A6 6 0 0 1 84 36 V60 A6 6 0 0 1 78 66 H46 L34 76 V66 H22 A6 6 0 0 1 16 60 V36 A6 6 0 0 1 22 30 Z"
-            fill="rgba(156,226,187,0.22)"
-            stroke={mint}
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
-
-          {/* Typing dots — pulse opacity + radius at staggered intervals */}
-          <circle cx="36" cy="48" r="3.5" fill={mint}>
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" repeatCount="indefinite" />
-            <animate attributeName="r" values="3;4;3" dur="1.4s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="50" cy="48" r="3.5" fill={mint}>
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" begin="0.2s" repeatCount="indefinite" />
-            <animate attributeName="r" values="3;4;3" dur="1.4s" begin="0.2s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="64" cy="48" r="3.5" fill={mint}>
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.4s" begin="0.4s" repeatCount="indefinite" />
-            <animate attributeName="r" values="3;4;3" dur="1.4s" begin="0.4s" repeatCount="indefinite" />
-          </circle>
-
-          {/* Small sparkle in the corner — hints at "AI magic" */}
-          <g className="hero-sparkle" transform="translate(78 20)">
-            <path d="M0 -6 L1.5 -1.5 L6 0 L1.5 1.5 L0 6 L-1.5 1.5 L-6 0 L-1.5 -1.5 Z" fill={mint} />
+  // Resource Library keeps its own dropping-sheets visual (mint pages) inline.
+  if (feature === "assets") {
+    return (
+      <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+        {[
+          { x: 26, y: 38, rot: -9, delay: "0s" },
+          { x: 43, y: 34, rot: 6, delay: "0.3s" },
+          { x: 35, y: 43, rot: -2, delay: "0.6s" },
+        ].map((s, i) => (
+          <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.rot} 15 20)`}>
+            <g>
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 -30;0 0;0 0;0 -30"
+                keyTimes="0;0.28;0.82;1"
+                dur="1.8s"
+                begin={s.delay}
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="opacity"
+                values="0;1;1;0"
+                keyTimes="0;0.28;0.82;1"
+                dur="1.8s"
+                begin={s.delay}
+                repeatCount="indefinite"
+              />
+              <path
+                d="M2 1 H21 L30 10 V39 a2 2 0 0 1 -2 2 H2 a2 2 0 0 1 -2 -2 V3 a2 2 0 0 1 2 -2 Z"
+                fill={mint}
+                stroke="var(--anchor-deep)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path d="M21 1 V8 a2 2 0 0 0 2 2 H30" fill="none" stroke="var(--anchor-deep)" strokeWidth="1.5" strokeLinejoin="round" />
+              <rect x="7" y="17" width="16" height="3" rx="1.5" fill="var(--anchor-deep)" />
+              <rect x="7" y="24" width="15" height="2.4" rx="1.2" fill="var(--anchor-deep)" />
+              <rect x="7" y="30" width="10" height="2.4" rx="1.2" fill="var(--anchor-deep)" />
+            </g>
           </g>
-        </svg>
-      );
-
-    case "assets":
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          <g fill="none" stroke={mint} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round">
-            {/* book covers */}
-            <path d="M50 24 L22 30 L22 76 L50 80" fill="rgba(156,226,187,0.18)" />
-            <path d="M50 24 L78 30 L78 76 L50 80" fill="rgba(156,226,187,0.18)" />
-            {/* spine */}
-            <line x1="50" y1="24" x2="50" y2="80" />
-            {/* static left page lines */}
-            <line x1="30" y1="40" x2="46" y2="38" />
-            <line x1="30" y1="48" x2="46" y2="46" />
-            <line x1="30" y1="56" x2="46" y2="54" />
-          </g>
-          {/* turning right page */}
-          <path
-            d="M50 24 L78 30 L78 76 L50 80 Z"
-            fill={mint}
-            opacity="0.85"
-            className="hero-page-flip"
-            style={{ transformOrigin: "50px 52px" }}
-          />
-        </svg>
-      );
-
-    case "consults":
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          <g fill="none" stroke={mint} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round">
-            {/* clipboard body */}
-            <rect x="26" y="26" width="48" height="56" rx="6" fill="rgba(156,226,187,0.18)" />
-            {/* clip */}
-            <rect x="40" y="20" width="20" height="10" rx="2" fill="rgba(156,226,187,0.35)" />
-            {/* a couple of static lines */}
-            <line x1="36" y1="50" x2="64" y2="50" opacity="0.55" />
-            <line x1="36" y1="60" x2="58" y2="60" opacity="0.4" />
-          </g>
-          {/* drawing checkmark */}
-          <path
-            d="M36 70 L46 78 L66 58"
-            fill="none"
-            stroke={mint}
-            strokeWidth="3.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="hero-check"
-          />
-        </svg>
-      );
-
-    case "commission":
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          {/* rising bill (behind wallet) */}
-          <g className="hero-bill">
-            <rect x="34" y="34" width="32" height="20" rx="3" fill={mint} opacity="0.9" />
-            <text x="50" y="49" textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--anchor-deep)">$</text>
-          </g>
-          {/* wallet body */}
-          <g fill="rgba(156,226,187,0.22)" stroke={mint} strokeWidth="2.4" strokeLinejoin="round">
-            <rect x="22" y="44" width="56" height="38" rx="6" />
-            {/* card slot */}
-            <rect x="60" y="58" width="14" height="10" rx="2" fill={mint} />
-          </g>
-        </svg>
-      );
-
-    case "notable":
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          {/* flash burst */}
-          <circle cx="50" cy="50" r="22" fill={mint} opacity="0.5" className="hero-flash" />
-          {/* camera body */}
-          <g fill="rgba(156,226,187,0.22)" stroke={mint} strokeWidth="2.4" strokeLinejoin="round">
-            <path d="M22 38 H38 L42 32 H58 L62 38 H78 A4 4 0 0 1 82 42 V70 A4 4 0 0 1 78 74 H22 A4 4 0 0 1 18 70 V42 A4 4 0 0 1 22 38 Z" />
-            <circle cx="50" cy="56" r="10" fill="rgba(156,226,187,0.35)" />
-            <circle cx="50" cy="56" r="5" fill={mint} />
-          </g>
-        </svg>
-      );
-
-    case "admin":
-      // Animated bar chart — bars rise and fall at staggered rates to evoke
-      // a live activity dashboard.
-      return (
-        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
-          {/* baseline */}
-          <line x1="14" y1="84" x2="86" y2="84" stroke={mint} strokeWidth="1.8" opacity="0.5" />
-          {/* bars */}
-          <rect x="20" y="50" width="12" height="34" rx="2" fill={mint} opacity="0.85">
-            <animate attributeName="height" values="34;52;28;46;34" dur="2.6s" repeatCount="indefinite" />
-            <animate attributeName="y" values="50;32;56;38;50" dur="2.6s" repeatCount="indefinite" />
-          </rect>
-          <rect x="36" y="34" width="12" height="50" rx="2" fill={mint}>
-            <animate attributeName="height" values="50;30;58;42;50" dur="2.2s" begin="0.2s" repeatCount="indefinite" />
-            <animate attributeName="y" values="34;54;26;42;34" dur="2.2s" begin="0.2s" repeatCount="indefinite" />
-          </rect>
-          <rect x="52" y="42" width="12" height="42" rx="2" fill={mint} opacity="0.9">
-            <animate attributeName="height" values="42;58;30;50;42" dur="2.8s" begin="0.5s" repeatCount="indefinite" />
-            <animate attributeName="y" values="42;26;54;34;42" dur="2.8s" begin="0.5s" repeatCount="indefinite" />
-          </rect>
-          <rect x="68" y="56" width="12" height="28" rx="2" fill={mint} opacity="0.75">
-            <animate attributeName="height" values="28;46;36;52;28" dur="2.4s" begin="0.8s" repeatCount="indefinite" />
-            <animate attributeName="y" values="56;38;48;32;56" dur="2.4s" begin="0.8s" repeatCount="indefinite" />
-          </rect>
-          {/* pulsing dot — current value indicator above bars */}
-          <circle cx="42" cy="20" r="3" fill={mint}>
-            <animate attributeName="r" values="3;5;3" dur="1.6s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
-          </circle>
-        </svg>
-      );
+        ))}
+      </svg>
+    );
   }
+
+  // Every other tool shares the animated icons in FeatureGraphic — here in the
+  // hero's mint-on-green palette. The same component powers each page's loader.
+  return (
+    <FeatureGraphic
+      feature={feature}
+      size={size}
+      accent={mint}
+      soft="rgba(156,226,187,0.22)"
+      ink="var(--anchor-deep)"
+    />
+  );
 }
 
 /* ─── Initials helper ───────────────────────────────────────────────────── */
