@@ -44,10 +44,11 @@ function NavIcon({ kind, className = "h-5 w-5" }: { kind: IconKind; className?: 
   }
 }
 
-function NavLink({ href, kind, label, active }: { href: string; kind: IconKind; label: string; active: boolean }) {
+function NavLink({ href, kind, label, active, tutorialKey }: { href: string; kind: IconKind; label: string; active: boolean; tutorialKey?: string }) {
   return (
     <Link
       href={href}
+      data-tutorial={tutorialKey}
       className={
         "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition " +
         (active
@@ -125,7 +126,7 @@ export function AppSidebar() {
       </Link>
 
       <nav data-tutorial="primary-nav" className="mt-8 flex flex-1 flex-col gap-1">
-        <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} />
+        <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} tutorialKey="nav-dashboard" />
         <NavLink href="/chat" kind="sparkles" label="Copilot" active={isPath("/chat")} />
         <NavLink href="/assets" kind="library" label="Assets" active={isPath("/assets")} />
         {(isExternal || isAdmin) && (
@@ -155,6 +156,7 @@ export function AppSidebar() {
           kind="lifebuoy"
           label="Support"
           active={isAdmin ? isPath("/admin/support") : isPath("/dashboard/support")}
+          tutorialKey="nav-support"
         />
       </nav>
 

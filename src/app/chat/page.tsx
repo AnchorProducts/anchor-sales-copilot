@@ -11,6 +11,7 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import ChatSidebar from "@/app/components/ChatSidebar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
+import { APP_NAME } from "@/lib/appMode";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -513,7 +514,7 @@ export default function ChatPage() {
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <AppNavbar
-        title={t("anchorSalesCoPilot")}
+        title={APP_NAME}
         subtitle={t("salesAssetsLeads")}
         menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
         mobileMenuItems={[

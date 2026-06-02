@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
+import { APP_NAME } from "@/lib/appMode";
 
 // ─── Public events / keys ──────────────────────────────────────────────────
 export const TUTORIAL_START_EVENT = "anchor:tutorial:start";
@@ -31,6 +32,10 @@ type Step = {
   // If provided, the tour will navigate here before showing the step. Used
   // when a step lives on a different route than the previous one.
   path?: string;
+  // Skip this step on the desktop layout. Used for steps that explain a
+  // mobile-only affordance (e.g. the bottom nav's adaptive recent buttons,
+  // which the fixed desktop sidebar doesn't have).
+  mobileOnly?: boolean;
 };
 
 // True when the desktop sidebar is in play. Matches the Tailwind `lg`
@@ -46,7 +51,7 @@ function isDesktopViewport() {
 // and the finish card).
 
 const COMMON_INTRO: Step = {
-  title: "Welcome to the Anchor Sales Co-Pilot",
+  title: `Welcome to ${APP_NAME}`,
   body: "Quick 60-second tour so you know where everything lives. You can skip anytime — hit the Walkthrough option in your account menu to replay it later.",
 };
 
@@ -59,6 +64,26 @@ const COMMON_OUTRO: Step = {
 // element is actually on screen — the sidebar's bottom block on desktop, or
 // the gear icon in the mobile nav pill.
 const SETTINGS_TARGET = '[data-tutorial="settings-signout"], [data-tutorial="settings-mobile"]';
+
+// The home button, pinned in both the desktop sidebar and the mobile bottom
+// nav. Shown on both layouts — the spotlight lands on whichever is on screen.
+const DASHBOARD_STEP: Step = {
+  target: '[data-tutorial="nav-dashboard"]',
+  title: "Back to home base",
+  body: () => isDesktopViewport()
+    ? "Dashboard is your home base. Click it anytime to return to your hub — quick actions, shortcuts, and what needs your attention."
+    : "The home button takes you back to your dashboard anytime — quick actions, shortcuts, and what needs your attention.",
+};
+
+// Bottom-nav only: the two middle buttons aren't fixed — they swap to the
+// sections you've opened most recently. Skipped on desktop, where the sidebar
+// shows every link in a fixed order.
+const RECENTS_STEP: Step = {
+  target: '[data-tutorial="nav-recents"]',
+  title: "Shortcuts that follow you",
+  body: "The two buttons in the middle of the bar aren't fixed — they swap to the sections you open most, so your go-to tools are always one tap away. Dashboard, Support, and Settings stay put.",
+  mobileOnly: true,
+};
 
 const STEPS_EXTERNAL: Step[] = [
   COMMON_INTRO,
@@ -110,6 +135,13 @@ const STEPS_EXTERNAL: Step[] = [
       ? "Use the left sidebar to switch between Dashboard, Copilot, Assets, and your forms."
       : "Use the bottom nav to switch between Dashboard, Copilot, Assets, and your forms.",
   },
+  DASHBOARD_STEP,
+  RECENTS_STEP,
+  {
+    target: '[data-tutorial="nav-support"]',
+    title: "Need a hand?",
+    body: "Open Support to message an Anchor admin directly — questions, bugs, or anything blocking you. Replies come back right here in the app.",
+  },
   {
     target: SETTINGS_TARGET,
     title: "Settings & Sign out",
@@ -157,6 +189,13 @@ const STEPS_INTERNAL: Step[] = [
     body: () => isDesktopViewport()
       ? "The left sidebar gets you anywhere fast. The Consults link takes you straight to the queue."
       : "The bottom nav gets you anywhere fast. The Consults icon takes you straight to the queue.",
+  },
+  DASHBOARD_STEP,
+  RECENTS_STEP,
+  {
+    target: '[data-tutorial="nav-support"]',
+    title: "Need a hand?",
+    body: "Open Support to message an Anchor admin directly — questions, bugs, or anything blocking you. Replies come back right here in the app.",
   },
   {
     target: SETTINGS_TARGET,
@@ -206,6 +245,13 @@ const STEPS_ADMIN: Step[] = [
       ? "The left sidebar puts Dashboard, Copilot, Assets, Admin, and Reports one click away."
       : "The bottom nav puts Dashboard, Copilot, Assets, Admin, and Reports one tap away.",
   },
+  DASHBOARD_STEP,
+  RECENTS_STEP,
+  {
+    target: '[data-tutorial="nav-support"]',
+    title: "Support queue",
+    body: "Every support request from reps and external partners lands here. Read and reply to each thread without leaving the app.",
+  },
   {
     target: SETTINGS_TARGET,
     title: "Settings & Sign out",
@@ -220,10 +266,13 @@ const STEPS_ADMIN: Step[] = [
 ];
 
 function stepsForRole(role: Role | string): Step[] {
-  if (role === "external_rep") return STEPS_EXTERNAL;
-  if (role === "anchor_rep") return STEPS_INTERNAL;
-  if (role === "admin") return STEPS_ADMIN;
-  return [];
+  let base: Step[];
+  if (role === "external_rep") base = STEPS_EXTERNAL;
+  else if (role === "anchor_rep") base = STEPS_INTERNAL;
+  else if (role === "admin") base = STEPS_ADMIN;
+  else return [];
+  // Drop mobile-only steps when the desktop sidebar is in play.
+  return isDesktopViewport() ? base.filter((s) => !s.mobileOnly) : base;
 }
 
 // ─── Imperative API used by the View-As switcher ───────────────────────────
@@ -371,17 +420,26 @@ export function AppTutorial() {
     if (!step) return;
     if (!step.target) { setRect(null); return; }
     const nodes = document.querySelectorAll(step.target);
-    let el: HTMLElement | null = null;
-    for (const n of Array.from(nodes)) {
-      const h = n as HTMLElement;
-      if (h.offsetWidth > 0 && h.offsetHeight > 0) { el = h; break; }
+    const visible = (Array.from(nodes) as HTMLElement[]).filter(
+      (h) => h.offsetWidth > 0 && h.offsetHeight > 0
+    );
+    if (visible.length === 0) { setRect(null); return; }
+    // Union every visible match so one step can spotlight more than a single
+    // element — e.g. the bottom nav's two adaptive recent buttons. The
+    // mobile/desktop duplicates never co-occur (only one layout is on screen),
+    // so single-target steps still produce exactly that element's rect.
+    let top = Infinity, left = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const el of visible) {
+      const r = el.getBoundingClientRect();
+      top = Math.min(top, r.top);
+      left = Math.min(left, r.left);
+      right = Math.max(right, r.right);
+      bottom = Math.max(bottom, r.bottom);
     }
-    if (!el) { setRect(null); return; }
-    const r = el.getBoundingClientRect();
-    setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    setRect({ top, left, width: right - left, height: bottom - top });
     // Bring the target into view if it's offscreen.
-    if (r.top < 0 || r.bottom > window.innerHeight) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (top < 0 || bottom > window.innerHeight) {
+      visible[0].scrollIntoView({ block: "center", behavior: "smooth" });
     }
   }, [step]);
 

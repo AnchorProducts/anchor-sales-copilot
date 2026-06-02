@@ -10,6 +10,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Input } from "@/app/components/ui/Field";
 import { Alert } from "@/app/components/ui/Alert";
 import { trackEvent } from "@/lib/analytics/track";
+import { APP_NAME } from "@/lib/appMode";
 
 export const dynamic = "force-dynamic";
 
@@ -180,7 +181,7 @@ function LoginInner() {
             <img src={process.env.NEXT_PUBLIC_APP_MODE === "internal" ? "/internal_anchorplogin.svg" : "/anchorplogin.svg"} alt="Anchor" className="ds-logo shrink-0" />
             <div>
               <div className="text-sm font-semibold tracking-wide text-[var(--anchor-black)]">
-                Anchor Sales Co-Pilot
+                {APP_NAME}
               </div>
               <div className="ds-caption">Sales • Assets • Consult</div>
             </div>
