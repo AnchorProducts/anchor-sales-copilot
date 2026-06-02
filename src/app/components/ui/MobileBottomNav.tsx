@@ -191,10 +191,13 @@ export function MobileBottomNav() {
         <NavItem href="/dashboard" kind="grid" ariaLabel="Dashboard" active={dashboardActive} tutorialKey="nav-dashboard" />
         {keys.map((k) => {
           const s = SECTION_BY_KEY.get(k)!;
+          // Admin always returns to the console root, not the last-visited
+          // admin sub-page.
+          const href = k === "admin" ? "/admin" : (recentByKey.get(k) ?? s.href);
           return (
             <NavItem
               key={k}
-              href={recentByKey.get(k) ?? s.href}
+              href={href}
               kind={s.kind}
               ariaLabel={s.label}
               active={currentKey === k}
