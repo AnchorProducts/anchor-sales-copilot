@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useEffectiveRole } from "@/lib/role/viewAs";
-import { FeatureGraphic } from "@/app/components/visuals/FeatureGraphic";
+import { FeatureGraphic, ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 
 type SearchProductRow = {
   id: string;
@@ -492,6 +492,18 @@ export default function DashboardPage() {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  // First load (auth + profile): show a branded loader instead of flashing an
+  // empty hub.
+  if (!roleReady) {
+    return (
+      <main className="ds-page">
+        <div className="flex min-h-[80vh] items-center justify-center">
+          <ToolLoader feature="dashboard" label={t("loading")} />
+        </div>
+      </main>
+    );
+  }
 
   // ── Talk-to-Sales accent (used in desktop layout) ──────────────────────
   const teamsLink = salesRep?.teams_link || "";
