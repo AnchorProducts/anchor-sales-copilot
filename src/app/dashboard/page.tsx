@@ -627,13 +627,14 @@ export default function DashboardPage() {
                 .map((x) => ({ key: x.key, count: featureCounts[featureKeyFor(x.key)] ?? 0 }))
                 .sort((x, y) => y.count - x.count);
               const hasAnyData = ranked.some((r) => r.count > 0);
-              // On mobile (2-col grid) only the single most-used action goes full
-              // width — going more than one wide-row eats the whole screen.
-              const topKeys = new Set(
-                hasAnyData
-                  ? ranked.slice(0, 1).filter((r) => r.count > 0).map((r) => r.key)
-                  : actions.slice(0, 1).map((a) => a.key)
-              );
+              // On mobile (2-col grid) promote one tile to full width ONLY when
+              // the tile count is odd, so the rest always pair into clean rows.
+              // (An even count with one wide tile leaves a lopsided half-tile.)
+              const wideKey =
+                actions.length % 2 === 1
+                  ? (hasAnyData ? ranked[0]?.key : actions[0]?.key)
+                  : null;
+              const topKeys = new Set(wideKey ? [wideKey] : []);
 
               return actions.map((a) => {
                 const isTopUsed = topKeys.has(a.key);
