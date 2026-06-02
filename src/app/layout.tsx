@@ -8,6 +8,7 @@ import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
 import { PageHelpButton } from "@/app/components/tutorial/PageHelpButton";
+import { ProfileCompletionPrompt } from "@/app/components/ProfileCompletionPrompt";
 
 export const metadata: Metadata = {
   title: {
@@ -67,6 +68,7 @@ export default function RootLayout({
         <AdminViewAsSwitcher />
         <AppTutorial />
         <PageHelpButton />
+        <ProfileCompletionPrompt />
         <UserEventTracker />
       </body>
     </html>
