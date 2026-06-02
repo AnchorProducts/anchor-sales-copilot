@@ -5,7 +5,7 @@
 // green accent + mint fill on a light surface). Colors are passed in so the
 // same animation reads correctly on either background.
 
-export type FeatureKey = "chat" | "consults" | "commission" | "notable" | "admin";
+export type FeatureKey = "chat" | "consults" | "commission" | "notable" | "admin" | "dashboard";
 
 type Colors = {
   size?: number;
@@ -114,6 +114,23 @@ export function FeatureGraphic({ feature, size = 96, accent, soft, ink }: { feat
             <circle cx="50" cy="56" r="10" fill={soft} />
             <circle cx="50" cy="56" r="5" fill={accent} />
           </g>
+        </svg>
+      );
+
+    case "dashboard":
+      // Four tiles pulsing in a pinwheel order — matches the bottom-nav grid.
+      return (
+        <svg viewBox="0 0 100 100" style={wrap} aria-hidden>
+          {[
+            { x: 20, y: 20, begin: "0s" },
+            { x: 54, y: 20, begin: "0.15s" },
+            { x: 54, y: 54, begin: "0.3s" },
+            { x: 20, y: 54, begin: "0.45s" },
+          ].map((s, i) => (
+            <rect key={i} x={s.x} y={s.y} width="26" height="26" rx="6" fill={accent}>
+              <animate attributeName="opacity" values="0.25;1;0.25" dur="1.4s" begin={s.begin} repeatCount="indefinite" />
+            </rect>
+          ))}
         </svg>
       );
 
