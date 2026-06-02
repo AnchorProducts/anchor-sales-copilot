@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
-import { APP_NAME } from "@/lib/appMode";
+import { appNameForRole } from "@/lib/appMode";
 
 // ─── Public events / keys ──────────────────────────────────────────────────
 export const TUTORIAL_START_EVENT = "anchor:tutorial:start";
@@ -51,7 +51,9 @@ function isDesktopViewport() {
 // and the finish card).
 
 const COMMON_INTRO: Step = {
-  title: `Welcome to ${APP_NAME}`,
+  // Title is set per-role in stepsForRole so the View-As preview greets you
+  // with the name of the experience you're in, not the deployment's.
+  title: "Welcome",
   body: "Quick 60-second tour so you know where everything lives. You can skip anytime — hit the Walkthrough option in your account menu to replay it later.",
 };
 
@@ -271,8 +273,12 @@ function stepsForRole(role: Role | string): Step[] {
   else if (role === "anchor_rep") base = STEPS_INTERNAL;
   else if (role === "admin") base = STEPS_ADMIN;
   else return [];
+  // Greet with the name of the experience being shown (View-As aware), so an
+  // admin previewing the external app sees "Anchor App", not the deployment's.
+  const intro: Step = { ...base[0], title: `Welcome to ${appNameForRole(role)}` };
+  const withIntro = [intro, ...base.slice(1)];
   // Drop mobile-only steps when the desktop sidebar is in play.
-  return isDesktopViewport() ? base.filter((s) => !s.mobileOnly) : base;
+  return isDesktopViewport() ? withIntro.filter((s) => !s.mobileOnly) : withIntro;
 }
 
 // ─── Imperative API used by the View-As switcher ───────────────────────────
