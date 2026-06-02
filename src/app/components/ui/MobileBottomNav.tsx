@@ -188,7 +188,7 @@ export function MobileBottomNav() {
       className="flex lg:hidden"
     >
       <div className="pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--anchor-deep)] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
-        <NavItem href="/dashboard" kind="grid" ariaLabel="Dashboard" active={dashboardActive} />
+        <NavItem href="/dashboard" kind="grid" ariaLabel="Dashboard" active={dashboardActive} tutorialKey="nav-dashboard" />
         {keys.map((k) => {
           const s = SECTION_BY_KEY.get(k)!;
           return (
@@ -198,6 +198,7 @@ export function MobileBottomNav() {
               kind={s.kind}
               ariaLabel={s.label}
               active={currentKey === k}
+              tutorialKey="nav-recents"
             />
           );
         })}
@@ -206,6 +207,7 @@ export function MobileBottomNav() {
           kind="lifebuoy"
           ariaLabel="Support"
           active={currentKey === "support"}
+          tutorialKey="nav-support"
         />
         <NavItem href="/dashboard/settings" kind="settings" ariaLabel="Settings" active={currentKey === "settings"} tutorialKey="settings-mobile" />
       </div>

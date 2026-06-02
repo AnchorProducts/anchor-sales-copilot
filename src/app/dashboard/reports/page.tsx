@@ -9,6 +9,7 @@ import { Card } from "@/app/components/ui/Card";
 import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
 import { generateCategorySummaryPdf } from "@/lib/analytics/categoryActivityPdf";
 import { prettyPagePath } from "@/lib/analytics/pagePath";
+import { APP_NAME } from "@/lib/appMode";
 
 export const dynamic = "force-dynamic";
 
@@ -716,7 +717,7 @@ export default function ReportsPage() {
   return (
     <main className="ds-page">
       <AppNavbar
-        title={t("anchorSalesCoPilot")}
+        title={APP_NAME}
         subtitle={meta.subtitle}
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
