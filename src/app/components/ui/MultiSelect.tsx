@@ -76,7 +76,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
         style={{ touchAction: "manipulation" }}
         className="ds-select flex min-h-[44px] w-full items-center justify-between px-3 py-2 text-left"
       >
-        <span className={cn("truncate text-sm leading-snug", value.length === 0 && "text-black/40")}>
+        <span className={cn("min-w-0 flex-1 truncate text-sm leading-snug", value.length === 0 && "text-black/40")}>
           {triggerLabel}
         </span>
         <span className="ml-2 shrink-0 text-[10px] text-black/40">{open ? "▴" : "▾"}</span>
@@ -160,7 +160,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
                                 onChange={() => toggle(opt)}
                                 className="h-4 w-4 shrink-0"
                               />
-                              <span>{opt}</span>
+                              <span className="min-w-0 break-words">{opt}</span>
                             </label>
                           ))}
                       </div>
@@ -177,7 +177,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
                         onChange={() => toggle(opt)}
                         className="h-4 w-4 shrink-0"
                       />
-                      <span>{opt}</span>
+                      <span className="min-w-0 break-words">{opt}</span>
                     </label>
                   ))}
             </div>
