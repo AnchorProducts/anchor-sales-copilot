@@ -25,6 +25,22 @@ export default function CommissionClaimPage() {
         router.replace("/");
         return;
       }
+      // Gate access: only admins, or external reps an admin has granted the
+      // `anchor_commission` flag (toggled from /admin/users), may open the form.
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("role,anchor_commission")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (!alive) return;
+      const p = prof as { role?: string; anchor_commission?: boolean } | null;
+      const allowed =
+        p?.role === "admin" ||
+        (p?.role === "external_rep" && p?.anchor_commission === true);
+      if (!allowed) {
+        router.replace("/dashboard");
+        return;
+      }
       setReady(true);
     })();
     return () => { alive = false; };
