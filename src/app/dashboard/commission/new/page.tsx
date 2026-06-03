@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useEffectiveRole } from "@/lib/role/viewAs";
 import CommissionForm from "@/app/components/commission/CommissionForm";
-import { Card } from "@/app/components/ui/Card";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -14,7 +14,9 @@ export const dynamic = "force-dynamic";
 export default function CommissionClaimPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
-  const [ready, setReady] = useState(false);
+  const [actualRole, setActualRole] = useState<string | null>(null);
+  const [anchorCommission, setAnchorCommission] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -25,8 +27,6 @@ export default function CommissionClaimPage() {
         router.replace("/");
         return;
       }
-      // Gate access: only admins, or external reps an admin has granted the
-      // `anchor_commission` flag (toggled from /admin/users), may open the form.
       const { data: prof } = await supabase
         .from("profiles")
         .select("role,anchor_commission")
@@ -34,18 +34,27 @@ export default function CommissionClaimPage() {
         .maybeSingle();
       if (!alive) return;
       const p = prof as { role?: string; anchor_commission?: boolean } | null;
-      const allowed =
-        p?.role === "admin" ||
-        (p?.role === "external_rep" && p?.anchor_commission === true);
-      if (!allowed) {
-        router.replace("/dashboard");
-        return;
-      }
-      setReady(true);
+      setActualRole(String(p?.role || ""));
+      setAnchorCommission(p?.anchor_commission === true);
+      setLoaded(true);
     })();
     return () => { alive = false; };
   }, [router, supabase]);
 
+  // Commission claims open to internal & external sales. Admins can't open it
+  // in admin view — they must "View app as" a sales role (which bypasses the
+  // per-user anchor_commission flag for preview). Real reps still need the flag
+  // (toggled from /admin/users).
+  const effectiveRole = useEffectiveRole(actualRole);
+  const allowed =
+    (effectiveRole === "external_rep" || effectiveRole === "anchor_rep") &&
+    (anchorCommission || actualRole === "admin");
+
+  useEffect(() => {
+    if (loaded && !allowed) router.replace("/dashboard");
+  }, [loaded, allowed, router]);
+
+  const ready = loaded && allowed;
   const { t } = useTranslation();
   return (
     <main className="ds-page">

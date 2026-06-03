@@ -129,7 +129,9 @@ export function AppSidebar() {
         <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} tutorialKey="nav-dashboard" />
         <NavLink href="/chat" kind="sparkles" label="Copilot" active={isPath("/chat")} />
         <NavLink href="/assets" kind="library" label="Assets" active={isPath("/assets")} />
-        {(isExternal || isAdmin) && (
+        {/* Submission forms are for internal & external sales. Admins don't see
+            these in admin view — they must "View app as" a sales role. */}
+        {(role === "external_rep" || role === "anchor_rep") && (
           <>
             <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isExternal && isPath("/dashboard/opportunities")} />
             <NavLink href="/dashboard/notable-projects/new" kind="camera" label="Notable Project" active={isPath("/dashboard/notable-projects")} />
