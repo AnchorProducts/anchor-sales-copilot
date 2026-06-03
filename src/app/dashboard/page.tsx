@@ -412,16 +412,25 @@ export default function DashboardPage() {
   type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
   const actions: Action[] = [];
 
-  if (roleReady && isExternal) {
-    // External rep gets the four equal Quick Actions in this exact order:
-    //   Resource Library → Copilot → REC → Commission Claim Form
+  // Internal vs external sales (NOT admin view). Submission forms are available
+  // to both; admins must "View app as" a sales role to see them.
+  const isInternalSales = effectiveRole === "anchor_rep";
+  const isSales = isExternal || isInternalSales;
+  // Admins previewing a sales role can open Commission even without the per-user
+  // flag; real reps still need it (toggled from /admin/users).
+  const canOpenCommission = canSeeCommission || role === "admin";
+
+  if (roleReady && isSales) {
+    // Sales personas get the workspace tools plus the submission forms.
     actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
     actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
     actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
-    // Commission Claim Form is gated per-user by the `anchor_commission` flag,
-    // which admins toggle from /admin/users. Hidden unless explicitly granted.
-    if (canSeeCommission) {
+    actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
+    if (canOpenCommission) {
       actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),     desc: t("commissionClaimDesc"),     icon: "wallet",    badge: "Commission" });
+    }
+    if (isInternalSales) {
+      actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
     }
   } else {
     if (heroLink !== "/chat") {
@@ -429,15 +438,10 @@ export default function DashboardPage() {
     }
     actions.push({ key: "assets", href: "/assets", label: t("assetManagement"),   desc: t("assetManagementDesc"),                       icon: "library",  badge: "Library" });
 
-    if (roleReady && isInternal) {
-      actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
-    }
-
     if (roleReady && isAdmin) {
-      // Admins get every user-facing option in addition to the admin tools.
-      actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"), desc: t("projectIdentifierDesc"),                 icon: "clipboard", badge: "Projects"   });
-      actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),   desc: t("commissionClaimDesc"),                   icon: "wallet",    badge: "Commission" });
-      actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),  desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
+      // Admin view: tools + queue review only. Submission forms (REC, notable,
+      // commission) are intentionally hidden — open them via "View app as".
+      actions.push({ key: "consults",   href: "/dashboard/opportunities",      label: "Active Consults",      desc: "Triage rooftop equipment consults submitted by external reps.", icon: "clipboard", badge: "Triage" });
       actions.push({ key: "admin",      href: "/admin",                        label: "Admin Console",        desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield", badge: "Admin" });
       actions.push({ key: "reports",    href: "/admin/rooftop-reports",        label: "Assessment Reports",   desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
     }

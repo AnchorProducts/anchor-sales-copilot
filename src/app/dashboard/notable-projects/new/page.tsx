@@ -1,36 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "@/lib/supabase/browser";
 import NotableProjectForm from "@/app/components/notable-projects/NotableProjectForm";
 import { Card } from "@/app/components/ui/Card";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useFormAccess } from "@/lib/role/useFormAccess";
 
 export const dynamic = "force-dynamic";
 
 export default function NewNotableProjectPage() {
-  const router = useRouter();
-  const supabase = useMemo(() => supabaseBrowser(), []);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!alive) return;
-      if (!data.user) {
-        router.replace("/");
-        return;
-      }
-      setReady(true);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [router, supabase]);
+  // Internal or external sales may submit; admins must "View app as" a sales
+  // role to preview (admin-view is blocked).
+  const { ready } = useFormAccess("sales");
 
   const { t } = useTranslation();
   return (
