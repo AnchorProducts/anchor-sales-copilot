@@ -327,10 +327,8 @@ export async function POST(req: Request) {
     if (!project_timeline || !PROJECT_TIMELINE_LABELS[project_timeline]) {
       return NextResponse.json({ error: "Valid project timeline is required." }, { status: 400 });
     }
-    if (parsedSolutions.length === 0) {
-      return NextResponse.json({ error: "Select at least one solution type and add media." }, { status: 400 });
-    }
-
+    // Solution type is optional — a REC may be submitted with no solutions.
+    // Any solution that IS provided must still include media (checked below).
     for (const solution of parsedSolutions) {
       if (!solution.files.length) {
         return NextResponse.json(
