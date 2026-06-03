@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [phone, setPhone]       = useState("");
   const [email, setEmail]       = useState("");
   const [serviceState, setServiceState] = useState("");
+  const [serviceZip, setServiceZip]     = useState("");
 
   // Preferences
   const [theme, setTheme]       = useState<Theme>("light");
@@ -55,7 +56,7 @@ export default function SettingsPage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name,company,phone,service_state")
+        .select("full_name,company,phone,service_state,service_zip")
         .eq("id", ud.user.id)
         .maybeSingle();
 
@@ -65,6 +66,7 @@ export default function SettingsPage() {
         setCompany((prof as any).company   || "");
         setPhone((prof as any).phone       || "");
         setServiceState((prof as any).service_state || "");
+        setServiceZip((prof as any).service_zip || "");
       }
 
       // Load theme preference from localStorage
@@ -86,6 +88,15 @@ export default function SettingsPage() {
     const { data: ud } = await supabase.auth.getUser();
     if (!ud.user) { router.replace("/"); return; }
 
+    // Texas is split by ZIP between reps, so a TX service area needs a ZIP for
+    // us to show the right Anchor rep.
+    const zip = serviceZip.replace(/\D/g, "").slice(0, 5);
+    if (serviceState.trim().toUpperCase() === "TX" && zip.length < 5) {
+      setSaving(false);
+      setSaveErr("Enter your 5-digit ZIP code for Texas so we can match you to the right rep.");
+      return;
+    }
+
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -93,6 +104,7 @@ export default function SettingsPage() {
         company:   company.trim()  || null,
         phone:     phone.trim()    || null,
         service_state: serviceState.trim() || null,
+        service_zip: zip || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", ud.user.id);
@@ -158,6 +170,23 @@ export default function SettingsPage() {
                 </Select>
                 <span className="text-[11px] text-[var(--anchor-gray)]">{t("serviceAreaHint")}</span>
               </label>
+
+              {serviceState.trim().toUpperCase() === "TX" && (
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-semibold">ZIP code</span>
+                  <Input
+                    value={serviceZip}
+                    onChange={(e) => setServiceZip(e.target.value)}
+                    className="h-11 px-3 text-sm"
+                    placeholder="e.g. 77001"
+                    inputMode="numeric"
+                    maxLength={5}
+                  />
+                  <span className="text-[11px] text-[var(--anchor-gray)]">
+                    Texas is covered by more than one rep — your ZIP tells us whether your rep is the Greater Houston &amp; Gulf Coast rep or the rest-of-Texas rep.
+                  </span>
+                </label>
+              )}
 
               <label className="grid gap-1.5 text-sm">
                 <span className="font-semibold">{t("email")}</span>

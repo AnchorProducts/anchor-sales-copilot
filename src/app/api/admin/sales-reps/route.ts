@@ -37,14 +37,26 @@ function normalizeStates(input: any): string[] {
     .filter(Boolean);
 }
 
+function normalizeKind(input: any): "internal" | "external" {
+  return clean(input).toLowerCase() === "internal" ? "internal" : "external";
+}
+
+// 3-digit ZIP prefixes. Accepts an array or comma/space-separated string.
+function normalizeZipPrefixes(input: any): string[] {
+  const raw = Array.isArray(input) ? input : clean(input).split(/[,\s]+/);
+  return raw
+    .map((s) => String(s || "").replace(/\D/g, "").slice(0, 3))
+    .filter((s) => s.length === 3);
+}
+
 export async function GET() {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   const { data, error } = await supabaseAdmin
     .from("sales_reps")
-    .select("id, outside_sales_name, outside_sales_email, inside_sales_name, inside_sales_email, teams_link, states, created_at, updated_at")
-    .order("outside_sales_name");
+    .select("id, kind, name, email, teams_link, states, zip_prefixes, created_at, updated_at")
+    .order("name");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ reps: data || [] });
@@ -55,19 +67,21 @@ export async function POST(req: Request) {
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   const body = await req.json().catch(() => ({}));
-  const outsideName = clean(body?.outside_sales_name);
-  const outsideEmail = clean(body?.outside_sales_email).toLowerCase();
-  if (!outsideName || !outsideEmail) {
-    return NextResponse.json({ error: "Outside sales name and email are required." }, { status: 400 });
+  const name = clean(body?.name);
+  const email = clean(body?.email).toLowerCase();
+  if (!name || !email) {
+    return NextResponse.json({ error: "Name and email are required." }, { status: 400 });
   }
 
+  const kind = normalizeKind(body?.kind);
   const row = {
-    outside_sales_name: outsideName,
-    outside_sales_email: outsideEmail,
-    inside_sales_name: clean(body?.inside_sales_name) || null,
-    inside_sales_email: clean(body?.inside_sales_email).toLowerCase() || null,
-    teams_link: clean(body?.teams_link) || null,
+    kind,
+    name,
+    email,
+    // Internal reps route by email only; they never need a Teams link.
+    teams_link: kind === "internal" ? null : clean(body?.teams_link) || null,
     states: normalizeStates(body?.states),
+    zip_prefixes: normalizeZipPrefixes(body?.zip_prefixes),
   };
 
   const { data, error } = await supabaseAdmin
@@ -89,12 +103,14 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
-  if ("outside_sales_name" in body) update.outside_sales_name = clean(body.outside_sales_name) || null;
-  if ("outside_sales_email" in body) update.outside_sales_email = clean(body.outside_sales_email).toLowerCase() || null;
-  if ("inside_sales_name" in body) update.inside_sales_name = clean(body.inside_sales_name) || null;
-  if ("inside_sales_email" in body) update.inside_sales_email = clean(body.inside_sales_email).toLowerCase() || null;
+  if ("kind" in body) update.kind = normalizeKind(body.kind);
+  if ("name" in body) update.name = clean(body.name) || null;
+  if ("email" in body) update.email = clean(body.email).toLowerCase() || null;
   if ("teams_link" in body) update.teams_link = clean(body.teams_link) || null;
   if ("states" in body) update.states = normalizeStates(body.states);
+  if ("zip_prefixes" in body) update.zip_prefixes = normalizeZipPrefixes(body.zip_prefixes);
+  // Internal reps never carry a Teams link, regardless of what was submitted.
+  if (update.kind === "internal") update.teams_link = null;
 
   const { error } = await supabaseAdmin.from("sales_reps").update(update).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

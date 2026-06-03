@@ -36,8 +36,8 @@ export async function GET() {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-  const COLS = "id, email, full_name, phone, company, role, user_type, service_state, anchor_commission, created_at";
-  const COLS_NO_AC = "id, email, full_name, phone, company, role, user_type, service_state, created_at";
+  const COLS = "id, email, full_name, phone, company, role, user_type, service_state, service_zip, anchor_commission, created_at";
+  const COLS_NO_AC = "id, email, full_name, phone, company, role, user_type, service_state, service_zip, created_at";
 
   const first = await supabaseAdmin.from("profiles").select(COLS).order("created_at", { ascending: false });
   // Tolerate the anchor_commission column not being migrated yet.
@@ -109,6 +109,9 @@ export async function PATCH(req: Request) {
   }
   if (Object.prototype.hasOwnProperty.call(body, "service_state")) {
     update.service_state = clean(body.service_state) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "service_zip")) {
+    update.service_zip = clean(body.service_zip).replace(/\D/g, "").slice(0, 5) || null;
   }
   const wantAnchorCommission = Object.prototype.hasOwnProperty.call(body, "anchor_commission");
   if (wantAnchorCommission) {
