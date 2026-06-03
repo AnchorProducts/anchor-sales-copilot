@@ -25,6 +25,7 @@ export type Person = {
   anchorCommission: boolean; // OEM contacts: on an Anchor commission arrangement
   role: string | null; // profile role
   serviceState: string | null;
+  serviceZip: string | null;
   signedUp: boolean;
 };
 
@@ -75,6 +76,7 @@ export function PersonEditorModal({
   const [anchorCommission, setAnchorCommission] = useState(person.anchorCommission);
   const [role, setRole] = useState<RoleKey>(asRoleKey(person.role));
   const [serviceState, setServiceState] = useState(person.serviceState ?? "");
+  const [serviceZip, setServiceZip] = useState(person.serviceZip ?? "");
   const [newOem, setNewOem] = useState("");
 
   const [busy, setBusy] = useState(false);
@@ -114,7 +116,7 @@ export function PersonEditorModal({
     try {
       // 1) Profile (login) — only if this person has an account.
       if (person.profileId) {
-        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_state: serviceState, anchor_commission: anchorCommission };
+        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_state: serviceState, service_zip: serviceZip, anchor_commission: anchorCommission };
         if (email.trim().toLowerCase() !== person.email.trim().toLowerCase()) patch.email = email.trim();
         if (!isSelf) patch.role = role;
         const res = await fetch("/api/admin/users", {
@@ -240,6 +242,9 @@ export function PersonEditorModal({
               <Text label="Phone" type="tel" value={phone} onChange={setPhone} />
               <Text label="Company" value={company} onChange={setCompany} />
               {hasLogin && <Text label="Service area / state" value={serviceState} onChange={setServiceState} />}
+              {hasLogin && serviceState.trim().toUpperCase() === "TX" && (
+                <Text label="Service ZIP (TX — Houston/Gulf vs. rest)" value={serviceZip} onChange={setServiceZip} />
+              )}
             </div>
           </Section>
 
@@ -300,7 +305,7 @@ export function PersonEditorModal({
               />
               <span>
                 <span className="font-semibold text-[var(--anchor-deep)]">Anchor commission</span>
-                <span className="block text-[11px] text-[var(--anchor-gray)]">Tag this person as on an Anchor commission arrangement.</span>
+                <span className="block text-[11px] text-[var(--anchor-gray)]">On an Anchor commission arrangement. For app users, this also unlocks the Commission Claim Form.</span>
               </span>
             </label>
           </Section>

@@ -482,6 +482,11 @@ export default function LeadForm() {
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">{t("zip")}</span>
             <Input value={form.zip} onChange={(e) => update("zip", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("zipPlain")} />
+            {clean(form.state).toUpperCase() === "TX" && (
+              <span className="text-[11px] text-[var(--anchor-gray)]">
+                Required for Texas — the ZIP routes this to the correct Anchor rep (Greater Houston &amp; Gulf Coast vs. the rest of TX).
+              </span>
+            )}
           </label>
 
           <label className="grid gap-1.5 text-sm">

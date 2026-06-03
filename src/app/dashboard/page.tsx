@@ -35,8 +35,8 @@ const SECTION_LABEL: Record<SearchProductRow["section"], string> = {
 };
 
 type SalesRepLite = {
-  outside_sales_name: string | null;
-  outside_sales_email: string | null;
+  name: string | null;
+  email: string | null;
   teams_link: string | null;
 };
 
@@ -46,7 +46,7 @@ export const dynamic = "force-dynamic";
 type IconName =
   | "search" | "more" | "right" | "grid" | "trendUp" | "trendDown"
   | "sparkles" | "library" | "phone" | "clipboard" | "wallet" | "shield"
-  | "settings" | "rocket" | "camera" | "logout";
+  | "settings" | "rocket" | "camera" | "logout" | "user";
 
 function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName; className?: string; strokeWidth?: number }) {
   const c = { fill: "none", stroke: "currentColor", strokeWidth, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -67,6 +67,7 @@ function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName
     case "rocket":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M5 13l4 4-4 4-2-2 2-6z"/><path d="M14 6l4 4-9 9-4-4 9-9z"/><path d="M19 2l3 3-3 3-3-3 3-3z"/></svg>);
     case "camera":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>);
     case "logout":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
+    case "user":     return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
   }
 }
 
@@ -172,8 +173,10 @@ export default function DashboardPage() {
   const [role, setRole] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
   const [serviceState, setServiceState] = useState<string>("");
-  const [salesRep, setSalesRep] = useState<SalesRepLite | null>(null);
+  const [serviceZip, setServiceZip] = useState<string>("");
+  const [salesReps, setSalesReps] = useState<SalesRepLite[]>([]);
   const [fullName, setFullName] = useState<string>("");
+  const [canSeeCommission, setCanSeeCommission] = useState(false);
   const [searchQ, setSearchQ] = useState("");
 
   const [suggestData, setSuggestData] = useState<SearchProductRow[] | null>(null);
@@ -231,7 +234,7 @@ export default function DashboardPage() {
 
       let { data: prof } = await supabase
         .from("profiles")
-        .select("role,user_type,email,service_state,full_name")
+        .select("role,user_type,email,service_state,service_zip,full_name,anchor_commission")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -258,7 +261,7 @@ export default function DashboardPage() {
             },
             { onConflict: "id" }
           )
-          .select("role,user_type,email,service_state,full_name")
+          .select("role,user_type,email,service_state,service_zip,full_name,anchor_commission")
           .single();
         prof = created ?? null;
       }
@@ -267,28 +270,33 @@ export default function DashboardPage() {
       const p = prof as Record<string, unknown> | null;
       setRole(String((p?.role as string) || ""));
       setServiceState(String((p?.service_state as string) || ""));
+      setServiceZip(String((p?.service_zip as string) || ""));
       setFullName(String((p?.full_name as string) || (user.user_metadata?.full_name as string) || (user.email as string) || ""));
+      setCanSeeCommission((p?.anchor_commission as boolean) === true);
       setRoleReady(true);
     })();
     return () => { alive = false; };
   }, [booting, supabase]);
 
-  // Fetch the assigned sales rep when the user's service state is known.
+  // Fetch the assigned sales reps when the user's service state is known.
+  // A state can have multiple external reps; we show all of them.
   useEffect(() => {
-    if (!serviceState) { setSalesRep(null); return; }
+    if (!serviceState) { setSalesReps([]); return; }
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/sales-reps/by-state?state=${encodeURIComponent(serviceState)}`, { cache: "no-store" });
+        const qs = new URLSearchParams({ state: serviceState });
+        if (serviceZip) qs.set("zip", serviceZip);
+        const res = await fetch(`/api/sales-reps/by-state?${qs.toString()}`, { cache: "no-store" });
         const json = await res.json().catch(() => null);
         if (!alive) return;
-        setSalesRep(json?.rep || null);
+        setSalesReps(Array.isArray(json?.reps) ? json.reps : []);
       } catch {
-        if (alive) setSalesRep(null);
+        if (alive) setSalesReps([]);
       }
     })();
     return () => { alive = false; };
-  }, [serviceState]);
+  }, [serviceState, serviceZip]);
 
   // Fetch the user's most-recent feature so the hero reflects the last thing
   // they opened. Re-run whenever the dashboard regains focus — on mobile,
@@ -346,7 +354,9 @@ export default function DashboardPage() {
   // Allowed hero features per role. Admin keeps its bespoke pulse copy
   // unless their top feature is one of these workspace tools.
   const allowedFeatures: HeroFeatureKey[] = isExternal
-    ? ["chat", "assets", "consults", "commission", "notable"]
+    ? canSeeCommission
+      ? ["chat", "assets", "consults", "commission", "notable"]
+      : ["chat", "assets", "consults", "notable"]
     : effectiveRole === "anchor_rep"
     ? ["chat", "assets", "consults"]
     : isAdmin
@@ -385,16 +395,16 @@ export default function DashboardPage() {
   // walkthrough overlay uses to highlight each circle one at a time — keep it
   // unique per role/stat.
   const stat1 = isAdmin
-    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "shield" as IconName, tutorialKey: "stat-reps" }
+    ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "user" as IconName, tutorialKey: "stat-reps" }
     : isInternal
     ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
-    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || undefined, tutorialKey: "stat-service-state" };
+    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || "Set", tutorialKey: "stat-service-state" };
 
   const stat2 = isAdmin
     ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
     : isInternal
     ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName, tutorialKey: "stat-copilot" }
-    : { label: "Your Rep", value: salesRep?.outside_sales_name?.split(" ")[0] || "—", trend: salesRep?.teams_link ? "Ready" : "Setup", href: salesRep?.teams_link || "/dashboard/settings", external: !!salesRep?.teams_link, icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
+    : { label: salesReps.length > 1 ? "Your Reps" : "Your Rep", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: salesReps[0]?.teams_link || "/dashboard/settings", external: !!salesReps[0]?.teams_link, icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
 
   const stats = [stat1, stat2];
 
@@ -408,7 +418,11 @@ export default function DashboardPage() {
     actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
     actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
     actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
-    actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),     desc: t("commissionClaimDesc"),     icon: "wallet",    badge: "Commission" });
+    // Commission Claim Form is gated per-user by the `anchor_commission` flag,
+    // which admins toggle from /admin/users. Hidden unless explicitly granted.
+    if (canSeeCommission) {
+      actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),     desc: t("commissionClaimDesc"),     icon: "wallet",    badge: "Commission" });
+    }
   } else {
     if (heroLink !== "/chat") {
       actions.push({ key: "chat", href: "/chat", label: t("openCopilot"), desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
@@ -505,17 +519,49 @@ export default function DashboardPage() {
     );
   }
 
-  // ── Talk-to-Sales accent (used in desktop layout) ──────────────────────
-  const teamsLink = salesRep?.teams_link || "";
-  const repFullName = salesRep?.outside_sales_name || "";
-  const repReady = !!serviceState && !!salesRep && !!teamsLink;
-  const repSub = !serviceState
-    ? t("talkToSalesNoState")
-    : !salesRep
-      ? t("talkToSalesNoRep")
-      : !teamsLink
-        ? t("talkToSalesNoLink")
-        : `${t("talkToSalesWith")} ${repFullName}`;
+  // "Your reps" contacts card — lists every external rep assigned to the
+  // user's service state, each with a direct Teams link. Shared by both the
+  // mobile and desktop layouts. Hidden until a service state + reps resolve.
+  const renderRepsCard = () => {
+    if (!serviceState || salesReps.length === 0) return null;
+    return (
+      <div className="rounded-3xl border border-[var(--border-default)] bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-center gap-2">
+          <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
+            <Icon name="phone" className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-[var(--anchor-deep)]">
+              {salesReps.length > 1 ? "Your sales reps" : "Your sales rep"} · {serviceState}
+            </div>
+            <div className="text-[11px] text-[var(--anchor-gray)]">Reach out directly on Teams.</div>
+          </div>
+        </div>
+        <ul className="mt-3 divide-y divide-black/5">
+          {salesReps.map((rep, i) => (
+            <li key={rep.email || rep.name || i} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "—"}</div>
+                {rep.email && <div className="truncate text-[11px] text-[var(--anchor-gray)]">{rep.email}</div>}
+              </div>
+              {rep.teams_link ? (
+                <a
+                  href={rep.teams_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-full bg-[var(--anchor-deep)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[var(--anchor-green)]"
+                >
+                  Teams
+                </a>
+              ) : (
+                <span className="shrink-0 text-[11px] text-[var(--anchor-gray)]">No link</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -696,6 +742,9 @@ export default function DashboardPage() {
           })}
         </div>
 
+        {/* Your reps — all external reps for the user's state */}
+        {renderRepsCard()}
+
         </div>
 
         {/* Loading hint */}
@@ -869,6 +918,9 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+
+            {/* Your reps — all external reps for the user's state */}
+            <div className="mt-6 max-w-md">{renderRepsCard()}</div>
 
             {booting && (
               <p className="mt-6 text-center text-xs text-[var(--anchor-gray)]">Loading your workspace…</p>

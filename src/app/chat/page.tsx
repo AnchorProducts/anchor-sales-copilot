@@ -95,6 +95,65 @@ async function readJsonSafely<T = any>(res: Response): Promise<T | null> {
   }
 }
 
+// ─── Local chat cache ─────────────────────────────────────────────────────────
+// The server only persists plain message text (to chat_messages, keyed by
+// session_id); the `messages` table the sidebar reads from isn't written to,
+// and the inline sheet/doc buttons (`docs`) aren't stored anywhere. So opening a
+// sheet — a full-page navigation to /docs/view — and coming back would remount
+// the chat with an empty thread and no sheet buttons. We mirror the live thread
+// (messages + docs) into localStorage, keyed per user+conversation, so it
+// survives that round trip and is restored on mount. We also remember the
+// last-active conversation so we land back on it instead of the most recent.
+const CHAT_THREAD_PREFIX = "anchor.chat.thread";
+const CHAT_LAST_PREFIX = "anchor.chat.last";
+
+function chatThreadKey(uid: string, cid: string) {
+  return `${CHAT_THREAD_PREFIX}.${uid}.${cid}`;
+}
+function readCachedThread(uid: string, cid: string): Msg[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(chatThreadKey(uid, cid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Msg[]) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCachedThread(uid: string, cid: string, msgs: Msg[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(chatThreadKey(uid, cid), JSON.stringify(msgs));
+  } catch {
+    /* quota / serialization — non-fatal */
+  }
+}
+function clearCachedThread(uid: string, cid: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(chatThreadKey(uid, cid));
+  } catch {
+    /* non-fatal */
+  }
+}
+function readLastConversation(uid: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(`${CHAT_LAST_PREFIX}.${uid}`);
+  } catch {
+    return null;
+  }
+}
+function writeLastConversation(uid: string, cid: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${CHAT_LAST_PREFIX}.${uid}`, cid);
+  } catch {
+    /* non-fatal */
+  }
+}
+
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const router = useRouter();
@@ -188,6 +247,15 @@ export default function ChatPage() {
     async (uid: string, cid: string) => {
       setHistoryLoading(true);
       try {
+        // Prefer the locally cached thread — it preserves the inline sheet/doc
+        // buttons (and survives the /docs/view round trip), which the DB copy
+        // doesn't carry.
+        const cached = readCachedThread(uid, cid);
+        if (cached) {
+          setMessages(cached);
+          return;
+        }
+
         const { data: rows, error: msgErr } = await supabase
           .from("messages")
           .select("role,content,meta,created_at")
@@ -295,6 +363,7 @@ export default function ChatPage() {
         .eq("id", cid)
         .eq("user_id", userId);
       if (error) { console.error("CONVERSATION_DELETE_ERROR:", error); return; }
+      clearCachedThread(userId, cid);
       const list = await loadConversations(userId);
       if (cid === conversationId) {
         const nextId = list?.[0]?.id ?? null;
@@ -379,7 +448,11 @@ export default function ChatPage() {
         const list = await loadConversations(user.id);
         if (!alive) return;
 
-        let cid: string | null = list?.[0]?.id ?? null;
+        // Land back on the conversation we were last in (e.g. after opening a
+        // sheet), falling back to the most recent one.
+        const lastId = readLastConversation(user.id);
+        let cid: string | null =
+          lastId && list.some((c) => c.id === lastId) ? lastId : (list?.[0]?.id ?? null);
         if (!cid) {
           const created = await createConversation(user.id);
           cid = created?.id ?? null;
@@ -400,6 +473,21 @@ export default function ChatPage() {
 
     return () => { alive = false; };
   }, [createConversation, loadConversationMessages, loadConversations, router, supabase]);
+
+  // Mirror the live thread (incl. sheet buttons) into localStorage so it
+  // survives full-page navigations like opening a sheet in /docs/view. Skip the
+  // bare greeting so we never clobber a real cached thread with an empty one.
+  useEffect(() => {
+    if (!userId || !conversationId) return;
+    if (messages.length <= 1) return;
+    writeCachedThread(userId, conversationId, messages);
+  }, [messages, userId, conversationId]);
+
+  // Remember the active conversation so a remount lands back on it.
+  useEffect(() => {
+    if (!userId || !conversationId) return;
+    writeLastConversation(userId, conversationId);
+  }, [userId, conversationId]);
 
   async function newChat() {
     if (!userId) return;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
-import { resolveRegionalAssignment } from "@/lib/sales/regions";
+import { resolveRepsByKind } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,15 +13,17 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const state = url.searchParams.get("state") || "";
   const country = url.searchParams.get("country") || "US";
+  const zip = url.searchParams.get("zip") || "";
 
-  const rep = await resolveRegionalAssignment(country, state);
-  if (!rep) return NextResponse.json({ rep: null });
+  // Customer-facing dashboard shows external (outside) reps for the state. The
+  // ZIP narrows ZIP-split territories (TX Houston/Gulf vs the rest) to one rep.
+  const { external } = await resolveRepsByKind(country, state, zip);
+  const reps = external.map((r) => ({
+    name: r.name,
+    email: r.email,
+    teams_link: r.teams_link,
+  }));
 
-  return NextResponse.json({
-    rep: {
-      outside_sales_name: rep.outside_sales_name,
-      outside_sales_email: rep.outside_sales_email,
-      teams_link: rep.teams_link,
-    },
-  });
+  // `rep` (first match) retained for backward compatibility with older clients.
+  return NextResponse.json({ reps, rep: reps[0] ?? null });
 }

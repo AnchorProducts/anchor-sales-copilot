@@ -90,14 +90,14 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
             aria-label="Close"
             onClick={close}
             style={{ touchAction: "manipulation" }}
-            className="fixed inset-0 z-40 cursor-default bg-black/30 sm:hidden"
+            className="fixed inset-0 z-[110] cursor-default bg-black/30 sm:hidden"
           />
 
           {/* Panel — bottom sheet on mobile, absolute dropdown on sm+ */}
           <div
             className={cn(
               // Mobile: fixed bottom sheet
-              "fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-white shadow-xl",
+              "fixed inset-x-0 bottom-0 z-[120] rounded-t-2xl bg-white shadow-xl",
               // Desktop: absolute dropdown
               "sm:absolute sm:inset-x-auto sm:bottom-auto sm:top-full sm:mt-1 sm:w-full sm:rounded-xl sm:shadow-lg",
             )}

@@ -18,6 +18,7 @@ type ProfileRow = {
   company: string | null;
   role: string | null;
   service_state: string | null;
+  service_zip: string | null;
   anchor_commission?: boolean | null;
 };
 
@@ -161,6 +162,7 @@ export default function AdminUsersPage() {
         anchorCommission: !!c.anchor_commission || !!prof?.anchor_commission,
         role: prof?.role ?? c.profile_role ?? null,
         serviceState: prof?.service_state ?? null,
+        serviceZip: prof?.service_zip ?? null,
         signedUp: c.signed_up,
       });
     }
@@ -188,6 +190,7 @@ export default function AdminUsersPage() {
         anchorCommission: !!p.anchor_commission,
         role: p.role ?? null,
         serviceState: p.service_state ?? null,
+        serviceZip: p.service_zip ?? null,
         signedUp: true,
       });
     }
