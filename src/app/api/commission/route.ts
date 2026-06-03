@@ -14,7 +14,7 @@ function clean(v: any) {
 async function getProfile(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("role,full_name,company,phone,email")
+    .select("role,full_name,company,phone,email,anchor_commission")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -174,7 +174,12 @@ export async function POST(req: Request) {
 
     const user = auth.user;
     const profile = await getProfile(user.id);
-    if (!profile || (profile.role !== "external_rep" && profile.role !== "admin")) {
+    // Commission claims are gated per-user by the `anchor_commission` flag that
+    // admins toggle from /admin/users. Admins are always allowed.
+    const canClaim =
+      profile?.role === "admin" ||
+      (profile?.role === "external_rep" && profile?.anchor_commission === true);
+    if (!canClaim) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

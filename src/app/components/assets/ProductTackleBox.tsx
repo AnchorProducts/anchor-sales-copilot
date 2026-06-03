@@ -129,18 +129,6 @@ async function docOpenHrefWithToken(
   return `/api/doc-open?path=${encodeURIComponent(p)}${download ? "&download=1" : "&download=0"}${t}`;
 }
 
-// ✅ NEW: download without leaving the current page (prevents the black screen)
-function triggerDownload(href: string, filename?: string) {
-  const a = document.createElement("a");
-  a.href = href;
-  a.rel = "noopener";
-  // If same-origin, download attr helps. If cross-origin, browser may ignore it (still okay).
-  if (filename) a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
 // Mobile detection — on phones we hand PDFs straight to the OS browser
 // (Safari/Chrome) which has a proper native PDF viewer, instead of trying
 // to embed via the in-app /docs/view wrapper (whose <object> fallback
@@ -613,18 +601,6 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     window.location.href = `/docs/view?${qs.toString()}`;
   }
 
-  function forceDownload(path: string) {
-    if (isMobileDevice()) {
-      // Hand off to the phone's browser — it'll honor Content-Disposition:
-      // attachment via its native download/share sheet.
-      window.open(docOpenHref(path, true), "_blank", "noopener");
-      return;
-    }
-    // Desktop: programmatic anchor click keeps the current page alive
-    // instead of navigating the tab to the attachment response.
-    triggerDownload(docOpenHref(path, true), basename(path));
-  }
-
   async function shareAsset(path: string) {
     // Share a link that works on iOS. This endpoint should redirect to a signed URL.
     const url = new URL(docOpenHref(path, false), window.location.origin).toString();
@@ -1056,13 +1032,6 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                               >
                                 {t("view")}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => forceDownload(a.path)}
-                                className="flex-1 rounded-lg border border-black/10 bg-white py-1.5 text-[11px] font-semibold text-black"
-                              >
-                                {t("save")}
-                              </button>
                             </div>
                             {isAdmin && (
                               <button
@@ -1085,8 +1054,6 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     <div className="grid gap-3">
                       {docs.map((a) => {
                         const badge = groupBadgeFromPath(a.path);
-                        const ext = extOf(a.path);
-                        const canOpenInline = ["pdf", "mp4"].includes(ext);
                         return (
                           <div
                             key={a.id}
@@ -1108,28 +1075,19 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 </div>
                               </div>
                               <div className="flex w-full gap-2 sm:w-auto sm:justify-end">
-                                {canOpenInline && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openInline(a.path)}
-                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
-                                  >
-                                    Open →
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => openInline(a.path)}
+                                  className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap"
+                                >
+                                  Open →
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => shareAsset(a.path)}
                                   className="hidden sm:inline-flex items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
                                 >
                                   Share
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => forceDownload(a.path)}
-                                  className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03]"
-                                >
-                                  Download
                                 </button>
                                 {isAdmin && (
                                   <button

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
-import { resolveRegionalAssignment, resolveStatesForUser } from "@/lib/sales/regions";
+import { resolveRepsByKind, resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -188,6 +188,7 @@ async function sendInsideSalesLeadEmail(params: {
   req: Request;
   leadId: string;
   toEmail: string;
+  toEmails?: string[];
   insideSalesName: string | null;
   outsideSalesName: string | null;
   customerCompany: string;
@@ -213,7 +214,12 @@ async function sendInsideSalesLeadEmail(params: {
 
   const resend = new Resend(resendKey);
   const to = clean(params.toEmail);
-  if (!to) return;
+  // De-duped recipient list — every internal rep for the state (falls back to
+  // the single primary contact when an explicit list isn't supplied).
+  const recipients = Array.from(
+    new Set((params.toEmails && params.toEmails.length ? params.toEmails : [to]).map((e) => clean(e)).filter(Boolean))
+  );
+  if (recipients.length === 0) return;
 
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
   const contactMethodLabel = CONTACT_METHOD_LABELS[params.preferredContactMethod] || params.preferredContactMethod;
@@ -250,7 +256,7 @@ async function sendInsideSalesLeadEmail(params: {
 
   const result = await resend.emails.send({
     from,
-    to: [to],
+    to: recipients,
     subject,
     text: lines.join("\n"),
   });
@@ -370,21 +376,31 @@ export async function POST(req: Request) {
 
     const region_code = deriveRegionCode(country, state);
     const location_text = buildLocation(project_address, city, state, zip, country);
-    const regionalAssignment = await resolveRegionalAssignment(country, state);
-    const outside_sales_name = regionalAssignment?.outside_sales_name || null;
-    const outside_sales_email = regionalAssignment?.outside_sales_email || null;
-    // Prefer the configured internal sales rep for the project's state; fall
-    // back to the outside rep when an inside contact has not been set yet.
-    const inside_sales_name =
-      regionalAssignment?.inside_sales_name || outside_sales_name;
-    const inside_sales_email =
-      regionalAssignment?.inside_sales_email || outside_sales_email;
+    // Pass the project ZIP so ZIP-split territories resolve to one rep, e.g. a
+    // TX lead routes to Daymon (Houston/Gulf) or Robert (rest of TX), not both.
+    const { internal: internalReps, external: externalReps } = await resolveRepsByKind(country, state, zip);
+    // Notify every internal (inside) rep configured for the project's state.
+    // Fall back to the external reps when no internal contact is set yet.
+    const notifyReps = (internalReps.length > 0 ? internalReps : externalReps)
+      .filter((r) => clean(r.email));
+    const notify_emails = notifyReps.map((r) => clean(r.email).toLowerCase()).filter(Boolean);
+    // Snapshot a primary contact onto the lead row for display/back-compat.
+    const primaryExternal = externalReps[0] || null;
+    const outside_sales_name = primaryExternal?.name || null;
+    const outside_sales_email = primaryExternal?.email || null;
+    const inside_sales_name = notifyReps[0]?.name || outside_sales_name;
+    const inside_sales_email = notify_emails[0] || outside_sales_email;
     const notification_email = inside_sales_email;
     const notification_name = inside_sales_name;
-    const assignment_note = regionalAssignment
+    const hasAssignment = internalReps.length > 0 || externalReps.length > 0;
+    const assignment_note = hasAssignment
       ? [
-          inside_sales_name ? `Inside sales: ${inside_sales_name}` : null,
-          outside_sales_name ? `Outside sales: ${outside_sales_name}` : null,
+          internalReps.length > 0
+            ? `Inside sales: ${internalReps.map((r) => r.name).filter(Boolean).join(", ")}`
+            : null,
+          externalReps.length > 0
+            ? `Outside sales: ${externalReps.map((r) => r.name).filter(Boolean).join(", ")}`
+            : null,
         ]
           .filter(Boolean)
           .join(" | ") || null
@@ -558,7 +574,7 @@ export async function POST(req: Request) {
         sent: false,
         emailId: null,
         error: null,
-        to: notification_email,
+        to: notify_emails.join(", ") || notification_email,
       };
 
       try {
@@ -566,6 +582,7 @@ export async function POST(req: Request) {
           req,
           leadId,
           toEmail: notification_email,
+          toEmails: notify_emails,
           insideSalesName: notification_name,
           outsideSalesName: outside_sales_name,
           customerCompany: customer_company,
