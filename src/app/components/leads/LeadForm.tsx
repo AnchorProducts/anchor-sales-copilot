@@ -248,15 +248,13 @@ export default function LeadForm() {
     if (!form.roof_type.length) return "Roof type is required.";
     if (!form.roof_brand.length) return "Roof brand is required.";
 
-    if (solutions.length === 0) return "Add at least one solution.";
+    // Solution type is optional. Empty solution rows are ignored, but any row
+    // the user actually filled in must be complete (described + has media).
     for (const entry of solutions) {
-      if (!entry.solution_label) {
-        return "Select a solution type for each solution.";
-      }
       if (entry.solution_key === "other" && !clean(entry.other_label)) {
         return "Describe the other solution type.";
       }
-      if (entry.files.length === 0) {
+      if (entry.solution_label && entry.files.length === 0) {
         const label = entry.solution_key === "other" ? (clean(entry.other_label) || "Other") : entry.solution_label;
         return `Add at least one photo or video for ${label}.`;
       }
@@ -540,9 +538,9 @@ export default function LeadForm() {
 
           {/* ── Solution Types (repeatable) ─────────────────────────────────── */}
           <div data-tutorial="rec-solutions" className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
-            <div className="text-sm font-semibold text-black">Solution Type *</div>
+            <div className="text-sm font-semibold text-black">Solution Type</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
-              Pick a solution type, attach a picture, and add notes. Add another for each solution on the project.
+              Optional. Pick a solution type, attach a picture, and add notes. Add another for each solution on the project.
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-3">
