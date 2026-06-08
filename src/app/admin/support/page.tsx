@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { getViewAs } from "@/lib/role/viewAs";
 
@@ -86,12 +85,6 @@ export default function AdminSupportQueue() {
 
   return (
     <main className="ds-page">
-      <AppNavbar
-        title="Support Queue"
-        subtitle="User-submitted requests"
-        menuItems={[{ label: "Admin Console", href: "/admin" }]}
-      />
-
       <div className="mx-auto max-w-4xl px-5 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">Loading…</Card>

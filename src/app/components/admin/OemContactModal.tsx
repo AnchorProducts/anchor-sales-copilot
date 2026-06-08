@@ -74,13 +74,16 @@ export function OemContactModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Re-seed values when the modal is opened with new initial values.
+  // Re-seed only when the modal opens or switches to a different contact. Keying
+  // on contactId (stable) instead of the initialValues object avoids wiping
+  // in-progress edits when the parent re-renders and passes a new object identity.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return;
     setValues({ ...EMPTY, ...initialValues });
     setError(null);
     setConfirmDelete(false);
-  }, [open, initialValues]);
+  }, [open, contactId]);
 
   // Lock body scroll while open.
   useEffect(() => {

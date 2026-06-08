@@ -148,6 +148,7 @@ export default function AdminNotificationsPage() {
       }
       setWeeklyEmails(list);
       setNewWeeklyEmail("");
+      setWeeklyMsg({ kind: "ok", text: "Saved." });
     } catch (e) {
       setWeeklyMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed." });
     } finally {

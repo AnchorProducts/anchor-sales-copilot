@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 // Every event a single user logged within a time window — powers the per-user
 // "full event log" PDF. Capped so a very chatty user can't produce a huge file.
 const MAX_EVENTS = 3000;
-const ALLOWED_DAYS = [7, 14, 30, 90] as const;
+// Includes 1 so the matrix's "Last 24 hours" window returns a real 1-day cut
+// instead of silently coercing to 30 (which mislabeled the export).
+const ALLOWED_DAYS = [1, 7, 14, 30, 90] as const;
 
 function parseDays(value: string | null): number {
   const n = Number(value);

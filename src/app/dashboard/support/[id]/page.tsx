@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -111,14 +110,6 @@ export default function SupportThreadPage() {
 
   return (
     <main className="ds-page">
-      <AppNavbar
-        title="Support thread"
-        subtitle={request?.subject || ""}
-        menuItems={[
-          { label: t("dashboard"), href: "/dashboard" },
-          { label: "All requests", href: "/dashboard/support" },
-        ]}
-      />
 
       <div className="mx-auto max-w-3xl px-5 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         <Link href="/dashboard/support" className="text-sm text-[var(--anchor-green)] hover:underline">
@@ -160,7 +151,7 @@ export default function SupportThreadPage() {
                       (isAdmin
                         ? "border-[var(--anchor-green)]/40 bg-[var(--anchor-mint)]/30"
                         : isMine
-                          ? "border-[var(--border-default)] bg-white"
+                          ? "border-[var(--border-default)] bg-[var(--anchor-mint)]/10"
                           : "border-[var(--border-default)] bg-white")
                     }
                   >
