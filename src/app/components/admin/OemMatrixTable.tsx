@@ -6,7 +6,7 @@ import type {
   MatrixCell,
   MatrixGroup,
   MatrixRow,
-} from "@/lib/analytics/oemMatrixPdf";
+} from "@/lib/analytics/oemMatrixCore";
 
 const ALL_GROUPS: Array<{ key: MatrixGroup; label: string; tint: string }> = [
   { key: "sales", label: "OEM Sales Reps", tint: "bg-[#dbeafe]" },

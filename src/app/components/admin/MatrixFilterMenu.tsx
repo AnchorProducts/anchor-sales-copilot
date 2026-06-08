@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { MatrixGroup } from "@/lib/analytics/oemMatrixPdf";
+import type { MatrixGroup } from "@/lib/analytics/oemMatrixCore";
 
 export const DAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 1, label: "Last 24 hours" },

@@ -25,11 +25,14 @@ export default function NotableProjectForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Track the latest photos in a ref so the unmount cleanup revokes the actual
+  // object URLs, not the empty array captured at mount.
+  const photosRef = useRef<Photo[]>([]);
+  useEffect(() => { photosRef.current = photos; }, [photos]);
   useEffect(() => {
     return () => {
-      photos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      photosRef.current.forEach((p) => URL.revokeObjectURL(p.previewUrl));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleFiles(filesList: FileList | null) {

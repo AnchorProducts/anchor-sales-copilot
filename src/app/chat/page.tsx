@@ -7,11 +7,9 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import ChatSidebar from "@/app/components/ChatSidebar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
-import { APP_NAME } from "@/lib/appMode";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -198,13 +196,18 @@ export default function ChatPage() {
     const msg = messages[idx];
     const userMsg = [...messages].slice(0, idx).reverse().find((m) => m.role === "user");
 
+    // The feedback/corrections routes both require a session id; fall back to the
+    // conversation id when the chat API hasn't returned a sessionId yet, so the
+    // request validates instead of silently 400-ing.
+    const sid = sessionId ?? conversationId;
+
     setFb(idx, { busy: true });
     try {
-      await fetch("/api/feedback", {
+      const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionId,
+          sessionId: sid,
           conversationId,
           userMessage: userMsg?.content ?? null,
           assistantMessage: msg.content,
@@ -214,12 +217,17 @@ export default function ChatPage() {
           note: fb.note.trim() || null,
         }),
       });
+      // Only confirm "saved" if the write actually succeeded.
+      if (!res.ok) {
+        setFb(idx, { busy: false });
+        return;
+      }
       if (fb.rating === "bad" && fb.note.trim()) {
         await fetch("/api/corrections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sessionId,
+            sessionId: sid,
             conversationId,
             userMessage: userMsg?.content ?? null,
             assistantMessage: msg.content,
@@ -601,17 +609,6 @@ export default function ChatPage() {
       className="flex h-dvh flex-col overflow-hidden bg-white text-black sm:bg-[var(--surface-page)] lg:pl-64"
     >
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <AppNavbar
-        title={APP_NAME}
-        subtitle={t("salesAssetsLeads")}
-        menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
-        mobileMenuItems={[
-          { label: t("newChat"), onClick: newChat },
-          { label: t("chatHistory"), onClick: () => setSidebarOpen(true) },
-          { label: t("dashboard"), href: "/dashboard" },
-        ]}
-      />
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-hidden">

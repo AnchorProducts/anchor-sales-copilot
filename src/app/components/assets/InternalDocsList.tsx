@@ -80,6 +80,9 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   const [assets, setAssets] = useState<AssetRow[]>([]);
 
   const [isInternalUser, setIsInternalUser] = useState(false);
+  // Session token for mobile/new-tab doc opens — a new tab can't send the auth
+  // cookie/header, so /api/doc-open accepts it as a ?token= query param.
+  const [accessToken, setAccessToken] = useState("");
 
   // Upload form
   const [uploading, setUploading] = useState(false);
@@ -107,6 +110,10 @@ export default function InternalDocsList({ productId }: { productId: string }) {
         setLoading(false);
         return;
       }
+
+      // Capture the access token so mobile/new-tab doc links can authenticate.
+      const { data: sessionData } = await supabase.auth.getSession();
+      setAccessToken(sessionData?.session?.access_token || "");
 
       // role
       try {
@@ -284,9 +291,12 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   // PDF viewer renders the file instead of the in-app <object> fallback.
   // Non-PDFs (DOCX, etc.) always go straight to the download URL.
   const mobile = isMobileDevice();
+  // New-tab / direct-file opens (mobile preview + downloads) can't send the auth
+  // cookie, so append the session token. The in-app viewer (desktop) uses cookies.
+  const tokenQS = accessToken ? `&token=${encodeURIComponent(accessToken)}` : "";
   const href = isPreviewable
-    ? (mobile ? docOpenHref(a.path, false) : docViewerHref(a.path, a.title))
-    : docOpenHref(a.path, true);
+    ? (mobile ? docOpenHref(a.path, false) + tokenQS : docViewerHref(a.path, a.title))
+    : docOpenHref(a.path, true) + tokenQS;
   // Open in a new tab on mobile (or whenever we're going straight to the
   // file URL), so the user can swipe back to the app afterward.
   const openInNewTab = !isPreviewable || mobile;

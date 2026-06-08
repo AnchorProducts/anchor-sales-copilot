@@ -1,4 +1,25 @@
 import jsPDF from "jspdf";
+import {
+  type MatrixCell,
+  type MatrixGroup,
+  type MatrixRow,
+  type MatrixPdfPayload,
+  ALL_GROUPS,
+  computeTotals,
+} from "./oemMatrixCore";
+
+// Pure types + computeTotals live in oemMatrixCore (jsPDF-free); re-exported here
+// so existing importers keep working.
+export {
+  type MatrixCellPerson,
+  type MatrixCell,
+  type MatrixGroup,
+  type MatrixRow,
+  type EventDetail,
+  type ProjectDetail,
+  type MatrixPdfPayload,
+  computeTotals,
+} from "./oemMatrixCore";
 
 // OEM matrix PDF: the full per-manufacturer matrix (Sales/Tech/Consultant, all
 // six on-screen columns) plus, for every OEM, the people behind each cell — the
@@ -6,40 +27,7 @@ import jsPDF from "jspdf";
 // every event and every project, with who did each. Everything reflects the
 // caller's selected time window (passed as windowLabel).
 
-export type MatrixCellPerson = {
-  name: string;
-  email: string | null;
-  signedUp: boolean;
-  uses: number;
-  leads: number;
-  reports: number;
-};
-
-export type MatrixCell = {
-  downloaded: number;
-  notDownloaded: number;
-  uses: number;
-  notReporting: number;
-  leads: number;
-  reports: number;
-  people: MatrixCellPerson[];
-};
-
-export type MatrixGroup = "sales" | "tech" | "consultant";
-export type MatrixRow = { manufacturer: string; groups: Record<MatrixGroup, MatrixCell> };
-
-export type EventDetail = { person: string; group: string; groupLabel: string; manufacturers: string[]; type: string; at: string; label: string };
-export type ProjectDetail = { person: string; group: string; groupLabel: string; manufacturers: string[]; kind: "Lead" | "Report"; at: string; company: string };
-
-export type MatrixPdfPayload = {
-  rows: MatrixRow[];
-  totals: Record<MatrixGroup, MatrixCell>;
-  events: EventDetail[];
-  projects: ProjectDetail[];
-};
-
 const GROUP_LABEL: Record<MatrixGroup, string> = { sales: "Sales Reps", tech: "Tech Reps", consultant: "Consultants" };
-const ALL_GROUPS: MatrixGroup[] = ["sales", "tech", "consultant"];
 
 // Mirror the on-screen matrix columns exactly.
 const SUB_COLS = [
@@ -50,27 +38,6 @@ const SUB_COLS = [
   { key: "leads", label: "Leads" },
   { key: "reports", label: "Reps" },
 ] as const;
-
-function emptyCell(): MatrixCell {
-  return { downloaded: 0, notDownloaded: 0, uses: 0, notReporting: 0, leads: 0, reports: 0, people: [] };
-}
-
-export function computeTotals(rows: MatrixRow[]): Record<MatrixGroup, MatrixCell> {
-  const totals: Record<MatrixGroup, MatrixCell> = { sales: emptyCell(), tech: emptyCell(), consultant: emptyCell() };
-  for (const r of rows) {
-    for (const g of ALL_GROUPS) {
-      const t = totals[g];
-      const c = r.groups[g];
-      t.downloaded += c.downloaded;
-      t.notDownloaded += c.notDownloaded;
-      t.uses += c.uses;
-      t.notReporting += c.notReporting;
-      t.leads += c.leads;
-      t.reports += c.reports;
-    }
-  }
-  return totals;
-}
 
 function fmtAt(iso: string) {
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });

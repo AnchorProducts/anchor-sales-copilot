@@ -71,7 +71,7 @@ export default function ForgotPage() {
           </button>
 
           <div className="mt-4 text-center text-sm text-white/60">
-            <Link href="/login" className="text-emerald-200 hover:text-emerald-100 underline-offset-4 hover:underline">
+            <Link href="/" className="text-emerald-200 hover:text-emerald-100 underline-offset-4 hover:underline">
               Back to sign in
             </Link>
           </div>

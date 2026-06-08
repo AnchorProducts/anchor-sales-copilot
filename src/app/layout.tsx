@@ -3,6 +3,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { isInternal, APP_NAME, APP_SHORT } from "@/lib/appMode";
 import { MobileBottomNav } from "@/app/components/ui/MobileBottomNav";
+import { MobileBackButton } from "@/app/components/ui/MobileBackButton";
 import { AppSidebar } from "@/app/components/ui/AppSidebar";
 import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
@@ -18,8 +19,6 @@ export const metadata: Metadata = {
   description: isInternal
     ? "Internal sales tools — leads, assets, and reporting."
     : "Sales • Assets • Leads",
-
-  themeColor: "#047835",
 
   appleWebApp: {
     capable: true,
@@ -38,6 +37,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#047835",
 };
 
 export default function RootLayout({
@@ -64,6 +64,7 @@ export default function RootLayout({
       <body>
         <AppSidebar />
         {children}
+        <MobileBackButton />
         <MobileBottomNav />
         <AdminViewAsSwitcher />
         <AppTutorial />

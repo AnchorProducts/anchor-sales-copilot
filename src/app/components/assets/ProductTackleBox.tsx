@@ -934,7 +934,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 )}
 
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">
-                  {counts.pub} {t("showingPublic").replace("Showing: ", "")}{isInternalUser ? ` • ${counts.internal} ${t("internal").toLowerCase()}` : ""}
+                  {counts.pub} {t("public")}{isInternalUser ? ` • ${counts.internal} ${t("internal").toLowerCase()}` : ""}
                 </span>
 
                 <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/70">

@@ -74,13 +74,18 @@ export async function POST(req: Request) {
   }
 
   const kind = normalizeKind(body?.kind);
+  const states = normalizeStates(body?.states);
+  // States drive regional lead/rep routing — a rep with none is unreachable.
+  if (states.length === 0) {
+    return NextResponse.json({ error: "Select at least one state covered." }, { status: 400 });
+  }
   const row = {
     kind,
     name,
     email,
     // Internal reps route by email only; they never need a Teams link.
     teams_link: kind === "internal" ? null : clean(body?.teams_link) || null,
-    states: normalizeStates(body?.states),
+    states,
     zip_prefixes: normalizeZipPrefixes(body?.zip_prefixes),
   };
 
@@ -107,7 +112,12 @@ export async function PATCH(req: Request) {
   if ("name" in body) update.name = clean(body.name) || null;
   if ("email" in body) update.email = clean(body.email).toLowerCase() || null;
   if ("teams_link" in body) update.teams_link = clean(body.teams_link) || null;
-  if ("states" in body) update.states = normalizeStates(body.states);
+  if ("states" in body) {
+    update.states = normalizeStates(body.states);
+    if (update.states.length === 0) {
+      return NextResponse.json({ error: "Select at least one state covered." }, { status: 400 });
+    }
+  }
   if ("zip_prefixes" in body) update.zip_prefixes = normalizeZipPrefixes(body.zip_prefixes);
   // Internal reps never carry a Teams link, regardless of what was submitted.
   if (update.kind === "internal") update.teams_link = null;

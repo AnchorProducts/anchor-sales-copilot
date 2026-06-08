@@ -6,8 +6,8 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
-import { generateUserActivityPdf } from "@/lib/analytics/userActivityPdf";
-import { generateCategorySummaryPdf } from "@/lib/analytics/categoryActivityPdf";
+// PDF helpers are dynamically imported in the download handlers so jspdf is
+// code-split out of this page's initial bundle.
 import { prettyPagePath } from "@/lib/analytics/pagePath";
 import { APP_NAME } from "@/lib/appMode";
 
@@ -298,7 +298,8 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
             type="button"
             data-track-id="category-summary-pdf"
             disabled={loading || users.length === 0}
-            onClick={() =>
+            onClick={async () => {
+              const { generateCategorySummaryPdf } = await import("@/lib/analytics/categoryActivityPdf");
               generateCategorySummaryPdf({
                 category,
                 users: users.map((u) => ({
@@ -318,8 +319,8 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                   },
                 })),
                 charts,
-              })
-            }
+              });
+            }}
             className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -549,7 +550,8 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                             <button
                               type="button"
                               data-track-id="user-activity-pdf"
-                              onClick={() =>
+                              onClick={async () => {
+                                const { generateUserActivityPdf } = await import("@/lib/analytics/userActivityPdf");
                                 generateUserActivityPdf({
                                   full_name: u.full_name,
                                   email: u.email,
@@ -560,8 +562,8 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                                   leadCount: u.leadCount,
                                   reportCount: u.reports.length,
                                   events: u.events,
-                                })
-                              }
+                                });
+                              }}
                               className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--anchor-green)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-green)] transition-colors hover:bg-[var(--anchor-green)] hover:text-white sm:text-sm"
                             >
                               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
