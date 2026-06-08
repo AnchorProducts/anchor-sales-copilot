@@ -15,6 +15,7 @@ import {
   SOLUTION_CATALOG,
   SOLUTION_CATEGORIES,
 } from "@/lib/solutions/solutionCatalog";
+import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
 import { trackEvent } from "@/lib/analytics/track";
 
 type FormState = {
@@ -62,17 +63,18 @@ const TIMELINE_OPTIONS = [
 
 type SolutionOption = { key: string; label: string };
 
+// Coming-soon solutions aren't yet available, so they're excluded from the lead
+// form — a rep shouldn't be able to pick a solution that doesn't exist yet.
 const SOLUTION_OPTIONS: SolutionOption[] = [
-  ...SOLUTION_CATALOG.map((s) => ({ key: s.key, label: s.label })),
+  ...SOLUTION_CATALOG.filter((s) => !s.comingSoon).map((s) => ({ key: s.key, label: s.label })),
   { key: "other", label: "Other" },
 ];
 
 const SOLUTION_SECTIONS = SOLUTION_CATEGORIES.map((category) => {
-  const items = SOLUTION_CATALOG.filter((s) => s.category === category.key);
+  const items = SOLUTION_CATALOG.filter((s) => s.category === category.key && !s.comingSoon);
   return {
     heading: category.label,
     options: items.map((s) => s.label),
-    comingSoon: items.length > 0 && items.every((s) => s.comingSoon),
   };
 }).filter((sec) => sec.options.length > 0);
 
@@ -81,15 +83,7 @@ const SOLUTION_SECTIONS_WITH_OTHER = [
   { heading: "Other", options: ["Other"] },
 ];
 
-// Commission-claim-only options (mirrors CommissionForm) for the optional
-// "also file my Anchor commission claim" section.
-const U_ANCHOR_OPTIONS = [
-  "U2000 KEE", "U2000 PVC", "U2000 TPO", "U2200 Plate", "U2400 EPDM", "U2400 KEE",
-  "U2400 PVC", "U2400 TPO", "U2600 APP", "U2600 SBS", "U2600 SBS Torch", "U2800 Coatings",
-  "U3200 Plate", "U3400 EPDM", "U3400 KEE", "U3400 PVC", "U3400 TPO", "U3600 APP",
-  "U3600 SBS", "U3600 SBS Torch", "U3800 Coatings",
-];
-const OTHER_ITEMS = SOLUTION_CATALOG.map((s) => s.label);
+// Commission-claim options shared with CommissionForm.
 
 type ClaimState = {
   certified: boolean;

@@ -11,6 +11,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
+import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
 import { trackEvent } from "@/lib/analytics/track";
 
 type UserProfile = {
@@ -42,32 +43,6 @@ type FormState = {
   ship_zip: string;
   project_description: string;
 };
-
-const U_ANCHOR_OPTIONS = [
-  "U2000 KEE",
-  "U2000 PVC",
-  "U2000 TPO",
-  "U2200 Plate",
-  "U2400 EPDM",
-  "U2400 KEE",
-  "U2400 PVC",
-  "U2400 TPO",
-  "U2600 APP",
-  "U2600 SBS",
-  "U2600 SBS Torch",
-  "U2800 Coatings",
-  "U3200 Plate",
-  "U3400 EPDM",
-  "U3400 KEE",
-  "U3400 PVC",
-  "U3400 TPO",
-  "U3600 APP",
-  "U3600 SBS",
-  "U3600 SBS Torch",
-  "U3800 Coatings",
-];
-
-const OTHER_ITEMS = SOLUTION_CATALOG.map((s) => s.label);
 
 const OTHER_ITEMS_SECTIONS = SOLUTION_CATEGORIES.map((category) => {
   const items = SOLUTION_CATALOG.filter((s) => s.category === category.key);

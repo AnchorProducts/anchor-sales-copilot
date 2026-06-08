@@ -8,6 +8,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { FeatureGraphic, ToolLoader } from "@/app/components/visuals/FeatureGraphic";
+import { salesToolKey, HERO_FEATURE_TO_TOOL_KEY, type SalesAudience } from "@/lib/salesTools";
 
 type SearchProductRow = {
   id: string;
@@ -182,11 +183,17 @@ export default function DashboardPage() {
   const [suggestData, setSuggestData] = useState<SearchProductRow[] | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const suggestLoadingRef = useRef(false);
+  // Tracks the role the current suggest fetch is filtered for, so an in-flight
+  // fetch can discard its result if the admin flips "View app as" mid-request.
+  const suggestInternalRef = useRef(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRefDesktop = useRef<HTMLDivElement | null>(null);
 
   const [topFeature, setTopFeature] = useState<HeroFeatureKey | null>(null);
   const [featureCounts, setFeatureCounts] = useState<Record<string, number>>({});
+  // Sales tools an admin has deactivated, as a set of `sales:<audience>:<key>`
+  // composite keys. A tool with no row is active, so we only track the off set.
+  const [hiddenSalesKeys, setHiddenSalesKeys] = useState<Set<string>>(new Set());
 
   // --- BOOT: ensure authed + ensure server cookies exist
   useEffect(() => {
@@ -278,6 +285,23 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [booting, supabase]);
 
+  // Load which sales tools an admin has deactivated. RLS lets any authenticated
+  // user read these flag rows (migration 000033).
+  useEffect(() => {
+    if (booting) return;
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("admin_tools")
+        .select("key,active")
+        .like("key", "sales:%")
+        .eq("active", false);
+      if (!alive) return;
+      setHiddenSalesKeys(new Set((data || []).map((r: { key: string }) => r.key)));
+    })();
+    return () => { alive = false; };
+  }, [booting, supabase]);
+
   // Fetch the assigned sales reps when the user's service state is known.
   // A state can have multiple external reps; we show all of them.
   useEffect(() => {
@@ -346,6 +370,23 @@ export default function DashboardPage() {
   const isAdmin = effectiveRole === "admin";
   const isInternal = effectiveRole === "admin" || effectiveRole === "anchor_rep";
 
+  // Search suggestions are filtered by role (internal sees internal_assets).
+  // When an admin flips "View app as", drop the cache and clear the in-flight
+  // guard so the next focus refetches with the correct filter.
+  useEffect(() => {
+    suggestInternalRef.current = isInternal;
+    setSuggestData(null);
+    suggestLoadingRef.current = false;
+  }, [isInternal]);
+
+  // Sales-tool activation is per audience. A viewer is a "sales persona" when
+  // they're an external rep or an internal (anchor) rep — admins previewing a
+  // sales role via "View app as" resolve to one of these too.
+  const viewerIsSales = isExternal || effectiveRole === "anchor_rep";
+  const salesAudience: SalesAudience = isExternal ? "external" : "internal";
+  const isSalesToolHidden = (toolKey: string) =>
+    viewerIsSales && hiddenSalesKeys.has(salesToolKey(salesAudience, toolKey));
+
   const firstName = (fullName || "").trim().split(/\s+/)[0] || "";
   const greetingName = firstName || "there";
 
@@ -353,7 +394,7 @@ export default function DashboardPage() {
 
   // Allowed hero features per role. Admin keeps its bespoke pulse copy
   // unless their top feature is one of these workspace tools.
-  const allowedFeatures: HeroFeatureKey[] = isExternal
+  const allowedFeaturesRaw: HeroFeatureKey[] = isExternal
     ? canSeeCommission
       ? ["chat", "assets", "consults", "commission", "notable"]
       : ["chat", "assets", "consults", "notable"]
@@ -362,6 +403,11 @@ export default function DashboardPage() {
     : isAdmin
     ? ["chat", "assets"]
     : [];
+  // Drop any hero feature whose underlying tool the admin deactivated for this
+  // audience, so the hero never promotes a tile that's hidden below.
+  const allowedFeatures: HeroFeatureKey[] = allowedFeaturesRaw.filter(
+    (f) => !isSalesToolHidden(HERO_FEATURE_TO_TOOL_KEY[f] ?? f)
+  );
 
   const resolvedFeature: HeroFeatureKey | null =
     topFeature && allowedFeatures.includes(topFeature) ? topFeature : null;
@@ -425,8 +471,11 @@ export default function DashboardPage() {
     actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
     actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
     actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
+    actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: t("rooftopAuditDesc"),        icon: "shield",   badge: "Safety"     });
     actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
-    if (canOpenCommission) {
+    // Commission is external-only (matches the page + API gate). isExternal is
+    // true for external reps and for admins previewing the external experience.
+    if (canOpenCommission && isExternal) {
       actions.push({ key: "commission", href: "/dashboard/commission/new",     label: t("commissionClaim"),     desc: t("commissionClaimDesc"),     icon: "wallet",    badge: "Commission" });
     }
     if (isInternalSales) {
@@ -444,6 +493,14 @@ export default function DashboardPage() {
       actions.push({ key: "consults",   href: "/dashboard/opportunities",      label: "Active Consults",      desc: "Triage rooftop equipment consults submitted by external reps.", icon: "clipboard", badge: "Triage" });
       actions.push({ key: "admin",      href: "/admin",                        label: "Admin Console",        desc: "Configure sales reps, view user activity, projects, claims, and assessments.", icon: "shield", badge: "Admin" });
       actions.push({ key: "reports",    href: "/admin/rooftop-reports",        label: "Assessment Reports",   desc: "Review submitted rooftop equipment audits.", icon: "clipboard", badge: "Reports" });
+    }
+  }
+
+  // Hide any sales tool an admin deactivated for this audience. Admin-only
+  // tiles (admin/reports) are never sales tools, so they pass through.
+  if (viewerIsSales) {
+    for (let i = actions.length - 1; i >= 0; i--) {
+      if (isSalesToolHidden(actions[i].key)) actions.splice(i, 1);
     }
   }
 
@@ -473,8 +530,12 @@ export default function DashboardPage() {
         .select("id,name,sku,series,section,internal_kind")
         .eq("active", true)
         .order("name", { ascending: true });
+      const fetchedForInternal = isInternal;
       if (!isInternal) query.neq("section", "internal_assets");
       const { data, error } = await query;
+      // Discard if the role changed while this fetch was in flight, so we don't
+      // cache the previous role's (wrong-filtered) results.
+      if (fetchedForInternal !== suggestInternalRef.current) return;
       if (error) {
         console.warn("dashboard search suggest fetch failed", error.message);
         setSuggestData([]);

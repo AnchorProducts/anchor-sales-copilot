@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 
 export const dynamic = "force-dynamic";
 
@@ -26,30 +27,45 @@ function isMobileDevice() {
 function DocViewer() {
   const params = useSearchParams();
   const router = useRouter();
+  const supabase = useMemo(() => supabaseBrowser(), []);
 
   const path = params?.get("path") || "";
   const from = params?.get("from") || "/dashboard";
   const title = params?.get("title") || basenameFromPath(path);
   const backLabel = deriveBackLabel(from);
 
+  // Session token so the mobile redirect / download can authenticate /api/doc-open
+  // (a top-level navigation can't send the auth cookie). null = not loaded yet.
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (alive) setToken(data?.session?.access_token || "");
+    });
+    return () => { alive = false; };
+  }, [supabase]);
+
+  const tokenQS = token ? `&token=${encodeURIComponent(token)}` : "";
+
   const inlineSrc = useMemo(() => {
     if (!path) return "";
-    return `/api/doc-open?path=${encodeURIComponent(path)}&download=0`;
-  }, [path]);
+    return `/api/doc-open?path=${encodeURIComponent(path)}&download=0${tokenQS}`;
+  }, [path, tokenQS]);
 
   // On mobile, the <object> embed below falls back to a "can't preview"
   // screen on iOS Safari. Hand the doc straight to the phone's browser
-  // (its native PDF viewer) instead.
+  // (its native PDF viewer) instead. Wait until the token is resolved so the
+  // redirect URL is authenticated.
   useEffect(() => {
-    if (!inlineSrc) return;
+    if (!inlineSrc || token === null) return;
     if (!isMobileDevice()) return;
     window.location.replace(inlineSrc);
-  }, [inlineSrc]);
+  }, [inlineSrc, token]);
 
   const downloadHref = useMemo(() => {
     if (!path) return "";
-    return `/api/doc-open?path=${encodeURIComponent(path)}&download=1`;
-  }, [path]);
+    return `/api/doc-open?path=${encodeURIComponent(path)}&download=1${tokenQS}`;
+  }, [path, tokenQS]);
 
   function downloadDoc() {
     if (!downloadHref || typeof document === "undefined") return;
