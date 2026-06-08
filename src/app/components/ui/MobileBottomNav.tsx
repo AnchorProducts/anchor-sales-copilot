@@ -38,6 +38,19 @@ const CATALOG: Section[] = [
 ];
 
 const SECTION_BY_KEY = new Map(CATALOG.map((s) => [s.key, s]));
+
+// Which section keys each view can actually use, mirroring AppSidebar's role
+// gating. Dashboard, Support, and Settings are pinned separately and always
+// shown. A tool a role can't reach (e.g. Commission for internal/admin, the
+// submission forms for admins) is never surfaced as a bottom-nav recent.
+const ALLOWED_KEYS_BY_ROLE: Record<string, string[]> = {
+  external_rep: ["chat", "assets", "consults", "notable", "commission"],
+  anchor_rep: ["chat", "assets", "consults", "notable"],
+  admin: ["chat", "assets", "consults", "reports", "admin"],
+};
+function allowedKeysFor(role: string | null | undefined): Set<string> {
+  return new Set(ALLOWED_KEYS_BY_ROLE[role || ""] ?? ["chat", "assets"]);
+}
 // Dashboard + 2 recents + pinned Support + pinned Settings = 5 buttons.
 // Settings/Support are never surfaced as recents (excluded below).
 const RECENT_SLOTS = 2;
@@ -154,15 +167,18 @@ export function MobileBottomNav() {
   const dashboardActive = currentKey === null && (pathname === "/dashboard" || pathname.startsWith("/dashboard") || pathname.startsWith("/admin"));
 
   // Middle buttons: the most-recent sections (Settings + Support are pinned
-  // and so excluded here), padded with defaults for new users.
+  // and so excluded here), padded with defaults for new users. Only surface
+  // tools the current view can actually use, so e.g. an admin never sees a
+  // Commission/Notable icon left over from a "View app as" session.
+  const allowed = allowedKeysFor(effectiveRole);
   const keys: string[] = [];
   for (const r of recents) {
     if (keys.length >= RECENT_SLOTS) break;
-    if (!NEVER_AS_RECENT.has(r.key) && !keys.includes(r.key) && SECTION_BY_KEY.has(r.key)) keys.push(r.key);
+    if (!NEVER_AS_RECENT.has(r.key) && allowed.has(r.key) && !keys.includes(r.key) && SECTION_BY_KEY.has(r.key)) keys.push(r.key);
   }
   for (const k of DEFAULT_KEYS) {
     if (keys.length >= RECENT_SLOTS) break;
-    if (!keys.includes(k)) keys.push(k);
+    if (allowed.has(k) && !keys.includes(k)) keys.push(k);
   }
 
   const recentByKey = new Map(recents.map((r) => [r.key, r.path]));
