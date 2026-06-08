@@ -76,7 +76,14 @@ export async function POST(req: Request) {
 
     const user = auth.user;
     const profile = await getProfile(user.id);
-    if (!profile || (profile.role !== "external_rep" && profile.role !== "admin")) {
+    // Notable projects are open to internal (anchor_rep) + external sales, and
+    // admins previewing a sales role. Matches the page-level access gate.
+    if (
+      !profile ||
+      (profile.role !== "external_rep" &&
+        profile.role !== "anchor_rep" &&
+        profile.role !== "admin")
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

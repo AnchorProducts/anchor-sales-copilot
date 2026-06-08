@@ -62,12 +62,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Generate short-lived signed URLs so admin can preview the pending images.
+  // Generate short-lived signed URLs so admin can preview the images. For
+  // approved rows the original storage_path was deleted on approval, so sign the
+  // live copy at approved_path instead (falling back to storage_path).
   const items = await Promise.all(
     (data || []).map(async (row: any) => {
+      // Approved rows have their original storage_path deleted, so sign the live
+      // approved_path. If an (older/partial) approved row has no approved_path,
+      // return null rather than signing the deleted original (a broken image).
+      const previewPath = row.status === "approved" ? row.approved_path : row.storage_path;
+      if (!previewPath) return { ...row, preview_url: null };
       const { data: signed } = await supabaseAdmin.storage
         .from("knowledge")
-        .createSignedUrl(row.storage_path, 60 * 10);
+        .createSignedUrl(previewPath, 60 * 10);
       return { ...row, preview_url: signed?.signedUrl || null };
     })
   );

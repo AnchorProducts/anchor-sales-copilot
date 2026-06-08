@@ -170,6 +170,9 @@ export default function InternalContactsList({ productId }: { productId: string 
     });
 
     if (memErr) {
+      // Roll back the just-created contact so a failed membership write doesn't
+      // leave an orphaned internal_contacts row with no list.
+      await supabase.from("internal_contacts").delete().eq("id", newContact.id);
       setFormMsg(memErr.message);
       setAdding(false);
       return;

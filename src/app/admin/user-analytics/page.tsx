@@ -8,8 +8,8 @@ import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { PeopleDirectory, type DirectoryPdfTarget } from "@/app/components/admin/PeopleDirectory";
 import { UserAnalyticsCharts, buildUserAnalyticsSummary, shortEventLabel } from "@/app/components/admin/UserAnalyticsCharts";
-import { generateUserAnalyticsPdf } from "@/lib/analytics/userAnalyticsPdf";
-import { generateUserEventLogPdf } from "@/lib/analytics/userEventLogPdf";
+// jsPDF-backed PDF helpers are dynamically imported in the handlers below so
+// jspdf (~300KB) is code-split out of this page's initial bundle.
 
 const DAY_OPTIONS = [7, 14, 30, 90] as const;
 const dayLabel = (d: number) => `Last ${d} days`;
@@ -106,7 +106,8 @@ export default function AdminUserAnalyticsPage() {
   // Shared summary feeds both the on-screen charts and the master PDF.
   const summary = useMemo(() => buildUserAnalyticsSummary(otherUsers, days), [otherUsers, days]);
 
-  function exportMasterPdf() {
+  async function exportMasterPdf() {
+    const { generateUserAnalyticsPdf } = await import("@/lib/analytics/userAnalyticsPdf");
     const isInternal = (role: string | null) => role === "anchor_rep" || role === "admin";
     const userTotal = (u: UserRow) => Object.values(u.events.byType).reduce((s, n) => s + n, 0);
 
@@ -157,6 +158,7 @@ export default function AdminUserAnalyticsPage() {
       const body = await res.json().catch(() => ({}));
       if (res.ok) { events = (body?.events ?? []) as typeof events; truncated = !!body?.truncated; }
     }
+    const { generateUserEventLogPdf } = await import("@/lib/analytics/userEventLogPdf");
     generateUserEventLogPdf({
       name: target.name,
       email: target.email ?? "—",

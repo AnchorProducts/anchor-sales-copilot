@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
 import { prettyPagePath } from "@/lib/analytics/pagePath";
-import {
-  generateUserActivityPdf,
-  type UserPdfPayload,
-} from "@/lib/analytics/userActivityPdf";
+import { type UserPdfPayload } from "@/lib/analytics/userActivityPdf";
 import {
   OemContactModal,
   type OemContactFormValues,
@@ -172,6 +169,7 @@ export function OemDirectory() {
         setPdfError("No activity record found for this user.");
         return;
       }
+      const { generateUserActivityPdf } = await import("@/lib/analytics/userActivityPdf");
       generateUserActivityPdf({
         full_name: u.full_name ?? displayName(c),
         email: u.email,

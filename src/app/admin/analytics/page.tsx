@@ -6,17 +6,17 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { generateUserEventLogPdf } from "@/lib/analytics/userEventLogPdf";
 import { OemMatrixTable } from "@/app/components/admin/OemMatrixTable";
 import { MatrixFilterMenu, dayLabel } from "@/app/components/admin/MatrixFilterMenu";
 import { PeopleDirectory, type DirectoryPdfTarget } from "@/app/components/admin/PeopleDirectory";
 import { OemPeopleModal, type OemPerson } from "@/app/components/admin/OemPeopleModal";
+// Pure totals/types eager (no jspdf); the PDF generators are dynamically
+// imported in their handlers so jspdf stays out of this page's initial bundle.
 import {
   computeTotals,
-  generateFullAnalyticsPdf,
   type MatrixGroup,
   type MatrixPdfPayload,
-} from "@/lib/analytics/oemMatrixPdf";
+} from "@/lib/analytics/oemMatrixCore";
 
 const PEOPLE_DAY_OPTIONS = [7, 14, 30, 90].map((value) => ({ value, label: dayLabel(value) }));
 const GROUP_LABEL: Record<MatrixGroup, string> = { sales: "Sales rep", tech: "Tech rep", consultant: "Consultant" };
@@ -247,6 +247,7 @@ export default function AdminAnalyticsPage() {
       const body = await res.json().catch(() => ({}));
       if (res.ok) { events = (body?.events ?? []) as typeof events; truncated = !!body?.truncated; }
     }
+    const { generateUserEventLogPdf } = await import("@/lib/analytics/userEventLogPdf");
     generateUserEventLogPdf({
       name: target.name,
       email: target.email ?? "—",
@@ -357,11 +358,15 @@ export default function AdminAnalyticsPage() {
                         type="button"
                         data-track-id="matrix-export-pdf"
                         disabled={!filteredMatrix || filteredMatrix.rows.length === 0}
-                        onClick={() => matrix && generateFullAnalyticsPdf(matrix, {
-                          windowLabel: dayLabel(matrixDays),
-                          manufacturers: matrixManufacturers,
-                          groups: matrixGroups,
-                        })}
+                        onClick={async () => {
+                          if (!matrix) return;
+                          const { generateFullAnalyticsPdf } = await import("@/lib/analytics/oemMatrixPdf");
+                          generateFullAnalyticsPdf(matrix, {
+                            windowLabel: dayLabel(matrixDays),
+                            manufacturers: matrixManufacturers,
+                            groups: matrixGroups,
+                          });
+                        }}
                         className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

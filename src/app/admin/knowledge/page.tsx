@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import AdminKnowledgeTabs from "@/app/components/admin/AdminKnowledgeTabs";
 import { Alert } from "@/app/components/ui/Alert";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 
 type Role = "admin" | "anchor_rep" | "external_rep";
 type UserType = "internal" | "external";
@@ -97,12 +96,6 @@ export default function AdminKnowledgePage() {
 
   return (
     <main className="min-h-screen anchor-app-bg text-white lg:pl-64">
-      <AppNavbar
-        title="Knowledge Admin"
-        subtitle="Review feedback · Promote fixes"
-        menuItems={[{ label: "Dashboard", href: "/dashboard" }]}
-      />
-
       <div className="mx-auto max-w-6xl px-4 py-4">
         <AdminKnowledgeTabs role={profile.role as Role} />
       </div>

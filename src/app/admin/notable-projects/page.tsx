@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -92,14 +91,6 @@ export default function AdminNotableProjectsPage() {
 
   return (
     <main className="ds-page">
-      <AppNavbar
-        title="Notable Projects"
-        subtitle="Admin"
-        menuItems={[
-          { label: t("dashboard"), href: "/dashboard" },
-          { label: "Admin", href: "/admin" },
-        ]}
-      />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">

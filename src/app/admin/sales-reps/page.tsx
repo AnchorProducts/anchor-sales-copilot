@@ -134,6 +134,13 @@ export default function AdminSalesRepsPage() {
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
 
+    // States Covered is required — a rep with none can't be routed leads.
+    if (states.length === 0) {
+      setActionErr("Select at least one state covered.");
+      setSaving(false);
+      return;
+    }
+
     const zip_prefixes = draft.zipText
       .split(/[,\s]+/)
       .map((s) => s.replace(/\D/g, "").slice(0, 3))

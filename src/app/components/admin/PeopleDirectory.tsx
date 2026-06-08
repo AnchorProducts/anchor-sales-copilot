@@ -478,7 +478,7 @@ export function PeopleDirectory({
                         {p.signedUp && (
                           <div className="flex items-center gap-4 text-center">
                             <Stat label="7d" value={p.events.total7} />
-                            <Stat label="30d" value={p.events.total30} />
+                            <Stat label={`${days ?? 30}d`} value={p.events.total30} />
                           </div>
                         )}
                         <button

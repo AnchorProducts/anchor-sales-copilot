@@ -88,6 +88,8 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
   const [err, setErr] = useState<string | null>(null);
   const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
   const [collapsedSols, setCollapsedSols] = useState<Record<string, boolean>>({});
+  // Promote-to-doc checkbox state per correction id (avoids reading the DOM).
+  const [promote, setPromote] = useState<Record<string, boolean>>({});
 
   function toggleCat(key: string) {
     setCollapsedCats((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
@@ -529,16 +531,18 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                     {role === "admin" ? (
                       <div className="flex items-center gap-2">
                         <label className="flex items-center gap-2 text-[12px] text-white/70">
-                          <input id={`promote-${c.id}`} type="checkbox" className="accent-emerald-400" />
+                          <input
+                            type="checkbox"
+                            className="accent-emerald-400"
+                            checked={!!promote[c.id]}
+                            onChange={(e) => setPromote((prev) => ({ ...prev, [c.id]: e.target.checked }))}
+                          />
                           Promote to doc draft
                         </label>
 
                         <Button
                           className="px-3 py-1 text-[12px]"
-                          onClick={() => {
-                            const cb = document.getElementById(`promote-${c.id}`) as HTMLInputElement | null;
-                            approveCorrection(c.id, !!cb?.checked);
-                          }}
+                          onClick={() => approveCorrection(c.id, !!promote[c.id])}
                           variant="secondary"
                         >
                           Approve
