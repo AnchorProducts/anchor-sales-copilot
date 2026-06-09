@@ -210,6 +210,10 @@ export async function GET(req: Request) {
   const path = normalizePathInput(searchParams.get("path") || "");
   const pathOptions = storagePathCandidates(path);
   const download = searchParams.get("download") === "1";
+  // mode=url returns the signed URL as JSON instead of redirecting. Used by the
+  // in-app viewer to hand Office docs to the Microsoft Office Online viewer,
+  // which needs a publicly fetchable URL string in its ?src= param.
+  const mode = (searchParams.get("mode") || "").trim();
 
   // ✅ NEW: allow token via query param for mobile (because window.location can't send headers)
   const tokenFromQuery = (searchParams.get("token") || "").trim();
@@ -305,6 +309,10 @@ export async function GET(req: Request) {
         { error: "Could not create signed url", tried: pathOptions.slice(0, 8) },
         { status: 500 }
       );
+    }
+
+    if (mode === "url") {
+      return NextResponse.json({ url: signedUrl }, { headers: { "Cache-Control": "no-store" } });
     }
 
     return NextResponse.redirect(signedUrl, 302);
