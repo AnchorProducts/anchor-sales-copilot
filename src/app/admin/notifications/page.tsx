@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { MARKETING_CATEGORIES, type MarketingRecipients } from "@/lib/marketingOrders";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Settings = {
   commission_recipient_email: string | null;
   weekly_report_emails: string[];
+  marketing_orders_recipients: MarketingRecipients;
 };
 
 export default function AdminNotificationsPage() {
@@ -37,6 +39,11 @@ export default function AdminNotificationsPage() {
   const [newWeeklyEmail, setNewWeeklyEmail] = useState("");
   const [weeklyBusy, setWeeklyBusy] = useState(false);
   const [weeklyMsg, setWeeklyMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Marketing orders per-category routing state.
+  const [marketingRecipients, setMarketingRecipients] = useState<MarketingRecipients>({});
+  const [marketingBusy, setMarketingBusy] = useState(false);
+  const [marketingMsg, setMarketingMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   // Admin gate.
   useEffect(() => {
@@ -73,9 +80,14 @@ export default function AdminNotificationsPage() {
         setLoading(false);
         return;
       }
-      const s = (json?.settings as Settings) ?? { commission_recipient_email: null, weekly_report_emails: [] };
+      const s = (json?.settings as Settings) ?? {
+        commission_recipient_email: null,
+        weekly_report_emails: [],
+        marketing_orders_recipients: {},
+      };
       setCommissionEmail(s.commission_recipient_email || "");
       setWeeklyEmails(s.weekly_report_emails || []);
+      setMarketingRecipients(s.marketing_orders_recipients || {});
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -153,6 +165,46 @@ export default function AdminNotificationsPage() {
       setWeeklyMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed." });
     } finally {
       setWeeklyBusy(false);
+    }
+  }
+
+  function setMarketingEmail(key: string, value: string) {
+    setMarketingRecipients((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function saveMarketing() {
+    setMarketingBusy(true);
+    setMarketingMsg(null);
+    // Trim + validate each non-empty entry; empty entries clear that category.
+    const payload: MarketingRecipients = {};
+    for (const [key, raw] of Object.entries(marketingRecipients)) {
+      const value = (raw || "").trim().toLowerCase();
+      if (!value) continue;
+      if (!EMAIL_RE.test(value)) {
+        setMarketingMsg({ kind: "err", text: `That doesn’t look like a valid email: ${raw}` });
+        setMarketingBusy(false);
+        return;
+      }
+      payload[key] = value;
+    }
+    try {
+      const res = await fetch("/api/admin/notification-settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketing_orders_recipients: payload }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMarketingMsg({ kind: "err", text: json?.error || "Save failed." });
+        return;
+      }
+      setMarketingRecipients(payload);
+      setMarketingMsg({ kind: "ok", text: "Saved." });
+    } catch (e) {
+      setMarketingMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed." });
+    } finally {
+      setMarketingBusy(false);
     }
   }
 
@@ -304,6 +356,71 @@ export default function AdminNotificationsPage() {
                       ))}
                     </ul>
                   )}
+                </Card>
+
+                {/* Marketing order recipients (per category) */}
+                <Card className="p-5 sm:p-6">
+                  <div className="mb-3">
+                    <h2 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">
+                      Marketing order recipients
+                    </h2>
+                    <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
+                      Route each order category to a specific address. Leave one blank to fall back to
+                      the default. If the default is blank too, it falls back to the{" "}
+                      <code>MARKETING_ORDERS_NOTIFICATIONS_EMAIL</code> env var.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {MARKETING_CATEGORIES.map((cat) => (
+                      <label key={cat.key} className="grid gap-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-3">
+                        <span className="text-sm font-medium text-[var(--anchor-deep)]">{cat.label}</span>
+                        <input
+                          type="email"
+                          value={marketingRecipients[cat.key] || ""}
+                          onChange={(e) => setMarketingEmail(cat.key, e.target.value)}
+                          placeholder="uses default…"
+                          className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                        />
+                      </label>
+                    ))}
+
+                    <div className="my-1 border-t border-[var(--border-default)]" />
+
+                    <label className="grid gap-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-3">
+                      <span className="text-sm font-semibold text-[var(--anchor-deep)]">Default</span>
+                      <input
+                        type="email"
+                        value={marketingRecipients.default || ""}
+                        onChange={(e) => setMarketingEmail("default", e.target.value)}
+                        placeholder="marketing@anchorp.com"
+                        className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={saveMarketing}
+                      disabled={marketingBusy}
+                      className="h-10 shrink-0 rounded-xl border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {marketingBusy ? "Saving…" : "Save"}
+                    </button>
+                    {marketingMsg && (
+                      <div
+                        className={
+                          "rounded-lg px-3 py-2 text-xs " +
+                          (marketingMsg.kind === "ok"
+                            ? "bg-[var(--anchor-mint)]/40 text-[var(--anchor-deep)]"
+                            : "border border-red-200 bg-red-50 text-red-700")
+                        }
+                      >
+                        {marketingMsg.text}
+                      </div>
+                    )}
+                  </div>
                 </Card>
 
                 <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)]/30 p-5 text-xs text-[var(--anchor-deep)] sm:p-6">

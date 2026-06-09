@@ -71,6 +71,13 @@ export const SALES_TOOLS: SalesTool[] = [
     icon: "clipboard",
     audiences: ["internal"],
   },
+  {
+    key: "marketing-orders",
+    label: "Marketing Orders",
+    description: "Order samples, brochures, swag, and other marketing collateral.",
+    icon: "megaphone",
+    audiences: ["internal", "external"],
+  },
 ];
 
 // Composite admin_tools key for a sales tool in a given audience.

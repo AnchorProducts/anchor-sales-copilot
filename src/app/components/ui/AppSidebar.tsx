@@ -8,7 +8,7 @@ import { useEffectiveRole } from "@/lib/role/viewAs";
 
 type IconKind =
   | "grid" | "sparkles" | "library" | "clipboard" | "camera"
-  | "wallet" | "shield" | "settings" | "logout" | "lifebuoy";
+  | "wallet" | "shield" | "settings" | "logout" | "lifebuoy" | "megaphone";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 // /docs/* is the full-screen document viewer. The sidebar is fixed/z-40, so if
@@ -44,6 +44,8 @@ function NavIcon({ kind, className = "h-5 w-5" }: { kind: IconKind; className?: 
       return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>);
     case "lifebuoy": // Support — rendered as a question mark.
       return (<svg viewBox="0 0 24 24" className={className} {...c}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>);
+    case "megaphone": // Marketing Orders.
+      return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M3 11l15-5v12L3 13v-2z" /><path d="M18 8a3 3 0 0 1 0 6" /><path d="M6 13v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1.5" /></svg>);
   }
 }
 
@@ -138,6 +140,7 @@ export function AppSidebar() {
           <>
             <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isExternal && isPath("/dashboard/opportunities")} />
             <NavLink href="/dashboard/notable-projects/new" kind="camera" label="Notable Project" active={isPath("/dashboard/notable-projects")} />
+            <NavLink href="/marketing-orders" kind="megaphone" label="Marketing Orders" active={isPath("/marketing-orders")} />
             <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission Claim Form" active={isPath("/dashboard/commission")} />
           </>
         )}
