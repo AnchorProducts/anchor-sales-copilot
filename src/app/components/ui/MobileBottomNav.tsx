@@ -7,7 +7,8 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth", "/chat"];
+// /docs/* is the full-screen document viewer — keep the nav out of the way.
+const HIDE_PREFIXES = ["/auth", "/chat", "/docs"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;

@@ -7,7 +7,9 @@ import { AppRole, getViewAs, setViewAs, useViewAs } from "@/lib/role/viewAs";
 import { startTutorial, tutorialDoneKey, TUTORIAL_PENDING_KEY } from "@/app/components/tutorial/AppTutorial";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth"];
+// /docs/* is the full-screen document viewer — this floating pill would overlap
+// the viewer's header.
+const HIDE_PREFIXES = ["/auth", "/docs"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;
