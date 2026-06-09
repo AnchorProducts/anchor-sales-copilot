@@ -35,25 +35,38 @@ async function emailAdminsOnNew(args: {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
 
-  // Resolve recipient: env var, then a notification_settings row if present,
-  // otherwise the same reports fallback used by the other forms.
-  let dbRecipient: string | null = null;
+  // Resolve recipients. Admin-configured values (notification_settings) take
+  // precedence over env vars: the support_emails list first, then the legacy
+  // single support_recipient_email column, then env, then the reports fallback.
+  let configured: string[] = [];
   try {
     const { data } = await supabaseAdmin
       .from("notification_settings")
-      .select("support_recipient_email")
+      .select("support_emails, support_recipient_email")
       .eq("id", 1)
       .maybeSingle();
-    const raw = (data as { support_recipient_email?: string | null } | null)?.support_recipient_email;
-    if (raw && typeof raw === "string") dbRecipient = raw.trim();
-  } catch { /* table column may not exist — env var fallback is fine */ }
+    const row = data as
+      | { support_emails?: string[] | null; support_recipient_email?: string | null }
+      | null;
+    const list = (row?.support_emails ?? []).map((e) => clean(e)).filter(Boolean);
+    if (list.length > 0) {
+      configured = list;
+    } else if (row?.support_recipient_email) {
+      const single = clean(row.support_recipient_email);
+      if (single) configured = [single];
+    }
+  } catch { /* columns may not exist — env var fallback is fine */ }
 
-  const to = clean(
-    process.env.SUPPORT_NOTIFICATIONS_EMAIL ||
-      dbRecipient ||
-      process.env.LEAD_NOTIFICATIONS_FROM ||
-      "reports@anchorp.com"
-  );
+  const to =
+    configured.length > 0
+      ? configured
+      : [
+          clean(
+            process.env.SUPPORT_NOTIFICATIONS_EMAIL ||
+              process.env.LEAD_NOTIFICATIONS_FROM ||
+              "reports@anchorp.com"
+          ),
+        ];
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
 
   const lines = [
@@ -68,7 +81,7 @@ async function emailAdminsOnNew(args: {
   const resend = new Resend(resendKey);
   await resend.emails.send({
     from,
-    to: [to],
+    to,
     subject: `Support — ${args.subject} (${args.requestId.slice(0, 8)})`,
     text: lines.join("\n"),
   });
