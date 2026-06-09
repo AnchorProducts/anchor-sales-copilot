@@ -171,7 +171,9 @@ export default function LeadForm() {
     roof_brand: [],
   });
 
-  const [solutions, setSolutions] = useState<SolutionEntry[]>(() => [newSolutionEntry()]);
+  // Start with no solution rows — the section stays collapsed until the rep
+  // chooses to add a solution (solutions are optional on a consult).
+  const [solutions, setSolutions] = useState<SolutionEntry[]>(() => []);
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [followUp, setFollowUp] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -203,7 +205,7 @@ export default function LeadForm() {
   }
 
   function removeSolutionEntry(id: string) {
-    setSolutions((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s.id !== id)));
+    setSolutions((prev) => prev.filter((s) => s.id !== id));
   }
 
   function addSolutionFiles(id: string, newFiles: File[]) {
@@ -542,11 +544,9 @@ export default function LeadForm() {
                 <div key={entry.id} className="rounded-xl border border-black/10 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="text-sm font-semibold text-black">Solution {idx + 1}</div>
-                    {solutions.length > 1 && (
-                      <Button onClick={() => removeSolutionEntry(entry.id)} className="px-3 py-1.5 text-[12px]" variant="secondary">
-                        {t("remove")}
-                      </Button>
-                    )}
+                    <Button onClick={() => removeSolutionEntry(entry.id)} className="px-3 py-1.5 text-[12px]" variant="secondary">
+                      {t("remove")}
+                    </Button>
                   </div>
 
                   <div className="grid grid-cols-1 gap-3">
@@ -628,11 +628,11 @@ export default function LeadForm() {
             </div>
 
             <Button onClick={addSolutionEntry} className="mt-3 w-full py-3 text-sm sm:w-auto sm:px-4" variant="secondary">
-              + Add Another Solution
+              {solutions.length === 0 ? "+ Add a Solution" : "+ Add Another Solution"}
             </Button>
           </div>
 
-          {/* ── Contractors + Project Follow Up ─────────────────────────────── */}
+          {/* ── Contractors ─────────────────────────────────────────────────── */}
           <div data-tutorial="rec-contractors" className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
             <div className="text-sm font-semibold text-black">{t("contractorsOnProject")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
@@ -677,17 +677,18 @@ export default function LeadForm() {
             <Button onClick={addContractor} className="mt-3 w-full py-3 text-sm sm:w-auto sm:px-4" variant="secondary">
               {t("addContractor")}
             </Button>
-
-            <label className="mt-4 grid gap-1.5 text-sm">
-              <span className="font-semibold">Project Follow Up</span>
-              <Textarea
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-                className="min-h-[88px] px-3 py-3 text-sm"
-                placeholder="Notes for the Anchor Products rep to follow up with the contractor on (timing, decision maker, scope, etc.)."
-              />
-            </label>
           </div>
+
+          {/* ── Project Follow Up ───────────────────────────────────────────── */}
+          <label className="grid gap-1.5 text-sm">
+            <span className="text-sm font-semibold text-black">Project Follow Up</span>
+            <Textarea
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+              className="min-h-[88px] px-3 py-3 text-sm"
+              placeholder="Notes for the Anchor Products rep to follow up with the contractor on (timing, decision maker, scope, etc.)."
+            />
+          </label>
         </div>
 
         <div className="mt-5 rounded-[14px] border border-[var(--anchor-green)]/40 bg-[var(--anchor-mint)]/20 p-4">
