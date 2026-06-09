@@ -20,6 +20,7 @@ import {
   isFolderLike,
   GLOBAL_SPEC_PATH,
 } from "@/lib/assets/storagePrefixes";
+import { getViewAs } from "@/lib/role/viewAs";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -284,7 +285,11 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
             .eq("id", user.id)
             .maybeSingle();
 
-          const role = (prof as ProfileRow | null)?.role || "";
+          const actualRole = (prof as ProfileRow | null)?.role || "";
+          // Respect admin "View app as" override so previewing as a rep
+          // hides admin-only controls in the resource library.
+          const viewAs = getViewAs();
+          const role = actualRole === "admin" && viewAs ? viewAs : actualRole;
           internal = isInternalRole(role);
           admin = role === "admin";
         } catch {

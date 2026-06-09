@@ -24,6 +24,15 @@ function isMobileDevice() {
   return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
+// Office docs (Word/PowerPoint/Excel) have no native renderer in mobile
+// browsers. We render them inline via the Microsoft Office Online viewer,
+// which needs a publicly fetchable URL — we pass it a short-lived signed URL.
+const OFFICE_EXTS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
+function extOf(path: string) {
+  const m = path.split("?")[0].toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : "";
+}
+
 function DocViewer() {
   const params = useSearchParams();
   const router = useRouter();
@@ -47,20 +56,52 @@ function DocViewer() {
 
   const tokenQS = token ? `&token=${encodeURIComponent(token)}` : "";
 
+  const isOffice = OFFICE_EXTS.has(extOf(path));
+
   const inlineSrc = useMemo(() => {
     if (!path) return "";
     return `/api/doc-open?path=${encodeURIComponent(path)}&download=0${tokenQS}`;
   }, [path, tokenQS]);
 
-  // On mobile, the <object> embed below falls back to a "can't preview"
+  // For Office docs, fetch a signed URL and embed the Microsoft Office Online
+  // viewer (renders Word/PPT/Excel inline on mobile + desktop). "" = loading,
+  // null = failed.
+  const [officeSrc, setOfficeSrc] = useState<string | "" | null>("");
+  useEffect(() => {
+    if (!isOffice || !path || token === null) return;
+    let alive = true;
+    fetch(`/api/doc-open?path=${encodeURIComponent(path)}&download=0&mode=url${tokenQS}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive) return;
+        const url = j?.url as string | undefined;
+        setOfficeSrc(
+          url
+            ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
+            : null
+        );
+      })
+      .catch(() => {
+        if (alive) setOfficeSrc(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isOffice, path, token, tokenQS]);
+
+  // On mobile, the <object> PDF embed below falls back to a "can't preview"
   // screen on iOS Safari. Hand the doc straight to the phone's browser
-  // (its native PDF viewer) instead. Wait until the token is resolved so the
-  // redirect URL is authenticated.
+  // (its native PDF viewer) instead. Office docs are excluded — they render
+  // inline via the Office viewer iframe. Wait until the token is resolved so
+  // the redirect URL is authenticated.
   useEffect(() => {
     if (!inlineSrc || token === null) return;
+    if (isOffice) return;
     if (!isMobileDevice()) return;
     window.location.replace(inlineSrc);
-  }, [inlineSrc, token]);
+  }, [inlineSrc, token, isOffice]);
 
   const downloadHref = useMemo(() => {
     if (!path) return "";
@@ -135,7 +176,36 @@ function DocViewer() {
       </header>
 
       <div className="flex-1 overflow-hidden bg-[var(--surface-page)]">
-        {inlineSrc ? (
+        {!inlineSrc ? (
+          <div className="p-6 text-sm text-[var(--anchor-gray)]">No document specified.</div>
+        ) : isOffice ? (
+          // Word/PowerPoint/Excel via the Microsoft Office Online viewer.
+          officeSrc === "" ? (
+            <div className="flex h-full items-center justify-center p-6 text-sm text-[var(--anchor-gray)]">
+              Loading preview…
+            </div>
+          ) : officeSrc ? (
+            <iframe
+              src={officeSrc}
+              title={title}
+              className="h-full w-full border-0"
+              allowFullScreen
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-sm text-[var(--anchor-gray)]">
+                This document couldn&apos;t be previewed.
+              </p>
+              <button
+                type="button"
+                onClick={downloadDoc}
+                className="rounded-lg bg-[var(--anchor-green)] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Download document
+              </button>
+            </div>
+          )
+        ) : (
           // <object> renders inline on desktop browsers AND falls back to its
           // children on iOS where iframe PDF rendering is not supported.
           <object data={inlineSrc} type="application/pdf" className="h-full w-full">
@@ -151,8 +221,6 @@ function DocViewer() {
               </a>
             </div>
           </object>
-        ) : (
-          <div className="p-6 text-sm text-[var(--anchor-gray)]">No document specified.</div>
         )}
       </div>
     </main>

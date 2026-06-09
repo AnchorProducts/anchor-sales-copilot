@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
 import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
+import { getViewAs } from "@/lib/role/viewAs";
 
 function catalogDisplayName(rawName: string | undefined | null): string {
   if (!rawName) return "";
@@ -98,6 +99,9 @@ const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook"]);
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
 const PDF_EXTS = new Set(["pdf"]);
+// Office docs have no native renderer on mobile — opened via the in-app
+// viewer, which embeds the Microsoft Office Online viewer.
+const OFFICE_EXTS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
 
 /* ---------------------------------------------
    Helpers
@@ -386,7 +390,11 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       if (user) {
         try {
           const { data: prof } = await supabase.from("profiles").select("id,role").eq("id", user.id).maybeSingle();
-          const role = (prof as ProfileRow | null)?.role || "";
+          const actualRole = (prof as ProfileRow | null)?.role || "";
+          // Respect admin "View app as" override so previewing as a rep
+          // hides admin-only controls in the tacklebox.
+          const viewAs = getViewAs();
+          const role = actualRole === "admin" && viewAs ? viewAs : actualRole;
           setIsInternalUser(role === "admin" || role === "anchor_rep");
           setIsAdmin(role === "admin");
         } catch {
@@ -585,11 +593,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   }
 
   // "Open" on desktop routes through the in-app viewer (Back button etc.).
-  // On mobile, open the doc URL in a new tab so the phone's browser renders
-  // the PDF in its native viewer instead of falling into the <object>
-  // fallback screen.
+  // On mobile, open PDFs in a new tab so the phone's browser renders them in
+  // its native viewer instead of the <object> fallback screen. Office docs
+  // (Word/PPT/Excel) have no native mobile renderer, so they always go through
+  // the in-app viewer, which embeds the Microsoft Office Online viewer.
   function openInline(path: string) {
-    if (isMobileDevice()) {
+    const isOffice = OFFICE_EXTS.has(extOf(path));
+    if (isMobileDevice() && !isOffice) {
       window.open(docOpenHref(path, false), "_blank", "noopener");
       return;
     }
