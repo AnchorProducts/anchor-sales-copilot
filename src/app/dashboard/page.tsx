@@ -47,7 +47,7 @@ export const dynamic = "force-dynamic";
 type IconName =
   | "search" | "more" | "right" | "grid" | "trendUp" | "trendDown"
   | "sparkles" | "library" | "phone" | "clipboard" | "wallet" | "shield"
-  | "settings" | "rocket" | "camera" | "logout" | "user";
+  | "settings" | "rocket" | "camera" | "logout" | "user" | "megaphone";
 
 function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName; className?: string; strokeWidth?: number }) {
   const c = { fill: "none", stroke: "currentColor", strokeWidth, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -69,6 +69,7 @@ function Icon({ name, className = "h-5 w-5", strokeWidth = 2 }: { name: IconName
     case "camera":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>);
     case "logout":   return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>);
     case "user":     return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
+    case "megaphone":return (<svg viewBox="0 0 24 24" className={className} {...c}><path d="M3 11l15-5v12L3 13v-2z"/><path d="M18 8a3 3 0 0 1 0 6"/><path d="M6 13v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1.5"/></svg>);
   }
 }
 
@@ -473,6 +474,7 @@ export default function DashboardPage() {
     actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
     actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: t("rooftopAuditDesc"),        icon: "shield",   badge: "Safety"     });
     actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
+    actions.push({ key: "marketing-orders", href: "/marketing-orders",        label: "Marketing Orders",     desc: "Order samples, brochures, swag, and other marketing collateral.", icon: "megaphone", badge: "Marketing" });
     // Commission is external-only (matches the page + API gate). isExternal is
     // true for external reps and for admins previewing the external experience.
     if (canOpenCommission && isExternal) {
