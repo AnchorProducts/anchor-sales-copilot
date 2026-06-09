@@ -595,11 +595,14 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   // "Open" on desktop routes through the in-app viewer (Back button etc.).
   // On mobile, open PDFs in a new tab so the phone's browser renders them in
   // its native viewer instead of the <object> fallback screen. Office docs
-  // (Word/PPT/Excel) have no native mobile renderer, so they always go through
-  // the in-app viewer, which embeds the Microsoft Office Online viewer.
+  // (no native mobile renderer) and images (SVG downloads instead of rendering
+  // when opened directly — Supabase serves it as an attachment) always go
+  // through the in-app viewer.
   function openInline(path: string) {
-    const isOffice = OFFICE_EXTS.has(extOf(path));
-    if (isMobileDevice() && !isOffice) {
+    const ext = extOf(path);
+    const isOffice = OFFICE_EXTS.has(ext);
+    const isImage = IMAGE_EXTS.has(ext);
+    if (isMobileDevice() && !isOffice && !isImage) {
       window.open(docOpenHref(path, false), "_blank", "noopener");
       return;
     }
