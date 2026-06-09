@@ -8,7 +8,7 @@
 
 export type IconName =
   | "users" | "chart" | "phone" | "clipboard" | "wallet"
-  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy" | "play";
+  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy" | "play" | "megaphone";
 
 export type AdminCard = {
   key: string;
@@ -58,7 +58,7 @@ export const CARDS: AdminCard[] = [
   {
     key: "notifications",
     title: "Notifications",
-    description: "Choose who gets commission claim emails and who receives the Friday analytics report.",
+    description: "Choose who gets commission claim emails, marketing order emails (per category), and the Friday analytics report.",
     badge: "Config",
     href: "/admin/notifications",
     icon: "mail",
@@ -260,6 +260,14 @@ export function TileIcon({ name, className }: { name: IconName; className?: stri
         <svg {...props}>
           <circle cx="12" cy="12" r="9" />
           <path d="M10 8l6 4-6 4z" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "megaphone": // Marketing Orders.
+      return (
+        <svg {...props}>
+          <path d="M3 11l15-5v12L3 13v-2z" />
+          <path d="M18 8a3 3 0 0 1 0 6" />
+          <path d="M6 13v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1.5" />
         </svg>
       );
   }
