@@ -8,7 +8,7 @@
 
 export type IconName =
   | "users" | "chart" | "phone" | "clipboard" | "wallet"
-  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy" | "play" | "megaphone";
+  | "shield" | "camera" | "book" | "image" | "mail" | "briefcase" | "grid" | "lifebuoy" | "play" | "package";
 
 export type AdminCard = {
   key: string;
@@ -117,7 +117,7 @@ export const CARDS: AdminCard[] = [
     description: "Samples, brochure, swag, and collateral orders submitted by internal and external sales reps.",
     badge: "Analytics",
     href: "/admin/marketing-orders",
-    icon: "megaphone",
+    icon: "package",
   },
   {
     key: "knowledge",
@@ -270,12 +270,13 @@ export function TileIcon({ name, className }: { name: IconName; className?: stri
           <path d="M10 8l6 4-6 4z" fill="currentColor" stroke="none" />
         </svg>
       );
-    case "megaphone": // Marketing Orders.
+    case "package": // Marketing Orders.
       return (
         <svg {...props}>
-          <path d="M3 11l15-5v12L3 13v-2z" />
-          <path d="M18 8a3 3 0 0 1 0 6" />
-          <path d="M6 13v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-1.5" />
+          <path d="M16.5 9.4 7.5 4.21" />
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <path d="m3.27 6.96 8.73 5.05 8.73-5.05" />
+          <path d="M12 22.08V12" />
         </svg>
       );
   }

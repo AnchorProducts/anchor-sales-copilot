@@ -3,12 +3,12 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { isInternal, APP_NAME, APP_SHORT } from "@/lib/appMode";
 import { MobileBottomNav } from "@/app/components/ui/MobileBottomNav";
+import { HelpMenuButton } from "@/app/components/ui/HelpMenuButton";
 import { MobileBackButton } from "@/app/components/ui/MobileBackButton";
 import { AppSidebar } from "@/app/components/ui/AppSidebar";
 import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
-import { PageHelpButton } from "@/app/components/tutorial/PageHelpButton";
 import { ProfileCompletionPrompt } from "@/app/components/ProfileCompletionPrompt";
 
 export const metadata: Metadata = {
@@ -68,7 +68,7 @@ export default function RootLayout({
         <MobileBottomNav />
         <AdminViewAsSwitcher />
         <AppTutorial />
-        <PageHelpButton />
+        <HelpMenuButton />
         <ProfileCompletionPrompt />
         <UserEventTracker />
       </body>
