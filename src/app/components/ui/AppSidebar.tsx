@@ -11,7 +11,10 @@ type IconKind =
   | "wallet" | "shield" | "settings" | "logout" | "lifebuoy";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth"];
+// /docs/* is the full-screen document viewer. The sidebar is fixed/z-40, so if
+// it rendered here it would sit on top of the viewer header and swallow clicks
+// on the in-header "Back" button.
+const HIDE_PREFIXES = ["/auth", "/docs"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;
