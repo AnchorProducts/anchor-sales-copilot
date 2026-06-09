@@ -41,11 +41,32 @@ async function sendNotableProjectEmail(params: {
   if (!resendKey) return;
 
   const resend = new Resend(resendKey);
-  const to = clean(
-    process.env.NOTABLE_PROJECT_NOTIFICATIONS_EMAIL ||
-      process.env.LEAD_NOTIFICATIONS_FROM ||
-      "reports@anchorp.com"
-  );
+
+  // Admin-configured recipients (notification_settings) take precedence; fall
+  // back to the env var, then the shared reports address.
+  let configured: string[] = [];
+  try {
+    const { data } = await supabaseAdmin
+      .from("notification_settings")
+      .select("notable_project_emails")
+      .eq("id", 1)
+      .maybeSingle();
+    const list = (data?.notable_project_emails as string[] | null) ?? [];
+    configured = list.map((e) => clean(e)).filter(Boolean);
+  } catch {
+    configured = [];
+  }
+
+  const to =
+    configured.length > 0
+      ? configured
+      : [
+          clean(
+            process.env.NOTABLE_PROJECT_NOTIFICATIONS_EMAIL ||
+              process.env.LEAD_NOTIFICATIONS_FROM ||
+              "reports@anchorp.com"
+          ),
+        ];
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
 
   const lines: string[] = [];
@@ -63,7 +84,7 @@ async function sendNotableProjectEmail(params: {
 
   const subject = `Notable Project - ${params.name} (${params.projectId.slice(0, 8)})`;
 
-  const result = await resend.emails.send({ from, to: [to], subject, text: lines.join("\n") });
+  const result = await resend.emails.send({ from, to, subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }

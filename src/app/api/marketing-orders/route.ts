@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import {
   isMarketingCategory,
-  marketingCategoryLabel,
+  marketingCategoriesLabel,
   type MarketingRecipients,
 } from "@/lib/marketingOrders";
 
@@ -25,10 +25,11 @@ async function getProfile(userId: string) {
   return data as any;
 }
 
-// Resolve the recipient for a category: category-specific mapping → "default"
-// mapping → env vars → hard fallback. Mirrors the fallback style used by the
-// commission + notable-project routes.
-async function resolveRecipient(category: string): Promise<string> {
+// Resolve recipients for the selected categories. Each category routes to its
+// own mapping → the "default" mapping → env vars → hard fallback; the result is
+// deduped so a multi-category order emails every relevant contact once. Mirrors
+// the fallback style used by the commission + notable-project routes.
+async function resolveRecipients(categories: string[]): Promise<string[]> {
   let recipients: MarketingRecipients = {};
   try {
     const { data } = await supabaseAdmin
@@ -41,21 +42,30 @@ async function resolveRecipient(category: string): Promise<string> {
     recipients = {};
   }
 
-  return clean(
-    recipients[category] ||
-      recipients.default ||
+  const fallback = clean(
+    recipients.default ||
       process.env.MARKETING_ORDERS_NOTIFICATIONS_EMAIL ||
       process.env.LEAD_NOTIFICATIONS_FROM ||
       "reports@anchorp.com"
   );
+
+  const out: string[] = [];
+  for (const category of categories) {
+    const to = clean(recipients[category] || fallback);
+    if (to && !out.includes(to)) out.push(to);
+  }
+  // Always have at least one recipient.
+  if (out.length === 0 && fallback) out.push(fallback);
+  return out;
 }
 
 async function sendMarketingOrderEmail(params: {
   orderId: string;
-  to: string;
-  category: string;
+  to: string[];
+  categories: string[];
   items: string;
   quantity: string | null;
+  neededBy: string | null;
   shipTo: string | null;
   notes: string | null;
   submitterName: string | null;
@@ -68,14 +78,15 @@ async function sendMarketingOrderEmail(params: {
 
   const resend = new Resend(resendKey);
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
-  const categoryLabel = marketingCategoryLabel(params.category);
+  const categoryLabel = marketingCategoriesLabel(params.categories);
 
   const lines: string[] = [];
   lines.push(`New Marketing Order submitted (ID: ${params.orderId.slice(0, 8)})`);
   lines.push("");
-  lines.push(`Category: ${categoryLabel}`);
+  lines.push(`Categories: ${categoryLabel}`);
   lines.push(`Item(s): ${params.items}`);
   lines.push(`Quantity: ${params.quantity || "—"}`);
+  lines.push(`Needed by: ${params.neededBy || "—"}`);
   lines.push("");
   lines.push(
     `Submitter: ${params.submitterName || "—"} | ${params.submitterCompany || "—"} | ${params.submitterPhone || "—"} | ${params.submitterEmail || "—"}`
@@ -89,7 +100,7 @@ async function sendMarketingOrderEmail(params: {
 
   const subject = `Marketing Order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
 
-  const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const result = await resend.emails.send({ from, to: params.to, subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
@@ -115,20 +126,37 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
-    const category = clean(body.category);
+    const rawCategories = Array.isArray(body.categories) ? body.categories : [];
+    // Normalize: strings only, de-duped, valid keys.
+    const categories: string[] = [];
+    for (const raw of rawCategories) {
+      const key = clean(raw);
+      if (key && isMarketingCategory(key) && !categories.includes(key)) categories.push(key);
+    }
     const items = clean(body.items);
     const quantity = clean(body.quantity) || null;
+    const needed_by = clean(body.needed_by) || null;
     const ship_to = clean(body.ship_to) || null;
     const notes = clean(body.notes) || null;
 
-    if (!category || !isMarketingCategory(category)) {
-      return NextResponse.json({ error: "Pick a valid category." }, { status: 400 });
+    if (categories.length === 0) {
+      return NextResponse.json({ error: "Pick at least one category." }, { status: 400 });
     }
     if (!items) {
       return NextResponse.json({ error: "Describe the item(s) you need." }, { status: 400 });
     }
+    if (!quantity) {
+      return NextResponse.json({ error: "Quantity is required." }, { status: 400 });
+    }
     if (!ship_to) {
       return NextResponse.json({ error: "A shipping address is required." }, { status: 400 });
+    }
+    // needed_by is required and must be a YYYY-MM-DD calendar date.
+    if (!needed_by) {
+      return NextResponse.json({ error: "A needed-by date is required." }, { status: 400 });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(needed_by) || Number.isNaN(Date.parse(needed_by))) {
+      return NextResponse.json({ error: "Needed-by date is invalid." }, { status: 400 });
     }
 
     const submitter_name = clean(profile.full_name) || null;
@@ -144,9 +172,10 @@ export async function POST(req: Request) {
         submitter_company,
         submitter_email,
         submitter_phone,
-        category,
+        categories,
         items,
         quantity,
+        needed_by,
         ship_to,
         notes,
         status: "new",
@@ -163,19 +192,20 @@ export async function POST(req: Request) {
     let emailNotification: {
       attempted: boolean;
       sent: boolean;
-      to: string | null;
+      to: string[] | null;
       error: string | null;
     } = { attempted: true, sent: false, to: null, error: null };
 
     try {
-      const to = await resolveRecipient(category);
+      const to = await resolveRecipients(categories);
       emailNotification.to = to;
       await sendMarketingOrderEmail({
         orderId,
         to,
-        category,
+        categories,
         items,
         quantity,
+        neededBy: needed_by,
         shipTo: ship_to,
         notes,
         submitterName: submitter_name,
@@ -193,5 +223,34 @@ export async function POST(req: Request) {
   } catch (e: any) {
     console.error("marketing order route error", e);
     return NextResponse.json({ error: e?.message || "Failed to submit order." }, { status: 500 });
+  }
+}
+
+// Admin (and internal sales) order history — every submitted marketing order,
+// newest first. Mirrors the notable-projects list endpoint.
+export async function GET() {
+  try {
+    const supabase = await supabaseRoute();
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const profile = await getProfile(auth.user.id);
+    const role = clean(profile?.role);
+    if (role !== "admin" && role !== "anchor_rep") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("marketing_orders")
+      .select(
+        "id,categories,items,quantity,needed_by,ship_to,notes,status,submitter_name,submitter_company,submitter_email,submitter_phone,created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ items: data || [] });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to load orders." }, { status: 500 });
   }
 }
