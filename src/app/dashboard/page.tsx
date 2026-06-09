@@ -39,6 +39,7 @@ type SalesRepLite = {
   name: string | null;
   email: string | null;
   teams_link: string | null;
+  states?: string[] | null;
 };
 
 export const dynamic = "force-dynamic";
@@ -166,6 +167,85 @@ function HeroFeatureVisual({ feature, size = 96 }: { feature: HeroVisualKey; siz
 const initials = (s: string) =>
   s.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase() || "?";
 
+/* ─── Your-reps popover ─────────────────────────────────────────────────────
+   Compact menu (same look as the Help button menu) anchored to the "Your Rep"
+   stat circle. Lists the assigned sales (external) rep with Teams + Email, and
+   the inside (internal) rep with Email. */
+function RepPopover({
+  salesReps,
+  internalReps,
+  serviceState,
+  onClose,
+}: {
+  salesReps: SalesRepLite[];
+  internalReps: SalesRepLite[];
+  serviceState: string;
+  onClose: () => void;
+}) {
+  const row =
+    "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40";
+  const mail = (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+      <polyline points="22 6 12 13 2 6" />
+    </svg>
+  );
+  const teams = (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+
+  return (
+    <div role="menu" className="overflow-hidden rounded-2xl border border-black/10 bg-white p-1.5 text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+      {salesReps.length === 0 && internalReps.length === 0 ? (
+        <div className="px-3 py-2 text-sm text-[var(--anchor-gray)]">No reps assigned yet.</div>
+      ) : (
+        <>
+          {salesReps.map((rep, i) => (
+            <div key={`ext-${i}`}>
+              <div className="px-3 pb-1 pt-2">
+                <div className="text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "Sales rep"}</div>
+                <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+                  Your roofing expert — reach out with product questions or to talk through a project.
+                </div>
+              </div>
+              {rep.teams_link && (
+                <a href={rep.teams_link} target="_blank" rel="noopener noreferrer" role="menuitem" onClick={onClose} className={row}>
+                  {teams} Teams
+                </a>
+              )}
+              {rep.email && (
+                <a href={`mailto:${rep.email}`} role="menuitem" onClick={onClose} className={row}>
+                  {mail} Email
+                </a>
+              )}
+            </div>
+          ))}
+
+          {internalReps.length > 0 && <div className="my-1 border-t border-black/5" />}
+
+          {internalReps.map((rep, i) => (
+            <div key={`int-${i}`}>
+              <div className="px-3 pb-1 pt-2">
+                <div className="text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "Inside sales rep"}</div>
+                <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+                  Sets up and handles your order — reach out to place an order or check on one.
+                </div>
+              </div>
+              {rep.email && (
+                <a href={`mailto:${rep.email}`} role="menuitem" onClick={onClose} className={row}>
+                  {mail} Email
+                </a>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -177,6 +257,8 @@ export default function DashboardPage() {
   const [serviceState, setServiceState] = useState<string>("");
   const [serviceZip, setServiceZip] = useState<string>("");
   const [salesReps, setSalesReps] = useState<SalesRepLite[]>([]);
+  const [internalReps, setInternalReps] = useState<SalesRepLite[]>([]);
+  const [repModalOpen, setRepModalOpen] = useState(false);
   const [fullName, setFullName] = useState<string>("");
   const [canSeeCommission, setCanSeeCommission] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -306,7 +388,7 @@ export default function DashboardPage() {
   // Fetch the assigned sales reps when the user's service state is known.
   // A state can have multiple external reps; we show all of them.
   useEffect(() => {
-    if (!serviceState) { setSalesReps([]); return; }
+    if (!serviceState) { setSalesReps([]); setInternalReps([]); return; }
     let alive = true;
     (async () => {
       try {
@@ -316,8 +398,9 @@ export default function DashboardPage() {
         const json = await res.json().catch(() => null);
         if (!alive) return;
         setSalesReps(Array.isArray(json?.reps) ? json.reps : []);
+        setInternalReps(Array.isArray(json?.internal) ? json.internal : []);
       } catch {
-        if (alive) setSalesReps([]);
+        if (alive) { setSalesReps([]); setInternalReps([]); }
       }
     })();
     return () => { alive = false; };
@@ -451,7 +534,7 @@ export default function DashboardPage() {
     ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
     : isInternal
     ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName, tutorialKey: "stat-copilot" }
-    : { label: salesReps.length > 1 ? "Your Reps" : "Your Rep", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: salesReps[0]?.teams_link || "/dashboard/settings", external: !!salesReps[0]?.teams_link, icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
+    : { label: salesReps.length > 1 ? "Your Reps" : "Your Rep", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: "#", popup: "rep", icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
 
   const stats = [stat1, stat2];
 
@@ -585,50 +668,6 @@ export default function DashboardPage() {
       </main>
     );
   }
-
-  // "Your reps" contacts card — lists every external rep assigned to the
-  // user's service state, each with a direct Teams link. Shared by both the
-  // mobile and desktop layouts. Hidden until a service state + reps resolve.
-  const renderRepsCard = () => {
-    if (!serviceState || salesReps.length === 0) return null;
-    return (
-      <div className="rounded-3xl border border-[var(--border-default)] bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-center gap-2">
-          <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--anchor-mint)] text-[var(--anchor-deep)]">
-            <Icon name="phone" className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-[var(--anchor-deep)]">
-              {salesReps.length > 1 ? "Your sales reps" : "Your sales rep"} · {serviceState}
-            </div>
-            <div className="text-[11px] text-[var(--anchor-gray)]">Reach out directly on Teams.</div>
-          </div>
-        </div>
-        <ul className="mt-3 divide-y divide-black/5">
-          {salesReps.map((rep, i) => (
-            <li key={rep.email || rep.name || i} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "—"}</div>
-                {rep.email && <div className="truncate text-[11px] text-[var(--anchor-gray)]">{rep.email}</div>}
-              </div>
-              {rep.teams_link ? (
-                <a
-                  href={rep.teams_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded-full bg-[var(--anchor-deep)] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[var(--anchor-green)]"
-                >
-                  Teams
-                </a>
-              ) : (
-                <span className="shrink-0 text-[11px] text-[var(--anchor-gray)]">No link</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
 
   return (
     <>
@@ -783,8 +822,25 @@ export default function DashboardPage() {
         <div data-tutorial="stat-buttons" className="grid grid-cols-2 gap-4">
           {stats.map((s, i) => {
             const isExt = "external" in s && (s as { external?: boolean }).external;
+            const isPopup = "popup" in s && (s as { popup?: string }).popup === "rep";
             const tKey = (s as { tutorialKey?: string }).tutorialKey;
-            const Wrap = isExt
+            const Wrap = isPopup
+              ? ({ children }: { children: React.ReactNode }) => (
+                  <div className="relative flex flex-col items-center gap-2">
+                    <button type="button" onClick={() => setRepModalOpen((v) => !v)} aria-label={s.label} aria-expanded={repModalOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">
+                      {children}
+                    </button>
+                    {repModalOpen && (
+                      <>
+                        <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
+                        <div className="absolute bottom-full right-0 z-[120] mb-3 w-64">
+                          <RepPopover salesReps={salesReps} internalReps={internalReps} serviceState={serviceState} onClose={() => setRepModalOpen(false)} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              : isExt
               ? ({ children }: { children: React.ReactNode }) => (
                   <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">
                     {children}
@@ -808,9 +864,6 @@ export default function DashboardPage() {
             );
           })}
         </div>
-
-        {/* Your reps — all external reps for the user's state */}
-        {renderRepsCard()}
 
         </div>
 
@@ -962,8 +1015,23 @@ export default function DashboardPage() {
             <div data-tutorial="stat-buttons" className="mt-6 flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
+                const isPopup = "popup" in s && (s as { popup?: string }).popup === "rep";
                 const tKey = (s as { tutorialKey?: string }).tutorialKey;
-                const Wrap = isExt
+                const Wrap = isPopup
+                  ? ({ children }: { children: React.ReactNode }) => (
+                      <div className="relative flex flex-col items-center gap-2">
+                        <button type="button" onClick={() => setRepModalOpen((v) => !v)} aria-label={s.label} aria-expanded={repModalOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</button>
+                        {repModalOpen && (
+                          <>
+                            <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
+                            <div className="absolute bottom-full left-1/2 z-[120] mb-3 w-64 -translate-x-1/2">
+                              <RepPopover salesReps={salesReps} internalReps={internalReps} serviceState={serviceState} onClose={() => setRepModalOpen(false)} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  : isExt
                   ? ({ children }: { children: React.ReactNode }) => (
                       <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</a>
                     )
@@ -985,9 +1053,6 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-
-            {/* Your reps — all external reps for the user's state */}
-            <div className="mt-6 max-w-md">{renderRepsCard()}</div>
 
             {booting && (
               <p className="mt-6 text-center text-xs text-[var(--anchor-gray)]">Loading your workspace…</p>
