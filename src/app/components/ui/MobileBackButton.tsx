@@ -14,7 +14,9 @@ import { usePathname, useRouter } from "next/navigation";
 // (not a bare arrow) reads clearer for less app-savvy users.
 
 const HIDE_EXACT = new Set(["/", "/dashboard", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth"];
+// /docs/* is a full-screen document viewer with its own in-header Back button —
+// the floating pill would be a redundant second "Back".
+const HIDE_PREFIXES = ["/auth", "/docs"];
 
 export function MobileBackButton() {
   const pathname = usePathname() || "";

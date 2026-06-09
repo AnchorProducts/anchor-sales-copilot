@@ -8,7 +8,7 @@ import { pageTourForPath, startPageTutorial, startTutorial } from "./AppTutorial
 // a tour. AppNavbar is hidden app-wide, so this is the per-page tutorial entry
 // point. Sits above the mobile bottom nav and below the tour overlay (z-100).
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth"];
+const HIDE_PREFIXES = ["/auth", "/docs"];
 
 export function PageHelpButton() {
   const pathname = usePathname() || "";
