@@ -15,8 +15,135 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Settings = {
   commission_recipient_email: string | null;
   weekly_report_emails: string[];
+  notable_project_emails: string[];
+  support_emails: string[];
   marketing_orders_recipients: MarketingRecipients;
 };
+
+// Reusable add/remove recipient list. Self-contained: seeds from `emails`, and
+// persists each change through `onSave` (which returns an error string or null).
+function EmailListEditor({
+  title,
+  description,
+  emails,
+  emptyHint,
+  onSave,
+}: {
+  title: string;
+  description: string;
+  emails: string[];
+  emptyHint: string;
+  onSave: (next: string[]) => Promise<string | null>;
+}) {
+  const [list, setList] = useState<string[]>(emails);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    setList(emails);
+  }, [emails]);
+
+  async function commit(next: string[]) {
+    setBusy(true);
+    setMsg(null);
+    const err = await onSave(next);
+    if (err) {
+      setMsg({ kind: "err", text: err });
+    } else {
+      setList(next);
+      setInput("");
+      setMsg({ kind: "ok", text: "Saved." });
+    }
+    setBusy(false);
+  }
+
+  function add() {
+    const value = input.trim().toLowerCase();
+    setMsg(null);
+    if (!value) return;
+    if (!EMAIL_RE.test(value)) {
+      setMsg({ kind: "err", text: "That doesn’t look like a valid email." });
+      return;
+    }
+    if (list.includes(value)) {
+      setMsg({ kind: "err", text: "Already in the list." });
+      return;
+    }
+    void commit([...list, value]);
+  }
+
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="mb-3">
+        <h2 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">{title}</h2>
+        <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">{description}</p>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          type="email"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="add another recipient…"
+          className="h-10 flex-1 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={busy}
+          className="h-10 shrink-0 rounded-xl border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Add
+        </button>
+      </div>
+
+      {msg && (
+        <div
+          className={
+            "mt-2 rounded-lg px-3 py-2 text-xs " +
+            (msg.kind === "ok"
+              ? "bg-[var(--anchor-mint)]/40 text-[var(--anchor-deep)]"
+              : "border border-red-200 bg-red-50 text-red-700")
+          }
+        >
+          {msg.text}
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-dashed border-[var(--border-default)] p-4 text-center text-xs text-[var(--anchor-gray)]">
+          {emptyHint}
+        </div>
+      ) : (
+        <ul className="mt-4 divide-y divide-[var(--border-default)] rounded-xl border border-[var(--border-default)]">
+          {list.map((email) => (
+            <li key={email} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="truncate text-[var(--anchor-deep)]" title={email}>
+                {email}
+              </span>
+              <button
+                type="button"
+                onClick={() => commit(list.filter((e) => e !== email))}
+                disabled={busy}
+                aria-label={`Remove ${email}`}
+                className="shrink-0 rounded-lg border border-red-300 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 export default function AdminNotificationsPage() {
   const router = useRouter();
@@ -44,6 +171,27 @@ export default function AdminNotificationsPage() {
   const [marketingRecipients, setMarketingRecipients] = useState<MarketingRecipients>({});
   const [marketingBusy, setMarketingBusy] = useState(false);
   const [marketingMsg, setMarketingMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Notable projects + support recipient lists.
+  const [notableEmails, setNotableEmails] = useState<string[]>([]);
+  const [supportEmails, setSupportEmails] = useState<string[]>([]);
+
+  // Persist one email-list field; returns an error string or null on success.
+  async function saveListField(field: string, next: string[]): Promise<string | null> {
+    try {
+      const res = await fetch("/api/admin/notification-settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: next }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) return json?.error || "Save failed.";
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Save failed.";
+    }
+  }
 
   // Admin gate.
   useEffect(() => {
@@ -83,10 +231,14 @@ export default function AdminNotificationsPage() {
       const s = (json?.settings as Settings) ?? {
         commission_recipient_email: null,
         weekly_report_emails: [],
+        notable_project_emails: [],
+        support_emails: [],
         marketing_orders_recipients: {},
       };
       setCommissionEmail(s.commission_recipient_email || "");
       setWeeklyEmails(s.weekly_report_emails || []);
+      setNotableEmails(s.notable_project_emails || []);
+      setSupportEmails(s.support_emails || []);
       setMarketingRecipients(s.marketing_orders_recipients || {});
       setLoading(false);
     })();
@@ -423,14 +575,29 @@ export default function AdminNotificationsPage() {
                   </div>
                 </Card>
 
+                {/* Notable project recipients */}
+                <EmailListEditor
+                  title="Notable project recipients"
+                  description="Emailed whenever a rep submits a notable project. Falls back to the NOTABLE_PROJECT_NOTIFICATIONS_EMAIL env var when empty."
+                  emails={notableEmails}
+                  emptyHint="No recipients yet — notable project emails fall back to the env var."
+                  onSave={(next) => saveListField("notable_project_emails", next)}
+                />
+
+                {/* Support request recipients */}
+                <EmailListEditor
+                  title="Support request recipients"
+                  description="Emailed whenever a rep files a support request from the in-app help form. Falls back to the SUPPORT_NOTIFICATIONS_EMAIL env var when empty."
+                  emails={supportEmails}
+                  emptyHint="No recipients yet — support emails fall back to the env var."
+                  onSave={(next) => saveListField("support_emails", next)}
+                />
+
                 <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)]/30 p-5 text-xs text-[var(--anchor-deep)] sm:p-6">
                   <div className="font-semibold">Other notifications</div>
                   <ul className="mt-2 list-disc space-y-1 pl-5">
                     <li>
-                      <strong>Leads</strong> — auto-routed to the assigned internal sales rep based on the project’s state (configured in <a href="/admin/sales-reps" className="underline">Sales Reps</a>).
-                    </li>
-                    <li>
-                      <strong>Notable Projects</strong> — single recipient set via the <code>NOTABLE_PROJECT_NOTIFICATIONS_EMAIL</code> env var.
+                      <strong>Leads / Rooftop Consults</strong> — auto-routed to the assigned internal sales rep based on the project’s state (configured in <a href="/admin/sales-reps" className="underline">Sales Reps</a>).
                     </li>
                     <li>
                       <strong>Sender domain</strong> — all emails come from <code>reports@anchorp.com</code> (your Resend domain).

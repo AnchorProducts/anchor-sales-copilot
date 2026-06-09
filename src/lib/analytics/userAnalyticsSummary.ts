@@ -34,6 +34,7 @@ const EVENT_LABELS: Record<string, string> = {
   lead_submitted: "Leads",
   commission_submitted: "Commission claims",
   notable_project_submitted: "Notable projects",
+  marketing_order_submitted: "Marketing orders",
   doc_opened: "Docs opened",
 };
 
@@ -51,6 +52,7 @@ const SHORT_EVENT_LABELS: Record<string, string> = {
   lead_submitted: "Leads",
   commission_submitted: "Claims",
   notable_project_submitted: "Projects",
+  marketing_order_submitted: "Orders",
   doc_opened: "Docs",
 };
 

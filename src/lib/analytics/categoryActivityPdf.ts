@@ -44,6 +44,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   lead_submitted: "Leads submitted",
   commission_submitted: "Commission claims",
   notable_project_submitted: "Notable projects",
+  marketing_order_submitted: "Marketing orders",
   doc_opened: "Docs opened",
 };
 
