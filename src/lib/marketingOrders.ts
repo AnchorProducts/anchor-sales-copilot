@@ -28,6 +28,12 @@ export function marketingCategoryLabel(key: string): string {
   return MARKETING_CATEGORIES.find((c) => c.key === key)?.label || key;
 }
 
+// Label a list of category keys for display/email, e.g. "Samples, Swag".
+export function marketingCategoriesLabel(keys: string[] | null | undefined): string {
+  if (!keys || keys.length === 0) return "—";
+  return keys.map(marketingCategoryLabel).join(", ");
+}
+
 // The per-category recipient map persisted on notification_settings. Keys are
 // category keys (above) plus the special "default" fallback. Values are emails.
 export type MarketingRecipients = Record<string, string>;

@@ -58,7 +58,7 @@ export const CARDS: AdminCard[] = [
   {
     key: "notifications",
     title: "Notifications",
-    description: "Choose who gets commission claim emails, marketing order emails (per category), and the Friday analytics report.",
+    description: "Configure email recipients for every form — commission claims, marketing orders, notable projects, support requests — plus the Friday analytics report.",
     badge: "Config",
     href: "/admin/notifications",
     icon: "mail",
@@ -110,6 +110,14 @@ export const CARDS: AdminCard[] = [
     badge: "Analytics",
     href: "/admin/notable-projects",
     icon: "camera",
+  },
+  {
+    key: "marketing-orders",
+    title: "Marketing Orders",
+    description: "Samples, brochure, swag, and collateral orders submitted by internal and external sales reps.",
+    badge: "Analytics",
+    href: "/admin/marketing-orders",
+    icon: "megaphone",
   },
   {
     key: "knowledge",

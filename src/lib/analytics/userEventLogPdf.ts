@@ -29,6 +29,7 @@ const EVENT_LABELS: Record<string, string> = {
   lead_submitted: "Lead",
   commission_submitted: "Commission claim",
   notable_project_submitted: "Notable project",
+  marketing_order_submitted: "Marketing order",
   doc_opened: "Doc opened",
 };
 function eventLabel(t: string): string {

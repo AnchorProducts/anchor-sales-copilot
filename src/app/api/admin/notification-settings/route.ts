@@ -31,8 +31,32 @@ async function requireAdmin() {
 type Settings = {
   commission_recipient_email: string | null;
   weekly_report_emails: string[];
+  notable_project_emails: string[];
+  support_emails: string[];
   marketing_orders_recipients: MarketingRecipients;
 };
+
+// The form-recipient fields that are plain email lists. Validated + saved uniformly.
+const EMAIL_LIST_FIELDS = [
+  "weekly_report_emails",
+  "notable_project_emails",
+  "support_emails",
+] as const;
+
+function parseEmailList(
+  list: unknown
+): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(list)) return { ok: false, error: "must be an array." };
+  const cleaned: string[] = [];
+  for (const raw of list) {
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim().toLowerCase();
+    if (!trimmed) continue;
+    if (!EMAIL_RE.test(trimmed)) return { ok: false, error: `invalid email: ${raw}` };
+    if (!cleaned.includes(trimmed)) cleaned.push(trimmed);
+  }
+  return { ok: true, value: cleaned };
+}
 
 export async function GET() {
   const gate = await requireAdmin();
@@ -51,6 +75,8 @@ export async function GET() {
   const settings: Settings = {
     commission_recipient_email: (data?.commission_recipient_email as string | null) ?? null,
     weekly_report_emails: (data?.weekly_report_emails as string[] | null) ?? [],
+    notable_project_emails: (data?.notable_project_emails as string[] | null) ?? [],
+    support_emails: (data?.support_emails as string[] | null) ?? [],
     marketing_orders_recipients:
       (data?.marketing_orders_recipients as MarketingRecipients | null) ?? {},
   };
@@ -77,22 +103,14 @@ export async function PUT(req: Request) {
     }
   }
 
-  if ("weekly_report_emails" in body) {
-    const list = body.weekly_report_emails;
-    if (!Array.isArray(list)) {
-      return NextResponse.json({ error: "weekly_report_emails must be an array." }, { status: 400 });
-    }
-    const cleaned: string[] = [];
-    for (const raw of list) {
-      if (typeof raw !== "string") continue;
-      const trimmed = raw.trim().toLowerCase();
-      if (!trimmed) continue;
-      if (!EMAIL_RE.test(trimmed)) {
-        return NextResponse.json({ error: `Invalid email: ${raw}` }, { status: 400 });
+  for (const field of EMAIL_LIST_FIELDS) {
+    if (field in body) {
+      const res = parseEmailList((body as Record<string, unknown>)[field]);
+      if (!res.ok) {
+        return NextResponse.json({ error: `${field}: ${res.error}` }, { status: 400 });
       }
-      if (!cleaned.includes(trimmed)) cleaned.push(trimmed);
+      update[field] = res.value;
     }
-    update.weekly_report_emails = cleaned;
   }
 
   if ("marketing_orders_recipients" in body) {
