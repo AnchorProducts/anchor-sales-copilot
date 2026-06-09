@@ -9,7 +9,7 @@ import { Input, Select } from "@/app/components/ui/Field";
 import { US_STATES } from "@/lib/sales/states";
 import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
-import { useTranslation, setLanguage, type Lang } from "@/lib/i18n/useTranslation";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export const dynamic = "force-dynamic";
 
@@ -24,20 +24,10 @@ function applyTheme(t: Theme) {
   localStorage.setItem("anchor-theme", t);
 }
 
-// Languages the app is translated into (see src/lib/i18n/translations.ts).
-// Labels are shown in their own language so any user can find theirs.
-const LANGUAGE_OPTIONS: { value: Lang; label: string }[] = [
-  { value: "en", label: "English" },
-  { value: "fr", label: "Français" },
-  { value: "es", label: "Español" },
-  { value: "pt", label: "Português" },
-  { value: "de", label: "Deutsch" },
-];
-
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -240,23 +230,6 @@ export default function SettingsPage() {
                   </button>
                 );
               })}
-            </div>
-
-            {/* Language */}
-            <div className="mt-5">
-              <label htmlFor="settings-language" className="text-sm font-semibold text-black">
-                {t("language")}
-              </label>
-              <select
-                id="settings-language"
-                value={lang}
-                onChange={(e) => setLanguage(e.target.value as Lang)}
-                className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3 py-3 text-sm text-black outline-none focus:border-[var(--anchor-green)]"
-              >
-                {LANGUAGE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
             </div>
           </Card>
 
