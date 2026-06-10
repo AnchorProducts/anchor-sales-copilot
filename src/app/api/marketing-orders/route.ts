@@ -6,6 +6,8 @@ import {
   isMarketingCategory,
   isMarketingOrderStatus,
   marketingCategoriesLabel,
+  normalizeMarketingRecipients,
+  normalizeRecipientEmails,
   type MarketingRecipients,
 } from "@/lib/marketingOrders";
 
@@ -38,25 +40,41 @@ async function resolveRecipients(categories: string[]): Promise<string[]> {
       .select("marketing_orders_recipients")
       .eq("id", 1)
       .maybeSingle();
-    recipients = (data?.marketing_orders_recipients as MarketingRecipients | null) ?? {};
+    // normalize handles both the new string[] shape and legacy single strings.
+    recipients = normalizeMarketingRecipients(
+      data?.marketing_orders_recipients as Record<string, unknown> | null
+    );
   } catch {
     recipients = {};
   }
 
-  const fallback = clean(
-    recipients.default ||
-      process.env.MARKETING_ORDERS_NOTIFICATIONS_EMAIL ||
-      process.env.LEAD_NOTIFICATIONS_FROM ||
-      "reports@anchorp.com"
-  );
+  const defaultList =
+    recipients.default && recipients.default.length > 0
+      ? recipients.default
+      : normalizeRecipientEmails(
+          process.env.MARKETING_ORDERS_NOTIFICATIONS_EMAIL ||
+            process.env.LEAD_NOTIFICATIONS_FROM ||
+            "reports@anchorp.com"
+        );
 
   const out: string[] = [];
   for (const category of categories) {
-    const to = clean(recipients[category] || fallback);
-    if (to && !out.includes(to)) out.push(to);
+    const list =
+      recipients[category] && recipients[category].length > 0
+        ? recipients[category]
+        : defaultList;
+    for (const to of list) {
+      const email = clean(to);
+      if (email && !out.includes(email)) out.push(email);
+    }
   }
   // Always have at least one recipient.
-  if (out.length === 0 && fallback) out.push(fallback);
+  if (out.length === 0) {
+    for (const to of defaultList) {
+      const email = clean(to);
+      if (email && !out.includes(email)) out.push(email);
+    }
+  }
   return out;
 }
 

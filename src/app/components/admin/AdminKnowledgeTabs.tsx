@@ -37,7 +37,9 @@ type CorrectionRow = {
   chunk_id: string | null;
   note: string | null;
   correction: string | null;
+  user_message?: string | null;
   status: string | null;
+  active?: boolean | null;
   created_at: string;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
@@ -76,7 +78,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
   // filters
   const [fbStatus, setFbStatus] = useState<string>("new");
   const [fbRating, setFbRating] = useState<string>(""); // "", "1", "5"
-  const [coStatus, setCoStatus] = useState<string>("pending");
+  const [coStatus, setCoStatus] = useState<string>(""); // default: show all corrections
 
   // data
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
@@ -227,7 +229,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       let q = supabase
         .from("knowledge_corrections")
         .select(
-          "id,user_id,conversation_id,session_id,document_id,chunk_id,note,correction,status,created_at,reviewed_at,reviewed_by"
+          "id,user_id,conversation_id,session_id,document_id,chunk_id,note,correction,user_message,status,active,created_at,reviewed_at,reviewed_by"
         )
         .order("created_at", { ascending: false })
         .limit(200);
@@ -323,10 +325,10 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       const row = corrections.find((c) => c.id === id);
       if (!row) throw new Error("Correction not found in state.");
 
-      // 1) set correction approved
+      // 1) set correction approved (and active, so the copilot uses it)
       const { error: upErr } = await supabase
         .from("knowledge_corrections")
-        .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: reviewer })
+        .update({ status: "approved", active: true, reviewed_at: new Date().toISOString(), reviewed_by: reviewer })
         .eq("id", id);
 
       if (upErr) throw upErr;
@@ -379,7 +381,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
 
       const { error } = await supabase
         .from("knowledge_corrections")
-        .update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: reviewer })
+        .update({ status: "rejected", active: false, reviewed_at: new Date().toISOString(), reviewed_by: reviewer })
         .eq("id", id);
 
       if (error) throw error;
@@ -388,6 +390,30 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       await loadCorrections();
     } catch (e: any) {
       setErr(e?.message || "Reject failed");
+    }
+  }
+
+  // Per-correction on/off switch for whether the copilot applies it (gates the
+  // match_knowledge_corrections RPC). Independent of approve/reject status so an
+  // admin can mute a correction without formally rejecting it.
+  async function setCorrectionActive(id: string, next: boolean) {
+    setMsg(null);
+    setErr(null);
+    try {
+      if (role !== "admin") throw new Error("Only admins can toggle corrections.");
+      // Optimistic update so the switch feels instant.
+      setCorrections((prev) => prev.map((c) => (c.id === id ? { ...c, active: next } : c)));
+      const { error } = await supabase
+        .from("knowledge_corrections")
+        .update({ active: next })
+        .eq("id", id);
+      if (error) {
+        setCorrections((prev) => prev.map((c) => (c.id === id ? { ...c, active: !next } : c)));
+        throw error;
+      }
+      setMsg(next ? "Correction is now ON — the copilot will use it." : "Correction is now OFF — the copilot will ignore it.");
+    } catch (e: any) {
+      setErr(e?.message || "Toggle failed");
     }
   }
 
@@ -520,16 +546,40 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
             </div>
 
             <div className="space-y-2">
-              {corrections.map((c) => (
+              {corrections.map((c) => {
+                const isActive = c.active ?? true;
+                return (
                 <div key={c.id} className="rounded-lg border border-white/10 bg-black/30 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[12px] text-white/70">
+                    <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/70">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          isActive ? "bg-emerald-400/20 text-emerald-200" : "bg-white/10 text-white/50"
+                        }`}
+                      >
+                        <span className={`inline-block h-2 w-2 rounded-full ${isActive ? "bg-emerald-400" : "bg-white/40"}`} />
+                        {isActive ? "Used by Copilot" : "Off"}
+                      </span>
                       <span className="font-semibold text-white/90">Status:</span> {c.status ?? "—"}{" "}
                       <span className="opacity-60">•</span> {fmt(c.created_at)}
                     </div>
 
                     {role === "admin" ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Primary on/off control: whether the copilot uses this correction. */}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isActive}
+                          onClick={() => setCorrectionActive(c.id, !isActive)}
+                          title={isActive ? "Copilot is using this correction — click to turn off" : "Copilot is ignoring this correction — click to turn on"}
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+                            isActive ? "bg-emerald-400" : "bg-white/20"
+                          }`}
+                        >
+                          <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${isActive ? "translate-x-5" : "translate-x-0.5"}`} />
+                        </button>
+
                         <label className="flex items-center gap-2 text-[12px] text-white/70">
                           <input
                             type="checkbox"
@@ -559,6 +609,12 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                     ) : null}
                   </div>
 
+                  {c.user_message ? (
+                    <div className="mt-2 text-[12px] text-white/60">
+                      <span className="font-semibold text-white/80">Question:</span> {c.user_message}
+                    </div>
+                  ) : null}
+
                   {c.note ? <div className="mt-2 text-[12px] text-white/80">Note: {c.note}</div> : null}
 
                   {c.correction ? (
@@ -573,7 +629,8 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                     {c.reviewed_at ? ` • reviewed: ${fmt(c.reviewed_at)}` : ""}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {corrections.length === 0 && !loading ? (
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-[12px] text-white/70">
                   No corrections for current filters.

@@ -35,20 +35,14 @@ export async function GET(_req: Request) {
     );
     if (docsError) throw new Error(docsError.message);
 
-    // open correction tickets
-    const { data: corrections, error: corrError } = await supabase
-      .from("knowledge_corrections")
-      .select("id,created_at,created_by,correction_text,proposed_doc_id,status")
-      .eq("status", "open")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (corrError) throw new Error(corrError.message);
-
+    // Corrections review/toggle now lives in Admin → Knowledge → Corrections
+    // (AdminKnowledgeTabs), which reads the correct columns and gates the copilot
+    // via `active`. This route used to also return corrections with a mismatched
+    // schema (correction_text / status='open'); that half has been retired.
     return NextResponse.json({
       ok: true,
       docs: docs || [],
-      corrections: corrections || [],
+      corrections: [],
     });
   } catch (e: any) {
     const msg = e?.message || "Forbidden";
