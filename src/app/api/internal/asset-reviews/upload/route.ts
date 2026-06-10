@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,6 +111,15 @@ export async function POST(req: NextRequest) {
     }
 
     const failed = results.filter((r) => !r.ok);
+    const okCount = results.length - failed.length;
+    if (okCount > 0) {
+      void sendPushToTool("asset_review", {
+        title: "Photos awaiting review",
+        body: `${okCount} photo${okCount === 1 ? "" : "s"} uploaded for ${(product as any).name || "a tackle box"}.`,
+        url: "/admin/asset-reviews",
+        tag: `asset-${productId}`,
+      });
+    }
     return NextResponse.json({ results, failed: failed.length });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Upload failed" }, { status: 500 });
