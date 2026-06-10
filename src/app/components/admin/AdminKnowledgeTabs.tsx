@@ -24,6 +24,8 @@ type FeedbackRow = {
   chunk_id: string | null;
   rating: number | null;
   note: string | null;
+  user_message?: string | null;
+  assistant_message?: string | null;
   status: string | null;
   created_at: string;
 };
@@ -205,7 +207,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
     try {
       let q = supabase
         .from("knowledge_feedback")
-        .select("id,user_id,conversation_id,session_id,document_id,chunk_id,rating,note,status,created_at")
+        .select("id,user_id,conversation_id,session_id,document_id,chunk_id,rating,note,user_message,assistant_message,status,created_at")
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -492,8 +494,16 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
               {feedback.map((f) => (
                 <div key={f.id} className="rounded-lg border border-white/10 bg-black/30 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[12px] text-white/70">
-                      <span className="font-semibold text-white/90">Rating:</span> {f.rating ?? "—"}{" "}
+                    <div className="flex flex-wrap items-center gap-2 text-[12px] text-white/70">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          (f.rating ?? 0) >= 4
+                            ? "bg-emerald-400/20 text-emerald-200"
+                            : "bg-red-400/20 text-red-200"
+                        }`}
+                      >
+                        {(f.rating ?? 0) >= 4 ? "👍 Accurate" : "👎 Needs correction"}
+                      </span>
                       <span className="opacity-60">•</span> {fmt(f.created_at)}
                     </div>
 
@@ -508,11 +518,33 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                     ) : null}
                   </div>
 
-                  {f.note ? <div className="mt-2 text-[12px] text-white/80">{f.note}</div> : null}
+                  {f.user_message ? (
+                    <div className="mt-2 text-[12px] text-white/70">
+                      <span className="font-semibold text-white/80">Question:</span> {f.user_message}
+                    </div>
+                  ) : null}
+
+                  {f.assistant_message ? (
+                    <div className="mt-2 whitespace-pre-wrap rounded border border-white/10 bg-black/40 p-2 text-[12px] text-white/90">
+                      <span className="font-semibold text-white/70">Answer rated: </span>
+                      {f.assistant_message}
+                    </div>
+                  ) : null}
+
+                  {f.note ? (
+                    <div className="mt-2 text-[12px] text-white/80">
+                      <span className="font-semibold text-white/70">Note:</span> {f.note}
+                    </div>
+                  ) : null}
+
+                  {!f.user_message && !f.assistant_message && !f.note ? (
+                    <div className="mt-2 text-[11px] italic text-white/40">
+                      No message captured (rated before message logging was added).
+                    </div>
+                  ) : null}
 
                   <div className="mt-2 text-[11px] text-white/50 break-words">
-                    user: {f.user_id ?? "—"} • session: {f.session_id ?? "—"} • doc:{" "}
-                    {f.document_id ?? "—"} • chunk: {f.chunk_id ?? "—"} • status: {f.status ?? "—"}
+                    user: {f.user_id ?? "—"} • session: {f.session_id ?? "—"} • status: {f.status ?? "—"}
                   </div>
                 </div>
               ))}
