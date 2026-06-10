@@ -49,7 +49,9 @@ html[data-theme="dark"] {
   --surface-soft:   #1c2a1b;
   --surface-strong: #223221;
   --text-primary:   #e8f0e8;
-  --text-secondary: #8fa08f;
+  /* Lifted from #8fa08f for legibility — the old value sat too close to the
+     dark surfaces and was hard to read. */
+  --text-secondary: #a7b4a7;
   --text-inverse:   #0e170d;
   --border-default: rgba(255, 255, 255, 0.09);
   --border-strong:  rgba(156, 226, 187, 0.28);
@@ -74,6 +76,88 @@ html[data-theme="dark"] .text-black { color: var(--text-primary) !important; }
 html[data-theme="dark"] .border-black\/10 { border-color: var(--border-default) !important; }
 html[data-theme="dark"] .bg-\[\#F6F7F8\],
 html[data-theme="dark"] .bg-\[var\(--surface-soft\)\] { background-color: var(--surface-soft) !important; }
+
+/* ── Brand-text legibility in dark mode ──────────────────────────────────────
+   The brand greens (--anchor-deep #11500F, --anchor-green #047835) and brand
+   gray (#76777B) are dark by design and stay readable on light surfaces, but on
+   the dark surfaces they're nearly invisible — this is the "green-on-dark-green
+   / gray-on-dark-green" problem. These tokens are dual-use (text AND fills), so
+   we can't recolor the tokens globally; instead we lift only the text-* utility
+   classes here. Background/border utilities keep the dark-green brand fills. */
+html[data-theme="dark"] .text-\[var\(--anchor-deep\)\],
+html[data-theme="dark"] .text-\[\#11500F\] { color: var(--anchor-mint) !important; }
+
+html[data-theme="dark"] .text-\[var\(--anchor-green\)\],
+html[data-theme="dark"] .text-\[\#047835\] { color: #5fd08f !important; }
+
+html[data-theme="dark"] .text-\[var\(--anchor-gray\)\],
+html[data-theme="dark"] .text-\[\#76777B\] { color: var(--text-secondary) !important; }
+
+/* Exception: chips that paint brand text on a SOLID mint background. Mint isn't
+   darkened in dark mode, so dark-green-on-mint stays readable — keep it dark
+   (lightening it here would make light-on-light). [class~=] matches only the
+   exact solid token, so translucent variants (bg-[…mint…]/30, /40 …) fall
+   through to the light-text rules above — over a dark surface they read as a
+   muted dark fill that needs light text, not dark. */
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"].text-\[var\(--anchor-deep\)\],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"].text-\[var\(--anchor-deep\)\],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"].text-\[\#11500F\] { color: var(--anchor-deep) !important; }
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"].text-\[var\(--anchor-green\)\],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"].text-\[\#047835\] { color: var(--anchor-green) !important; }
+
+/* Solid mint surfaces are "light islands" in dark mode, so their text must be
+   dark — including text that's merely INHERITED (e.g. chat user bubbles set no
+   text color and inherit the flipped-light body ink) and explicit text-black
+   utilities inside them (e.g. the chat-history active row's title/date). A
+   nested element with its OWN dark fill — like the bg-white "···" icon button
+   that uses text-black/70 — is intentionally not matched, so its light glyphs
+   stay light on their dark circle. */
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"] { color: var(--anchor-deep); }
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"] .text-black,
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"] .text-black { color: var(--anchor-deep) !important; }
+/* Muted text inside a mint island (e.g. the chat-history row's date) — keep it
+   a dimmed dark green, not the flipped-light secondary ink. */
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"] .text-\[\#76777B\],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"] .text-\[\#76777B\],
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"] .text-\[var\(--anchor-gray\)\],
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"] .text-\[var\(--anchor-gray\)\],
+html[data-theme="dark"] [class~="bg-[var(--anchor-mint)]"] .text-black\/40,
+html[data-theme="dark"] [class~="bg-[#9CE2BB]"] .text-black\/40 { color: rgba(17, 80, 15, 0.66) !important; }
+
+/* Opacity-based black text (text-black/NN) is the other big offender — muted
+   dark text vanishes on dark surfaces (e.g. the "VIEW APP AS" header and the
+   row sub-labels). Remap to a translucent LIGHT ink, keeping the muted
+   hierarchy. text-white/NN is left alone — light-on-dark already reads fine. */
+html[data-theme="dark"] .text-black\/20 { color: rgba(232, 240, 232, 0.34) !important; }
+html[data-theme="dark"] .text-black\/30 { color: rgba(232, 240, 232, 0.42) !important; }
+html[data-theme="dark"] .text-black\/35 { color: rgba(232, 240, 232, 0.46) !important; }
+html[data-theme="dark"] .text-black\/40 { color: rgba(232, 240, 232, 0.52) !important; }
+html[data-theme="dark"] .text-black\/50 { color: rgba(232, 240, 232, 0.62) !important; }
+html[data-theme="dark"] .text-black\/55 { color: rgba(232, 240, 232, 0.66) !important; }
+html[data-theme="dark"] .text-black\/60 { color: rgba(232, 240, 232, 0.72) !important; }
+html[data-theme="dark"] .text-black\/70 { color: rgba(232, 240, 232, 0.82) !important; }
+html[data-theme="dark"] .text-black\/80 { color: rgba(232, 240, 232, 0.9) !important; }
+
+/* Faint dividers that used near-black also disappear on dark surfaces. */
+html[data-theme="dark"] .border-black\/5 { border-color: rgba(255, 255, 255, 0.06) !important; }
+
+/* Design-system component classes hardcode brand text colors in CSS, so the
+   utility overrides above don't reach them — fix the dark-surface ones here. */
+html[data-theme="dark"] .ds-tab,
+html[data-theme="dark"] .ds-table th { color: var(--text-secondary); }
+html[data-theme="dark"] .ds-tab:hover { color: var(--anchor-mint); background: rgba(156, 226, 187, 0.16); }
+html[data-theme="dark"] .ds-alert-neutral { color: var(--text-primary); }
+html[data-theme="dark"] .ds-alert-success { color: #bdeecd; }
+html[data-theme="dark"] .ds-alert-error { color: var(--text-primary); background: rgba(17, 80, 15, 0.32); }
+/* ds-btn-secondary base sits on a dark card (--anchor-white flips dark); its
+   hover flips to a mint fill, so the text must flip back to dark on hover. */
+html[data-theme="dark"] .ds-btn-secondary { color: var(--anchor-mint); }
+html[data-theme="dark"] .ds-btn-secondary:hover { color: var(--anchor-deep); }
+/* These keep a green/translucent-dark fill, but their label uses --anchor-white,
+   which flips dark in this theme — force it back to light so it stays legible. */
+html[data-theme="dark"] .ds-btn-primary,
+html[data-theme="dark"] .ds-btn-ghost { color: #f3f7f3; }
 
 html,
 body {

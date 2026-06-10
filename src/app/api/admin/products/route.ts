@@ -151,6 +151,17 @@ export async function PATCH(req: Request) {
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
   if ("series" in body) patch.series = clean(body.series) || null;
   if ("sku" in body) patch.sku = clean(body.sku) || null;
+  if ("section" in body) {
+    const section = clean(body.section);
+    const allowed = ["solution", "anchor", "internal_assets"];
+    if (!section || !allowed.includes(section)) {
+      return NextResponse.json(
+        { error: `section must be one of: ${allowed.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    patch.section = section;
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });

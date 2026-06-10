@@ -42,6 +42,11 @@ export default function SettingsPage() {
   const [serviceState, setServiceState] = useState("");
   const [serviceZip, setServiceZip]     = useState("");
 
+  // NetSuite sync (internal reps only)
+  const [isInternalRep, setIsInternalRep] = useState(false);
+  const [syncMode, setSyncMode]           = useState<"manual" | "automatic">("manual");
+  const [savingSyncMode, setSavingSyncMode] = useState(false);
+
   // Preferences
   const [theme, setTheme]       = useState<Theme>("light");
 
@@ -56,7 +61,7 @@ export default function SettingsPage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name,company,phone,service_state,service_zip")
+        .select("full_name,company,phone,service_state,service_zip,role")
         .eq("id", ud.user.id)
         .maybeSingle();
 
@@ -67,6 +72,20 @@ export default function SettingsPage() {
         setPhone((prof as any).phone       || "");
         setServiceState((prof as any).service_state || "");
         setServiceZip((prof as any).service_zip || "");
+        const role = String((prof as any).role || "");
+        setIsInternalRep(role === "admin" || role === "anchor_rep");
+      }
+
+      // Fetched separately so an un-migrated DB (missing column) can't blank the
+      // whole profile load and hide the toggle. Defaults to manual on error.
+      const { data: syncProf } = await supabase
+        .from("profiles")
+        .select("netsuite_sync_mode")
+        .eq("id", ud.user.id)
+        .maybeSingle();
+      if (!alive) return;
+      if (syncProf) {
+        setSyncMode((syncProf as any).netsuite_sync_mode === "automatic" ? "automatic" : "manual");
       }
 
       // Load theme preference from localStorage
@@ -112,6 +131,31 @@ export default function SettingsPage() {
     setSaving(false);
     if (error) { setSaveErr(error.message); }
     else        { setSaveMsg("Profile updated."); setTimeout(() => setSaveMsg(null), 3000); }
+  }
+
+  async function changeSyncMode(mode: "manual" | "automatic") {
+    if (mode === syncMode || savingSyncMode) return;
+    const prev = syncMode;
+    setSyncMode(mode); // optimistic
+    setSavingSyncMode(true);
+    setSaveErr(null);
+
+    const { data: ud } = await supabase.auth.getUser();
+    if (!ud.user) { setSavingSyncMode(false); router.replace("/"); return; }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ netsuite_sync_mode: mode, updated_at: new Date().toISOString() })
+      .eq("id", ud.user.id);
+
+    setSavingSyncMode(false);
+    if (error) {
+      setSyncMode(prev); // roll back
+      setSaveErr(error.message);
+    } else {
+      setSaveMsg("Sync preference updated.");
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
   }
 
   function handleThemeChange(t: Theme) {
@@ -202,6 +246,42 @@ export default function SettingsPage() {
               </Button>
             </form>
           </Card>
+
+          {/* ── NetSuite sync (internal reps only) ───────────────── */}
+          {isInternalRep && (
+            <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+              <div className="text-sm font-semibold text-black">{t("netsuiteSync")}</div>
+              <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("netsuiteSyncDesc")}</div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {(["automatic", "manual"] as const).map((mode) => {
+                  const active = syncMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => changeSyncMode(mode)}
+                      disabled={savingSyncMode}
+                      aria-pressed={active}
+                      className={[
+                        "flex flex-col gap-1 rounded-2xl border p-4 text-left transition disabled:opacity-60",
+                        active
+                          ? "border-[var(--anchor-green)] bg-[#F0FDF4]"
+                          : "border-black/10 bg-white hover:bg-[var(--surface-soft)]",
+                      ].join(" ")}
+                    >
+                      <span className={["text-sm font-semibold", active ? "text-[var(--anchor-green)]" : "text-black"].join(" ")}>
+                        {mode === "automatic" ? t("syncModeAutomatic") : t("syncModeManual")}
+                      </span>
+                      <span className="text-[12px] text-[var(--anchor-gray)]">
+                        {mode === "automatic" ? t("syncModeAutomaticDesc") : t("syncModeManualDesc")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
 
           {/* ── Appearance ───────────────────────────────────────── */}
           <Card data-tutorial="settings-appearance" className="border-t-4 border-t-[var(--anchor-green)] p-5">

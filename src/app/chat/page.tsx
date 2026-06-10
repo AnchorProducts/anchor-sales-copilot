@@ -2,7 +2,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
@@ -62,6 +61,21 @@ const DEFAULT_GREETING: Msg = {
   content:
     "Hey, I'm your Anchor Products sales expert. Tell me what you're securing and I'll point you to the right solution.\n\nFor engineering questions — spacing, loads, or code compliance — I'll connect you with the Anchor Products team directly.",
 };
+
+// TEMP (user testing): a single welcome that also explains how to train the
+// copilot. Rendered as a fixed presentational bubble pinned at the top of the
+// thread (see JSX) — NOT part of `messages`, so it always shows, survives reloads
+// and conversation switches, never persists, and never reaches the model. It
+// stands in for the greeting bubble during testing (INITIAL_MESSAGES is empty).
+// To revert: delete TRAINING_MESSAGE and the pinned bubble, and set
+// INITIAL_MESSAGES back to [DEFAULT_GREETING].
+const TRAINING_MESSAGE: Msg = {
+  role: "assistant",
+  content:
+    "Hey, I'm your Anchor Products sales expert — tell me what you're securing and I'll point you to the right solution. For engineering questions (spacing, loads, or code compliance), I'll connect you with the Anchor Products team directly.\n\n🧪 While we're testing, you can help me get smarter: if an answer is right, tap “✓ Accurate” under it. If it's off, tap “Needs correction” and tell me what's right — or just reply and correct me. Either way, I'll learn from it.",
+};
+
+const INITIAL_MESSAGES: Msg[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function renderMessageContent(content: string) {
@@ -177,7 +191,7 @@ export default function ChatPage() {
 
   // ── Sales Copilot chat ────────────────────────────────────────────────────
   const [input, setInput]       = useState("");
-  const [messages, setMessages] = useState<Msg[]>([DEFAULT_GREETING]);
+  const [messages, setMessages] = useState<Msg[]>(INITIAL_MESSAGES);
   const [loading, setLoading]   = useState(false);
 
   // ── Internal feedback (per-message, internal users only) ─────────────────
@@ -284,7 +298,7 @@ export default function ChatPage() {
           }
           setMessages(display as any);
         } else {
-          setMessages([DEFAULT_GREETING] as any);
+          setMessages(INITIAL_MESSAGES as any);
         }
 
         
@@ -385,7 +399,7 @@ export default function ChatPage() {
         } else {
           const created = await createConversation(userId);
           setConversationId(created?.id ?? null);
-          setMessages([DEFAULT_GREETING]);
+          setMessages(INITIAL_MESSAGES);
           await loadConversations(userId);
         }
       }
@@ -471,7 +485,7 @@ export default function ChatPage() {
         setConversationId(cid);
 
         if (cid) await loadConversationMessages(user.id, cid);
-        else setMessages([DEFAULT_GREETING]);
+        else setMessages(INITIAL_MESSAGES);
       } finally {
         if (!alive) return;
         setProfileLoading(false);
@@ -487,7 +501,7 @@ export default function ChatPage() {
   // bare greeting so we never clobber a real cached thread with an empty one.
   useEffect(() => {
     if (!userId || !conversationId) return;
-    if (messages.length <= 1) return;
+    if (messages.length <= INITIAL_MESSAGES.length) return;
     writeCachedThread(userId, conversationId, messages);
   }, [messages, userId, conversationId]);
 
@@ -499,7 +513,7 @@ export default function ChatPage() {
 
   async function newChat() {
     if (!userId) return;
-    setMessages([DEFAULT_GREETING]);
+    setMessages(INITIAL_MESSAGES);
     
     setSessionId(null);
     setInput("");
@@ -508,7 +522,7 @@ export default function ChatPage() {
     if (!created?.id) return;
     setConversationId(created.id);
     await loadConversations(userId);
-    setMessages([DEFAULT_GREETING]);
+    setMessages(INITIAL_MESSAGES);
   }
 
   const ready = !profileLoading && !historyLoading && !!userId && !!conversationId;
@@ -628,31 +642,6 @@ export default function ChatPage() {
               />
             </aside>
 
-            {/* ── Mobile drawer ─────────────────────────────────────────── */}
-            {sidebarOpen && (
-              <div className="fixed inset-0 z-40 sm:hidden">
-                <div
-                  className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-                  onClick={() => setSidebarOpen(false)}
-                />
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-[76vw] max-w-[300px] flex flex-col overflow-hidden bg-white shadow-xl"
-                  style={{ paddingTop: "env(safe-area-inset-top)" }}
-                >
-                  <ChatSidebar
-                    conversations={conversations}
-                    activeId={conversationId}
-                    loading={historyLoading}
-                    onNewChat={() => { newChat(); setSidebarOpen(false); }}
-                    onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
-                    onRename={renameConversation}
-                    onDelete={deleteConversation}
-                    onClose={() => setSidebarOpen(false)}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* ── Chat panel ───────────────────────────────────────────── */}
             <section
               className={[
@@ -663,43 +652,87 @@ export default function ChatPage() {
               ].join(" ")}
             >
               {/* ── Mobile-only top menu ───────────────────────────────── */}
+              {/* Hamburger lives on the RIGHT: the global "Back" pill overlaps
+                  the left edge and was covering it there. It opens the chat
+                  history drawer; the Back pill handles navigation, so the old
+                  "Return to Dashboard" link is no longer needed here. */}
               <div
-                className="sm:hidden shrink-0 flex items-center justify-between gap-2 px-3 border-b border-black/10 bg-white"
+                className="sm:hidden shrink-0 flex items-center justify-end gap-2 px-3 border-b border-black/10 bg-white"
                 style={{
                   paddingTop: "calc(env(safe-area-inset-top) + 6px)",
                   paddingBottom: "6px",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(true)}
-                  aria-label="Menu"
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-black/70 active:bg-black/[0.05]"
-                >
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18M3 12h18M3 18h18" />
-                  </svg>
-                </button>
-                <Link
-                  href="/dashboard"
-                  aria-label="Return to dashboard"
-                  className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-semibold text-[var(--anchor-deep)] active:bg-[var(--anchor-mint)]"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M19 12H5" />
-                    <path d="M12 19l-7-7 7-7" />
-                  </svg>
-                  <span>Return to Dashboard</span>
-                </Link>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen((v) => !v)}
+                    aria-label="Chat history"
+                    aria-haspopup="dialog"
+                    aria-expanded={sidebarOpen}
+                    className="relative z-50 flex h-8 w-8 items-center justify-center rounded-md text-black/70 active:bg-black/[0.05]"
+                  >
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18M3 12h18M3 18h18" />
+                    </svg>
+                  </button>
+
+                  {/* Compact chat-history popover, anchored to the hamburger's
+                      corner (not a full-height drawer). It drops into the chat
+                      panel's visible area, so overflow-hidden doesn't clip it. */}
+                  {sidebarOpen && (
+                    <>
+                      {/* click-outside backdrop */}
+                      <button
+                        type="button"
+                        aria-hidden
+                        tabIndex={-1}
+                        onClick={() => setSidebarOpen(false)}
+                        className="fixed inset-0 z-40 cursor-default"
+                      />
+                      <div
+                        role="dialog"
+                        aria-label="Chat history"
+                        className="absolute right-0 top-full z-50 mt-2 flex w-[300px] max-w-[86vw] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.22)]"
+                        style={{ height: "min(70vh, 560px)" }}
+                      >
+                        <ChatSidebar
+                          conversations={conversations}
+                          activeId={conversationId}
+                          loading={historyLoading}
+                          onNewChat={() => { newChat(); setSidebarOpen(false); }}
+                          onSelect={(id) => { switchConversation(id); setSidebarOpen(false); }}
+                          onRename={renameConversation}
+                          onDelete={deleteConversation}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* ── Messages ─────────────────────────────────────────────── */}
               <div className={`${PANEL_BODY} ${SOFT_SCROLL} overscroll-contain px-3 py-3 sm:px-5 sm:py-4 bg-transparent`}>
                 <div className="space-y-2.5 sm:space-y-3">
+                  {/* TEMP (user testing): pinned training note. Rendered here (not
+                      from `messages`) so it always sits at the very top of the
+                      thread and survives reloads/conversation switches. Remove this
+                      block and TRAINING_MESSAGE when testing ends. */}
+                  <div className="flex justify-start">
+                    <div className="max-w-[92%] sm:max-w-[88%] w-full">
+                      <div className="whitespace-pre-wrap rounded-2xl border border-black/10 bg-[var(--surface-soft)] px-3.5 py-2.5 text-[13.5px] leading-relaxed shadow-sm sm:px-4 sm:py-3 sm:text-sm">
+                        {renderMessageContent(TRAINING_MESSAGE.content)}
+                      </div>
+                    </div>
+                  </div>
                   {historyLoading && messages.length === 0 && (
                     <ToolLoader feature="chat" label={t("loadingYourChat")} />
                   )}
                   {messages.map((m, idx) => {
+                    // TEMP (user testing): the standalone greeting is replaced by the
+                    // pinned welcome bubble above. Hide any lingering greeting coming
+                    // from older cached/persisted threads. Remove when reverting.
+                    if (m.content === DEFAULT_GREETING.content) return null;
                     const isInternal = role === "admin" || role === "anchor_rep";
                     const showFeedbackWidget = isInternal && m.role === "assistant" && m.content !== DEFAULT_GREETING.content;
                     const fb = fbFor(idx);

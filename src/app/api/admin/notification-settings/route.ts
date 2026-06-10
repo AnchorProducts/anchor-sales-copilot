@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { MARKETING_CATEGORY_KEYS, type MarketingRecipients } from "@/lib/marketingOrders";
+import {
+  MARKETING_CATEGORY_KEYS,
+  normalizeMarketingRecipients,
+  normalizeRecipientEmails,
+  type MarketingRecipients,
+} from "@/lib/marketingOrders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +64,7 @@ function parseEmailList(
 }
 
 export async function GET() {
+  try {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
@@ -77,10 +83,19 @@ export async function GET() {
     weekly_report_emails: (data?.weekly_report_emails as string[] | null) ?? [],
     notable_project_emails: (data?.notable_project_emails as string[] | null) ?? [],
     support_emails: (data?.support_emails as string[] | null) ?? [],
-    marketing_orders_recipients:
-      (data?.marketing_orders_recipients as MarketingRecipients | null) ?? {},
+    // Normalize legacy single-string values to string[] so the client always
+    // gets the multi-recipient shape.
+    marketing_orders_recipients: normalizeMarketingRecipients(
+      data?.marketing_orders_recipients as Record<string, unknown> | null
+    ),
   };
   return NextResponse.json({ settings });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to load settings." },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PUT(req: Request) {
@@ -126,17 +141,16 @@ export async function PUT(req: Request) {
       if (!MARKETING_RECIPIENT_KEYS.includes(rawKey)) {
         return NextResponse.json({ error: `Unknown category: ${rawKey}` }, { status: 400 });
       }
-      // Empty string clears that category (falls back to default/env).
-      if (rawVal === null || rawVal === "") continue;
-      if (typeof rawVal !== "string") {
-        return NextResponse.json({ error: `Invalid email for ${rawKey}.` }, { status: 400 });
+      // Each category accepts multiple emails (string[]); legacy single strings
+      // and comma-separated strings are tolerated. An empty list clears that
+      // category (falls back to default/env).
+      const emails = normalizeRecipientEmails(rawVal);
+      for (const email of emails) {
+        if (!EMAIL_RE.test(email)) {
+          return NextResponse.json({ error: `Invalid email for ${rawKey}: ${email}` }, { status: 400 });
+        }
       }
-      const trimmed = rawVal.trim().toLowerCase();
-      if (!trimmed) continue;
-      if (!EMAIL_RE.test(trimmed)) {
-        return NextResponse.json({ error: `Invalid email for ${rawKey}: ${rawVal}` }, { status: 400 });
-      }
-      cleaned[rawKey] = trimmed;
+      if (emails.length > 0) cleaned[rawKey] = emails;
     }
     update.marketing_orders_recipients = cleaned;
   }
