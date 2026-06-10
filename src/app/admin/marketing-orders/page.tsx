@@ -6,7 +6,9 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { marketingCategoriesLabel } from "@/lib/marketingOrders";
+import { marketingCategoriesLabel, MARKETING_ORDER_STATUSES } from "@/lib/marketingOrders";
+import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
+import { Select } from "@/app/components/ui/Field";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,9 @@ type MarketingOrder = {
   submitter_email: string | null;
   submitter_phone: string | null;
   created_at: string | null;
+  updated_at: string | null;
+  updated_by_name: string | null;
+  updated_by_email: string | null;
 };
 
 function formatDateTime(s: string | null) {
@@ -64,6 +69,47 @@ export default function AdminMarketingOrdersPage() {
   const [accessError, setAccessError] = useState<string | null>(null);
   const [items, setItems] = useState<MarketingOrder[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [updateErr, setUpdateErr] = useState<string | null>(null);
+
+  async function loadOrders() {
+    const res = await fetch("/api/marketing-orders", { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setLoadErr(json?.error || "Failed to load marketing orders.");
+      return;
+    }
+    setLoadErr(null);
+    setItems(json?.items || []);
+  }
+
+  async function updateStatus(id: string, status: string) {
+    setSavingId(id);
+    setUpdateErr(null);
+    // Optimistic status flip for a snappy tracker; revert on failure.
+    const prev = items;
+    setItems((list) => list.map((o) => (o.id === id ? { ...o, status } : o)));
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to update status.");
+        setItems(prev);
+      } else {
+        // Refresh so the "updated by" attribution reflects this change.
+        await loadOrders();
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to update status.");
+      setItems(prev);
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -82,25 +128,20 @@ export default function AdminMarketingOrdersPage() {
         .maybeSingle();
 
       const role = String((prof as { role?: string } | null)?.role || "");
-      if (role !== "admin" && role !== "anchor_rep") {
+      if (role !== "admin") {
         setAccessError("Admin access only.");
         setReady(true);
         return;
       }
 
-      const res = await fetch("/api/marketing-orders", { cache: "no-store" });
-      const json = await res.json().catch(() => null);
+      await loadOrders();
       if (!alive) return;
-      if (!res.ok) {
-        setLoadErr(json?.error || "Failed to load marketing orders.");
-      } else {
-        setItems(json?.items || []);
-      }
       setReady(true);
     })();
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, supabase]);
 
   return (
@@ -133,6 +174,9 @@ export default function AdminMarketingOrdersPage() {
             {loadErr && (
               <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadErr}</Card>
             )}
+            {updateErr && (
+              <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{updateErr}</Card>
+            )}
 
             {items.length === 0 && !loadErr ? (
               <Card className="p-6 text-center text-sm text-[var(--anchor-gray)]">
@@ -143,18 +187,43 @@ export default function AdminMarketingOrdersPage() {
                 {items.map((o) => (
                   <Card key={o.id} className="p-5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
+                      <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
+                        {marketingCategoriesLabel(o.categories)}
+                      </span>
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
-                          {marketingCategoriesLabel(o.categories)}
-                        </span>
-                        <span className="rounded-full border border-[var(--border-default)] px-2.5 py-0.5 text-xs font-medium capitalize text-[var(--anchor-gray)]">
-                          {o.status || "new"}
-                        </span>
+                        <Select
+                          value={o.status || "new"}
+                          onChange={(e) => updateStatus(o.id, e.target.value)}
+                          disabled={savingId === o.id}
+                          className="h-9 px-2 text-xs"
+                          aria-label="Order status"
+                        >
+                          {MARKETING_ORDER_STATUSES.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </Select>
+                        <span className="text-xs text-[var(--anchor-gray)]">{formatDateTime(o.created_at)}</span>
                       </div>
-                      <span className="text-xs text-[var(--anchor-gray)]">{formatDateTime(o.created_at)}</span>
                     </div>
 
-                    <div className="mt-3 text-sm text-black">{o.items}</div>
+                    <div className="mt-4">
+                      <OrderStatusTracker status={o.status} />
+                    </div>
+
+                    {(o.updated_by_name || o.updated_by_email) && (
+                      <div className="mt-3 text-xs text-[var(--anchor-gray)]">
+                        Status last updated by{" "}
+                        <span className="font-semibold text-[var(--anchor-deep)]">
+                          {o.updated_by_name || o.updated_by_email}
+                        </span>
+                        {o.updated_by_name && o.updated_by_email ? ` · ${o.updated_by_email}` : ""}
+                        {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
+                      </div>
+                    )}
+
+                    <div className="mt-4 text-sm text-black">{o.items}</div>
 
                     <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs text-[var(--anchor-gray)] sm:grid-cols-2">
                       <div>

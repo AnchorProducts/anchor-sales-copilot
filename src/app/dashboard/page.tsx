@@ -536,7 +536,8 @@ export default function DashboardPage() {
     ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName, tutorialKey: "stat-copilot" }
     : { label: salesReps.length > 1 ? "Your Reps" : "Your Rep", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: "#", popup: "rep", icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
 
-  const stats = [stat1, stat2];
+  // Internal sales reps don't get the Asset Library / Copilot stat tiles.
+  const stats = isInternal && !isAdmin ? [] : [stat1, stat2];
 
   // Quick actions list (role-gated)
   type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
@@ -819,6 +820,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Stat icon buttons (below Quick Actions) ────────────────────── */}
+        {stats.length > 0 && (
         <div data-tutorial="stat-buttons" className="grid grid-cols-2 gap-4">
           {stats.map((s, i) => {
             const isExt = "external" in s && (s as { external?: boolean }).external;
@@ -864,6 +866,7 @@ export default function DashboardPage() {
             );
           })}
         </div>
+        )}
 
         </div>
 
@@ -1012,6 +1015,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Stat icon buttons (below Quick Actions) */}
+            {stats.length > 0 && (
             <div data-tutorial="stat-buttons" className="mt-6 flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
@@ -1053,6 +1057,7 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+            )}
 
             {booting && (
               <p className="mt-6 text-center text-xs text-[var(--anchor-gray)]">Loading your workspace…</p>

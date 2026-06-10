@@ -431,8 +431,8 @@ export async function POST(req: Request) {
         attachments: [],
         solution_requests: [],
         status: "new",
-        hubspot_sync_status: "pending",
-        hubspot_sync_error: null,
+        netsuite_sync_status: "pending",
+        netsuite_sync_error: null,
       })
       .select("id")
       .single();
@@ -547,19 +547,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: updErr.message || "Failed to update opportunity." }, { status: 500 });
     }
 
-    // Fire-and-forget HubSpot sync
+    // Fire-and-forget NetSuite sync
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (supabaseUrl && serviceKey) {
-      void fetch(`${supabaseUrl}/functions/v1/hubspot-lead-sync`, {
+      void fetch(`${supabaseUrl}/functions/v1/netsuite-lead-sync`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${serviceKey}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ lead_id: leadId }),
-      }).catch((e) => console.warn("HubSpot sync failed", e?.message || e));
+      }).catch((e) => console.warn("NetSuite sync failed", e?.message || e));
     }
 
     let emailNotification:
