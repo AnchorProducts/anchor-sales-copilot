@@ -47,6 +47,11 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     label: "Photo for review",
     description: "An internal rep uploads a tackle-box photo awaiting approval.",
   },
+  {
+    key: "weekly_report",
+    label: "Weekly analytics report",
+    description: "The Friday analytics summary — email + push.",
+  },
 ];
 
 export const NOTIFICATION_TOOL_KEYS = NOTIFICATION_TOOLS.map((t) => t.key);

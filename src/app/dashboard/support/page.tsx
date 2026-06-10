@@ -43,6 +43,7 @@ export default function SupportListPage() {
 
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [images, setImages] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -98,15 +99,16 @@ export default function SupportListPage() {
     if (!s || !m) { setSubmitError("Subject and message are both required."); return; }
     try {
       setSubmitting(true);
-      const res = await fetch("/api/support", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ subject: s, message: m }),
-      });
+      const fd = new FormData();
+      fd.append("subject", s);
+      fd.append("message", m);
+      for (const f of images) fd.append("images", f);
+      const res = await fetch("/api/support", { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to submit.");
       setSubject("");
       setMessage("");
+      setImages([]);
       router.push(`/dashboard/support/${json.id}`);
     } catch (e) {
       setSubmitError((e as Error).message);
@@ -154,6 +156,46 @@ export default function SupportListPage() {
                 className="mt-1 block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
               />
             </div>
+            <div>
+              <label className="block text-sm font-semibold text-[var(--anchor-deep)]">Images (optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setImages((prev) => [...prev, ...files].slice(0, 6));
+                  e.currentTarget.value = "";
+                }}
+                className="mt-1 block w-full text-sm text-[var(--anchor-gray)] file:mr-3 file:rounded-full file:border-0 file:bg-[var(--anchor-mint)] file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-[var(--anchor-deep)]"
+              />
+              {images.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {images.map((f, i) => (
+                    <div key={i} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={URL.createObjectURL(f)}
+                        alt={f.name}
+                        className="h-16 w-16 rounded-lg border border-[var(--border-default)] object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label="Remove image"
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+                Screenshots help us help you — e.g. a UI element, an error, or a click path. PNG/JPG, up to 6 images.
+              </p>
+            </div>
+
             {submitError && (
               <div className="rounded-xl bg-[#fef2f2] px-3 py-2 text-sm text-[#991b1b]">{submitError}</div>
             )}
