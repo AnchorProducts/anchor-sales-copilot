@@ -78,6 +78,33 @@ export async function sendPushToTool(toolKey: string, payload: PushPayload): Pro
   }
 }
 
+// Push to the devices of the users whose profile email is in `emails`. Used for
+// dynamic, region-resolved recipients (e.g. the REC/consult form notifying the
+// internal reps for the submitter's region).
+export async function sendPushToEmails(emails: string[], payload: PushPayload): Promise<void> {
+  try {
+    if (!configure()) return;
+    const clean = Array.from(
+      new Set(emails.map((e) => String(e || "").trim().toLowerCase()).filter(Boolean))
+    );
+    if (clean.length === 0) return;
+
+    const { data: profs } = await supabaseAdmin.from("profiles").select("id").in("email", clean);
+    const ids = (profs || []).map((p: { id: string }) => p.id);
+    if (ids.length === 0) return;
+
+    const { data: subs } = await supabaseAdmin
+      .from("push_subscriptions")
+      .select("id,endpoint,p256dh,auth")
+      .in("user_id", ids);
+    if (!subs || subs.length === 0) return;
+
+    await deliver(subs as SubRow[], payload);
+  } catch (e) {
+    console.warn("[push] sendPushToEmails failed:", e);
+  }
+}
+
 // Push to a single user's devices (used by the "send test" route). Returns the
 // number of devices the push reached.
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<number> {

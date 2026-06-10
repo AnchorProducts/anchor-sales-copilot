@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { buildWeeklyOemMatrixPdf, buildWeeklyUserAnalyticsPdf } from "@/lib/analytics/weeklyReportPdfs";
+import { getToolRecipientEmails } from "@/lib/push/recipients";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,19 +29,9 @@ export async function GET(req: Request) {
 
     const resendKey = (process.env.RESEND_API_KEY || "").trim();
 
-    // Recipients: admin-managed table, falling back to the env var.
-    let recipients: string[] = [];
-    try {
-      const { data } = await supabaseAdmin
-        .from("notification_settings")
-        .select("weekly_report_emails")
-        .eq("id", 1)
-        .maybeSingle();
-      const dbList = (data as { weekly_report_emails?: string[] | null } | null)?.weekly_report_emails;
-      if (Array.isArray(dbList)) recipients = dbList.filter((e) => typeof e === "string" && e.trim());
-    } catch {
-      // Soft-fail to env var.
-    }
+    // Recipients = the weekly_report tool's assigned users + raw emails, falling
+    // back to the env var.
+    let recipients: string[] = await getToolRecipientEmails("weekly_report");
     if (recipients.length === 0) {
       recipients = parseRecipients(process.env.WEEKLY_REPORT_TO || "");
     }
@@ -72,6 +64,15 @@ export async function GET(req: Request) {
         ],
       });
     }
+
+    // Push the assigned users too (e.g. the CEO), so they get a Friday ping even
+    // without opening their email. Awaited so the cron doesn't cut it off.
+    await sendPushToTool("weekly_report", {
+      title: "Weekly analytics report",
+      body: "This week’s Anchor sales analytics are ready.",
+      url: "/admin/analytics",
+      tag: "weekly-report",
+    });
 
     return NextResponse.json(
       { ok: true, sentTo: emailsEnabled ? recipients : [], emailSent: emailsEnabled },

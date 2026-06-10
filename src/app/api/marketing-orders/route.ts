@@ -7,11 +7,9 @@ import {
   isMarketingOrderStatus,
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
-  normalizeMarketingRecipients,
-  normalizeRecipientEmails,
-  type MarketingRecipients,
 } from "@/lib/marketingOrders";
 import { sendPushToTool } from "@/lib/push/send";
+import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,54 +28,16 @@ async function getProfile(userId: string) {
   return data as any;
 }
 
-// Resolve recipients for the selected categories. Each category routes to its
-// own mapping → the "default" mapping → env vars → hard fallback; the result is
-// deduped so a multi-category order emails every relevant contact once. Mirrors
-// the fallback style used by the commission + notable-project routes.
-async function resolveRecipients(categories: string[]): Promise<string[]> {
-  let recipients: MarketingRecipients = {};
-  try {
-    const { data } = await supabaseAdmin
-      .from("notification_settings")
-      .select("marketing_orders_recipients")
-      .eq("id", 1)
-      .maybeSingle();
-    // normalize handles both the new string[] shape and legacy single strings.
-    recipients = normalizeMarketingRecipients(
-      data?.marketing_orders_recipients as Record<string, unknown> | null
-    );
-  } catch {
-    recipients = {};
-  }
-
-  const defaultList =
-    recipients.default && recipients.default.length > 0
-      ? recipients.default
-      : normalizeRecipientEmails(
-          process.env.MARKETING_ORDERS_NOTIFICATIONS_EMAIL ||
-            process.env.LEAD_NOTIFICATIONS_FROM ||
-            "reports@anchorp.com"
-        );
-
-  const out: string[] = [];
-  for (const category of categories) {
-    const list =
-      recipients[category] && recipients[category].length > 0
-        ? recipients[category]
-        : defaultList;
-    for (const to of list) {
-      const email = clean(to);
-      if (email && !out.includes(email)) out.push(email);
-    }
-  }
-  // Always have at least one recipient.
-  if (out.length === 0) {
-    for (const to of defaultList) {
-      const email = clean(to);
-      if (email && !out.includes(email)) out.push(email);
-    }
-  }
-  return out;
+// Recipients = the marketing_order tool's assigned users + raw emails, with an
+// env fallback so an order never goes nowhere.
+async function resolveRecipients(): Promise<string[]> {
+  const configured = await getToolRecipientEmails("marketing_order");
+  if (configured.length > 0) return configured;
+  return mergeEmails(
+    process.env.MARKETING_ORDERS_NOTIFICATIONS_EMAIL ||
+      process.env.LEAD_NOTIFICATIONS_FROM ||
+      "reports@anchorp.com"
+  );
 }
 
 async function sendMarketingOrderEmail(params: {
@@ -218,7 +178,7 @@ export async function POST(req: Request) {
     } = { attempted: true, sent: false, to: null, error: null };
 
     try {
-      const to = await resolveRecipients(categories);
+      const to = await resolveRecipients();
       emailNotification.to = to;
       await sendMarketingOrderEmail({
         orderId,
@@ -353,6 +313,10 @@ export async function PATCH(req: Request) {
       body: `Order ${String(id).slice(0, 8)} is now ${marketingOrderStatusLabel(status)}.`,
       url: "/admin/marketing-orders",
       tag: `mo-status-${id}`,
+    });
+    void emailToolUsers("marketing_order_status", {
+      subject: `Marketing order updated — ${marketingOrderStatusLabel(status)}`,
+      text: `Order ${String(id).slice(0, 8)} is now ${marketingOrderStatusLabel(status)}.`,
     });
 
     return NextResponse.json({ ok: true, order: data });

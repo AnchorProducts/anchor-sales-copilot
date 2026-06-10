@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MessageAttachments, { type SupportAttachmentView } from "@/app/components/support/MessageAttachments";
+import ImagePicker from "@/app/components/support/ImagePicker";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
@@ -27,6 +29,7 @@ type Message = {
   author_id: string;
   author_role: string | null;
   body: string;
+  attachments?: SupportAttachmentView[];
   created_at: string;
 };
 
@@ -51,6 +54,7 @@ export default function AdminSupportThread() {
   const [error, setError] = useState<string | null>(null);
 
   const [reply, setReply] = useState("");
+  const [replyImages, setReplyImages] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -98,17 +102,18 @@ export default function AdminSupportThread() {
     if (sending) return;
     setSendError(null);
     const m = reply.trim();
-    if (!m && !close) { setSendError("Type a reply or use Close request."); return; }
+    if (!m && !close && replyImages.length === 0) { setSendError("Type a reply or use Close request."); return; }
     try {
       setSending(true);
-      const res = await fetch(`/api/support/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: m, close }),
-      });
+      const fd = new FormData();
+      fd.append("message", m);
+      fd.append("close", String(close));
+      for (const f of replyImages) fd.append("images", f);
+      const res = await fetch(`/api/support/${id}`, { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed.");
       setReply("");
+      setReplyImages([]);
       await load();
     } catch (e) {
       setSendError((e as Error).message);
@@ -187,6 +192,7 @@ export default function AdminSupportThread() {
                       <span className="text-[var(--anchor-gray)]">{formatStamp(m.created_at)}</span>
                     </div>
                     <div className="mt-2 whitespace-pre-wrap text-sm text-[var(--anchor-deep)]">{m.body}</div>
+                    <MessageAttachments attachments={m.attachments} />
                   </li>
                 );
               })}
@@ -202,6 +208,9 @@ export default function AdminSupportThread() {
                 placeholder="Reply to the requester. They'll get an email when this is sent."
                 className="mt-1 block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
               />
+              <div className="mt-2">
+                <ImagePicker images={replyImages} onChange={setReplyImages} />
+              </div>
               {sendError && (
                 <div className="mt-2 rounded-xl bg-[#fef2f2] px-3 py-2 text-sm text-[#991b1b]">{sendError}</div>
               )}

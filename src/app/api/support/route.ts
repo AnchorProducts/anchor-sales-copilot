@@ -3,6 +3,8 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { sendPushToTool } from "@/lib/push/send";
+import { getToolRecipientEmails } from "@/lib/push/recipients";
+import { imagesFromForm, uploadSupportImages } from "@/lib/support/attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,28 +38,9 @@ async function emailAdminsOnNew(args: {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
 
-  // Resolve recipients. Admin-configured values (notification_settings) take
-  // precedence over env vars: the support_emails list first, then the legacy
-  // single support_recipient_email column, then env, then the reports fallback.
-  let configured: string[] = [];
-  try {
-    const { data } = await supabaseAdmin
-      .from("notification_settings")
-      .select("support_emails, support_recipient_email")
-      .eq("id", 1)
-      .maybeSingle();
-    const row = data as
-      | { support_emails?: string[] | null; support_recipient_email?: string | null }
-      | null;
-    const list = (row?.support_emails ?? []).map((e) => clean(e)).filter(Boolean);
-    if (list.length > 0) {
-      configured = list;
-    } else if (row?.support_recipient_email) {
-      const single = clean(row.support_recipient_email);
-      if (single) configured = [single];
-    }
-  } catch { /* columns may not exist — env var fallback is fine */ }
-
+  // Recipients = the support_request tool's assigned users + raw emails, with an
+  // env fallback so a request never goes nowhere.
+  const configured = await getToolRecipientEmails("support_request");
   const to =
     configured.length > 0
       ? configured
@@ -99,9 +82,21 @@ export async function POST(req: Request) {
     const role = clean(profile?.role);
     if (!role) return NextResponse.json({ error: "Profile not set up." }, { status: 400 });
 
-    const body = await req.json().catch(() => ({}));
-    const subject = clean((body as { subject?: string }).subject);
-    const message = clean((body as { message?: string }).message);
+    // Accept multipart (with image attachments) or legacy JSON.
+    const ct = req.headers.get("content-type") || "";
+    let subject = "";
+    let message = "";
+    let images: File[] = [];
+    if (ct.includes("multipart/form-data")) {
+      const form = await req.formData();
+      subject = clean(form.get("subject"));
+      message = clean(form.get("message"));
+      images = imagesFromForm(form);
+    } else {
+      const body = await req.json().catch(() => ({}));
+      subject = clean((body as { subject?: string }).subject);
+      message = clean((body as { message?: string }).message);
+    }
     if (!subject) return NextResponse.json({ error: "Subject is required." }, { status: 400 });
     if (!message) return NextResponse.json({ error: "Message is required." }, { status: 400 });
     if (subject.length > 200) return NextResponse.json({ error: "Subject is too long." }, { status: 400 });
@@ -128,14 +123,27 @@ export async function POST(req: Request) {
     }
     const requestId = row.id as string;
 
-    const { error: msgErr } = await supabaseAdmin.from("support_messages").insert({
-      request_id: requestId,
-      author_id: auth.user.id,
-      author_role: submitter_role,
-      body: message,
-    });
-    if (msgErr) {
-      return NextResponse.json({ error: msgErr.message }, { status: 500 });
+    const { data: msgRow, error: msgErr } = await supabaseAdmin
+      .from("support_messages")
+      .insert({
+        request_id: requestId,
+        author_id: auth.user.id,
+        author_role: submitter_role,
+        body: message,
+      })
+      .select("id")
+      .single();
+    if (msgErr || !msgRow?.id) {
+      return NextResponse.json({ error: msgErr?.message || "Failed to save message." }, { status: 500 });
+    }
+
+    // Upload any image attachments and attach them to the first message.
+    if (images.length > 0) {
+      const { attachments, error: upErr } = await uploadSupportImages(requestId, images);
+      if (attachments.length > 0) {
+        await supabaseAdmin.from("support_messages").update({ attachments }).eq("id", msgRow.id);
+      }
+      if (upErr) console.warn("support attachment upload:", upErr);
     }
 
     try {

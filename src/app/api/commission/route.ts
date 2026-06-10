@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { generateCommissionClaimPdf } from "@/lib/pdf/commissionClaimPdf";
 import { sendPushToTool } from "@/lib/push/send";
+import { getToolRecipientEmails, mergeEmails } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,31 +60,21 @@ async function sendCommissionEmail(params: {
 
   const resend = new Resend(resendKey);
 
-  // Prefer the recipient from the admin-managed notification_settings table.
-  // Fall back to the env var so deployments without a DB row still work.
-  let dbRecipient: string | null = null;
-  try {
-    const { data } = await supabaseAdmin
-      .from("notification_settings")
-      .select("commission_recipient_email")
-      .eq("id", 1)
-      .maybeSingle();
-    const raw = (data as { commission_recipient_email?: string | null } | null)?.commission_recipient_email;
-    if (raw && typeof raw === "string") dbRecipient = raw.trim();
-  } catch {
-    // Soft-fail to env var if the lookup blows up.
-  }
-
-  const to = clean(
-    dbRecipient ||
-    process.env.COMMISSION_NOTIFICATIONS_EMAIL ||
-    process.env.LEAD_NOTIFICATIONS_FROM ||
-    "reports@anchorp.com"
-  );
+  // Recipients = the commission_claim tool's assigned users + raw emails, with an
+  // env fallback so a claim never goes nowhere.
+  const configured = await getToolRecipientEmails("commission_claim");
+  const recipients = configured.length > 0
+    ? configured
+    : mergeEmails(
+        process.env.COMMISSION_NOTIFICATIONS_EMAIL ||
+          process.env.LEAD_NOTIFICATIONS_FROM ||
+          "reports@anchorp.com"
+      );
+  const to = recipients.join(", ");
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
 
-  if (!to) {
-    return { status: "skipped", reason: "No recipient configured (DB + env both empty)" };
+  if (recipients.length === 0) {
+    return { status: "skipped", reason: "No recipient configured (tool + env both empty)" };
   }
 
   const lines: string[] = [];
@@ -144,7 +135,7 @@ async function sendCommissionEmail(params: {
 
   const result = await resend.emails.send({
     from,
-    to: [to],
+    to: recipients,
     subject,
     text: lines.join("\n"),
     attachments: [
