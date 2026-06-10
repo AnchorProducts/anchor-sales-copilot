@@ -42,9 +42,26 @@ export async function getPushState(): Promise<PushSupport> {
   if (!VAPID_PUBLIC_KEY) {
     return { supported: false, reason: "Notifications aren’t configured on the server yet." };
   }
-  const reg = await navigator.serviceWorker.ready.catch(() => null);
-  const sub = reg ? await reg.pushManager.getSubscription() : null;
+  // Use getRegistration() (resolves immediately) — NOT serviceWorker.ready,
+  // which never resolves until a worker is active and would hang the card on
+  // "Checking…".
+  const reg = await navigator.serviceWorker.getRegistration().catch(() => null);
+  const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
   return { supported: true, permission: Notification.permission, subscribed: !!sub };
+}
+
+// Get an active service-worker registration, registering /sw.js ourselves if
+// next-pwa hasn't (and waiting — with a timeout — for it to become active).
+async function ensureRegistration(): Promise<ServiceWorkerRegistration> {
+  let reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) reg = await navigator.serviceWorker.register("/sw.js");
+  const ready = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+  ]);
+  const active = (ready as ServiceWorkerRegistration | null) || reg;
+  if (!active.active) throw new Error("The notification service worker didn’t start. Reload the app and try again.");
+  return active;
 }
 
 function isIos(): boolean {
@@ -64,7 +81,7 @@ export async function subscribeToPush(): Promise<{ ok: boolean; error?: string }
       return { ok: false, error: "Notification permission was not granted." };
     }
 
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await ensureRegistration();
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
@@ -91,8 +108,8 @@ export async function subscribeToPush(): Promise<{ ok: boolean; error?: string }
 
 export async function unsubscribeFromPush(): Promise<{ ok: boolean; error?: string }> {
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
     if (sub) {
       await fetch("/api/push/unsubscribe", {
         method: "POST",
