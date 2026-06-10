@@ -5,9 +5,6 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
-import { Input, Select } from "@/app/components/ui/Field";
-
-const STATUSES = ["new", "assigned", "contacted", "qualified", "closed_won", "closed_lost"] as const;
 
 type Attachment = {
   path: string;
@@ -50,21 +47,15 @@ type LeadRow = {
   status: string;
   assigned_rep_user_id: string | null;
   meeting_link: string | null;
-  hubspot_company_id: string | null;
-  hubspot_contact_id: string | null;
-  hubspot_deal_id: string | null;
-  hubspot_sync_status?: string | null;
-  hubspot_sync_error?: string | null;
+  netsuite_company_id: string | null;
+  netsuite_contact_id: string | null;
+  netsuite_deal_id: string | null;
+  netsuite_sync_status?: string | null;
+  netsuite_sync_error?: string | null;
   created_at: string;
 };
 
-type RepRow = { id: string; email: string | null; role: string | null };
-
 type SignedAttachment = Attachment & { url: string | null };
-
-function clean(v: any) {
-  return String(v || "").trim();
-}
 
 const CONTACT_METHOD_LABELS: Record<string, string> = {
   email: "Email",
@@ -97,13 +88,12 @@ export default function LeadDetail({ id }: { id: string }) {
   const { t } = useTranslation();
 
   const [lead, setLead] = useState<LeadRow | null>(null);
-  const [reps, setReps] = useState<RepRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("");
-  const [assignedRep, setAssignedRep] = useState<string>("");
-  const [meetingLink, setMeetingLink] = useState<string>("");
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
+  const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [assignRepExpanded, setAssignRepExpanded] = useState(false);
   const [attachments, setAttachments] = useState<SignedAttachment[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -127,16 +117,20 @@ export default function LeadDetail({ id }: { id: string }) {
       const row = json?.lead as LeadRow;
       const urlMap = (json?.attachmentUrls ?? {}) as Record<string, string>;
       setLead(row);
-      setStatus(row.status || "new");
-      setAssignedRep(row.assigned_rep_user_id || "");
-      setMeetingLink(row.meeting_link || "");
 
-      const { data: repRows } = await supabase
-        .from("profiles")
-        .select("id,email,role")
-        .in("role", ["admin", "anchor_rep"]);
-
-      setReps((repRows || []) as RepRow[]);
+      // The assigned rep is always the current user.
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id || "";
+      setCurrentUserId(uid);
+      setCurrentUserEmail(auth?.user?.email || "");
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", uid)
+          .maybeSingle();
+        setCurrentUserName(String((prof as any)?.full_name || ""));
+      }
 
       // Server pre-signs URLs (browser client can't, storage RLS blocks it).
       const atts = Array.isArray(row.attachments) ? row.attachments : [];
@@ -167,44 +161,45 @@ export default function LeadDetail({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function save() {
-    setSaving(true);
+  // Persist the current form state to the lead. Status stays "new" and the
+  // assigned rep is always the current user. Returns the updated row, or null.
+  async function persist(): Promise<LeadRow | null> {
+    const res = await fetch(`/api/leads/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: "new",
+        assigned_rep_user_id: currentUserId || null,
+      }),
+    });
+
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+
+    if (!res.ok) {
+      setError(json?.error || "Failed to update opportunity.");
+      return null;
+    }
+
+    const updated = (json?.lead || lead) as LeadRow;
+    setLead(updated);
+    return updated;
+  }
+
+  async function syncNetSuite() {
+    setSyncing(true);
+    setSyncMsg(null);
     setError(null);
 
     try {
-      const res = await fetch(`/api/leads/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          status,
-          assigned_rep_user_id: assignedRep || null,
-          meeting_link: meetingLink || null,
-        }),
-      });
-
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : {};
-
-      if (!res.ok) {
-        setError(json?.error || "Failed to update opportunity.");
-        setSaving(false);
+      // Push the latest status + rep assignment first so NetSuite gets current state.
+      const saved = await persist();
+      if (!saved) {
+        setSyncing(false);
         return;
       }
 
-      setLead(json?.lead || lead);
-      setSaving(false);
-    } catch (e: any) {
-      setError(e?.message || "Failed to update opportunity.");
-      setSaving(false);
-    }
-  }
-
-  async function syncHubSpot() {
-    setSyncing(true);
-    setSyncMsg(null);
-
-    try {
-      const res = await fetch(`/api/leads/${encodeURIComponent(id)}/hubspot-sync`, {
+      const res = await fetch(`/api/leads/${encodeURIComponent(id)}/netsuite-sync`, {
         method: "POST",
       });
 
@@ -212,16 +207,16 @@ export default function LeadDetail({ id }: { id: string }) {
       const json = text ? JSON.parse(text) : {};
 
       if (!res.ok) {
-        setSyncMsg(json?.error || "HubSpot sync failed.");
+        setSyncMsg(json?.error || "NetSuite sync failed.");
         setSyncing(false);
         return;
       }
 
-      setSyncMsg("HubSpot sync complete.");
+      setSyncMsg("NetSuite sync complete.");
       await load();
       setSyncing(false);
     } catch (e: any) {
-      setSyncMsg(e?.message || "HubSpot sync failed.");
+      setSyncMsg(e?.message || "NetSuite sync failed.");
       setSyncing(false);
     }
   }
@@ -293,42 +288,94 @@ export default function LeadDetail({ id }: { id: string }) {
           </dl>
         </Card>
 
-        {/* Right rail — actions */}
+        {/* Right rail */}
         <div className="flex flex-col gap-5">
+          {/* Solution uploads */}
           <Card className="p-5 sm:p-6">
+            <div className="ds-caption mb-4">{t("solutionUploads")}</div>
+
+            {solutionRequests.length === 0 ? (
+              attachments.length === 0 ? (
+                <div className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--anchor-gray)]">
+                  {t("noSolutionUploads")}
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {attachments.map((att) => (
+                    <AttachmentLink
+                      key={att.path}
+                      filename={att.filename}
+                      path={att.path}
+                      url={att.url}
+                      contentType={att.contentType}
+                    />
+                  ))}
+                </div>
+              )
+            ) : (
+              <div className="grid gap-3">
+                {solutionRequests.map((solution, idx) => (
+                  <div
+                    key={`${solution.solution_key}-${idx}`}
+                    className="rounded-2xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-4"
+                  >
+                    <div className="text-sm font-semibold text-[var(--anchor-deep)]">
+                      {solution.solution_label}
+                    </div>
+                    {solution.comment && (
+                      <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-primary)]">
+                        {solution.comment}
+                      </div>
+                    )}
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {(solution.attachments || []).length === 0 ? (
+                        <div className="rounded-xl border border-[var(--border-default)] bg-white p-3 text-xs text-[var(--anchor-gray)]">
+                          {t("noFiles")}
+                        </div>
+                      ) : (
+                        solution.attachments.map((att) => {
+                          const signed = attachmentByPath.get(att.path);
+                          return (
+                            <AttachmentLink
+                              key={att.path}
+                              filename={att.filename}
+                              path={att.path}
+                              url={signed?.url ?? null}
+                              contentType={att.contentType}
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="relative p-5 sm:p-6">
+            <div className="pointer-events-none select-none opacity-40">
             <div className="ds-caption mb-4">{t("leadActions")}</div>
-            <div className="grid gap-4">
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-xs font-semibold text-[var(--anchor-gray)]">{t("status")}</span>
-                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace("_", " ")}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-xs font-semibold text-[var(--anchor-gray)]">{t("assignRep")}</span>
-                <Select value={assignedRep} onChange={(e) => setAssignedRep(e.target.value)}>
-                  <option value="">{t("unassigned")}</option>
-                  {reps.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {clean(r.email) || r.id}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-xs font-semibold text-[var(--anchor-gray)]">{t("meetingLink")}</span>
-                <Input
-                  value={meetingLink}
-                  onChange={(e) => setMeetingLink(e.target.value)}
-                  placeholder="https://..."
-                />
-              </label>
+            <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
+              <button
+                type="button"
+                onClick={() => setAssignRepExpanded((v) => !v)}
+                aria-expanded={assignRepExpanded}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <span className="text-sm font-semibold text-black">{t("assignRep")}</span>
+                <span className="shrink-0 text-[11px] text-black/40">{assignRepExpanded ? "▴" : "▾"}</span>
+              </button>
+              {assignRepExpanded && (
+                <div className="px-4 pb-4">
+                  <div className="grid gap-1 text-sm text-[var(--anchor-gray)]">
+                    {currentUserName && (
+                      <div><span className="font-medium text-black">{currentUserName}</span></div>
+                    )}
+                    {currentUserEmail ? <div>{currentUserEmail}</div> : <div>{t("unknown")}</div>}
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -337,103 +384,39 @@ export default function LeadDetail({ id }: { id: string }) {
               </div>
             )}
 
-            <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              <Button onClick={save} disabled={saving} className="w-full">
-                {saving ? t("saving") : t("saveChangesCta")}
-              </Button>
+            <div className="mt-5 grid gap-2">
               <Button
-                variant="secondary"
-                onClick={syncHubSpot}
+                onClick={syncNetSuite}
                 disabled={syncing}
                 className="w-full"
               >
-                {syncing ? t("syncing") : t("syncToHubSpot")}
+                {syncing ? t("syncing") : t("syncToNetSuite")}
               </Button>
             </div>
             {syncMsg && (
               <div className="mt-3 text-xs text-[var(--anchor-gray)]">{syncMsg}</div>
             )}
-          </Card>
 
-          <Card className="p-5 sm:p-6">
-            <div className="ds-caption mb-3">HubSpot</div>
-            <dl className="grid gap-2 text-xs">
-              <Row label={t("syncStatus")} value={lead.hubspot_sync_status || "pending"} />
-              <Row label="Company" value={lead.hubspot_company_id || "—"} />
-              <Row label="Contact" value={lead.hubspot_contact_id || "—"} />
-              <Row label="Deal" value={lead.hubspot_deal_id || "—"} />
-            </dl>
-            {lead.hubspot_sync_status === "failed" && lead.hubspot_sync_error && (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {lead.hubspot_sync_error}
-              </div>
-            )}
+            {/* NetSuite sync status — merged into the actions card */}
+            <div className="mt-6 border-t border-[var(--border-default)] pt-5">
+              <div className="ds-caption mb-3">NetSuite</div>
+              <dl className="grid gap-2 text-xs">
+                <Row label={t("syncStatus")} value={lead.netsuite_sync_status || "pending"} />
+                <Row label="Company" value={lead.netsuite_company_id || "—"} />
+                <Row label="Contact" value={lead.netsuite_contact_id || "—"} />
+              </dl>
+            </div>
+            </div>
+
+            {/* Whole section is not live yet */}
+            <div className="absolute inset-0 flex items-start justify-center pt-16">
+              <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                Coming soon
+              </span>
+            </div>
           </Card>
         </div>
       </div>
-
-      {/* Solution uploads */}
-      <Card className="p-5 sm:p-6">
-        <div className="ds-caption mb-4">{t("solutionUploads")}</div>
-
-        {solutionRequests.length === 0 ? (
-          attachments.length === 0 ? (
-            <div className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--anchor-gray)]">
-              {t("noSolutionUploads")}
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {attachments.map((att) => (
-                <AttachmentLink
-                  key={att.path}
-                  filename={att.filename}
-                  path={att.path}
-                  url={att.url}
-                  contentType={att.contentType}
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <div className="grid gap-3">
-            {solutionRequests.map((solution, idx) => (
-              <div
-                key={`${solution.solution_key}-${idx}`}
-                className="rounded-2xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-4"
-              >
-                <div className="text-sm font-semibold text-[var(--anchor-deep)]">
-                  {solution.solution_label}
-                </div>
-                {solution.comment && (
-                  <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-primary)]">
-                    {solution.comment}
-                  </div>
-                )}
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {(solution.attachments || []).length === 0 ? (
-                    <div className="rounded-xl border border-[var(--border-default)] bg-white p-3 text-xs text-[var(--anchor-gray)]">
-                      {t("noFiles")}
-                    </div>
-                  ) : (
-                    solution.attachments.map((att) => {
-                      const signed = attachmentByPath.get(att.path);
-                      return (
-                        <AttachmentLink
-                          key={att.path}
-                          filename={att.filename}
-                          path={att.path}
-                          url={signed?.url ?? null}
-                          contentType={att.contentType}
-                        />
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

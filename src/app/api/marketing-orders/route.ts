@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import {
   isMarketingCategory,
+  isMarketingOrderStatus,
   marketingCategoriesLabel,
   type MarketingRecipients,
 } from "@/lib/marketingOrders";
@@ -226,8 +227,8 @@ export async function POST(req: Request) {
   }
 }
 
-// Admin (and internal sales) order history — every submitted marketing order,
-// newest first. Mirrors the notable-projects list endpoint.
+// Order history. Admins see every order; sales reps (internal + external) see
+// only their own — that's the rep-facing status tracker / history view.
 export async function GET() {
   try {
     const supabase = await supabaseRoute();
@@ -236,21 +237,92 @@ export async function GET() {
 
     const profile = await getProfile(auth.user.id);
     const role = clean(profile?.role);
-    if (role !== "admin" && role !== "anchor_rep") {
+    if (role !== "admin" && role !== "anchor_rep" && role !== "external_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    let query = supabaseAdmin
+      .from("marketing_orders")
+      .select(
+        "id,categories,items,quantity,needed_by,ship_to,notes,status,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
+      )
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    // Non-admins only ever see the orders they themselves submitted.
+    if (role !== "admin") {
+      query = query.eq("created_by", auth.user.id);
+    }
+
+    const { data, error } = await query;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const orders = (data || []) as any[];
+
+    // Resolve who last updated each order's status, so the submitting rep can
+    // see which admin to contact. One batched lookup; mapped onto each order.
+    const updaterIds = Array.from(
+      new Set(orders.map((o) => o.updated_by).filter((v): v is string => !!v))
+    );
+    const updaterMap = new Map<string, { name: string | null; email: string | null }>();
+    if (updaterIds.length) {
+      const { data: updaters } = await supabaseAdmin
+        .from("profiles")
+        .select("id,full_name,email")
+        .in("id", updaterIds);
+      for (const u of (updaters || []) as any[]) {
+        updaterMap.set(u.id, { name: clean(u.full_name) || null, email: clean(u.email) || null });
+      }
+    }
+
+    const items = orders.map((o) => {
+      const updater = o.updated_by ? updaterMap.get(o.updated_by) : undefined;
+      const { updated_by, ...rest } = o;
+      return {
+        ...rest,
+        updated_by_name: updater?.name ?? null,
+        updated_by_email: updater?.email ?? null,
+      };
+    });
+
+    return NextResponse.json({ items, role });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to load orders." }, { status: 500 });
+  }
+}
+
+// Admin-only: update an order's status (the tracker's source of truth).
+export async function PATCH(req: Request) {
+  try {
+    const supabase = await supabaseRoute();
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const profile = await getProfile(auth.user.id);
+    if (clean(profile?.role) !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const id = clean(body?.id);
+    const status = clean(body?.status);
+    if (!id) return NextResponse.json({ error: "Missing order id." }, { status: 400 });
+    if (!status || !isMarketingOrderStatus(status)) {
+      return NextResponse.json({ error: "Invalid status." }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin
       .from("marketing_orders")
-      .select(
-        "id,categories,items,quantity,needed_by,ship_to,notes,status,submitter_name,submitter_company,submitter_email,submitter_phone,created_at"
-      )
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      .update({ status, updated_by: auth.user.id, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("id,status,updated_at")
+      .single();
 
-    return NextResponse.json({ items: data || [] });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+
+    return NextResponse.json({ ok: true, order: data });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Failed to load orders." }, { status: 500 });
+    return NextResponse.json({ error: e?.message || "Failed to update order." }, { status: 500 });
   }
 }

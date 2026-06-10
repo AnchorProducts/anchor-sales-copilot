@@ -44,7 +44,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "Missing Supabase service configuration." }, { status: 500 });
     }
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/hubspot-lead-sync`, {
+    const res = await fetch(`${supabaseUrl}/functions/v1/netsuite-lead-sync`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${serviceKey}`,
@@ -57,7 +57,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const json = text ? JSON.parse(text) : {};
 
     if (!res.ok) {
-      return NextResponse.json({ error: json?.error || "HubSpot sync failed." }, { status: 500 });
+      return NextResponse.json({ error: json?.error || "NetSuite sync failed." }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, result: json });
