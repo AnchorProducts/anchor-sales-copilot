@@ -3,6 +3,7 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { resolveRepsByKind, resolveStatesForUser } from "@/lib/sales/regions";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -442,6 +443,15 @@ export async function POST(req: Request) {
     }
 
     const leadId = leadRow.id as string;
+
+    // Push: notify assigned users of a new consult (fire-and-forget).
+    void sendPushToTool("new_consult", {
+      title: "New consult submitted",
+      body: customer_company || "A new consult was submitted.",
+      url: `/dashboard/opportunities/${leadId}`,
+      tag: `consult-${leadId}`,
+    });
+
     const flatAttachments: Array<{
       path: string;
       filename: string;

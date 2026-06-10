@@ -3,6 +3,7 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { generateCommissionClaimPdf } from "@/lib/pdf/commissionClaimPdf";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -257,6 +258,13 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    void sendPushToTool("commission_claim", {
+      title: "New commission claim",
+      body: `${rep_name || "A rep"} — ${company_placing_order || job_name || "claim submitted"}`,
+      url: "/admin/commission-claims",
+      tag: `comm-${claim?.id ?? ""}`,
+    });
 
     let emailResult: EmailResult;
     try {

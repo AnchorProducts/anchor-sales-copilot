@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -149,6 +150,13 @@ export async function POST(req: Request) {
     } catch (e) {
       console.warn("support new-request email failed", (e as Error)?.message);
     }
+
+    void sendPushToTool("support_request", {
+      title: "New support request",
+      body: subject || "A rep filed a support request.",
+      url: "/admin/support",
+      tag: `support-${requestId}`,
+    });
 
     return NextResponse.json({ ok: true, id: requestId }, { status: 201 });
   } catch (e) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -205,6 +206,13 @@ export async function POST(req: Request) {
     } catch (emailErr: any) {
       console.warn("notable project email failed", emailErr?.message || emailErr);
     }
+
+    void sendPushToTool("notable_project", {
+      title: "New notable project",
+      body: `${name}${location ? ` — ${location}` : ""}`,
+      url: "/admin/notable-projects",
+      tag: `np-${projectId}`,
+    });
 
     return NextResponse.json({ ok: true, id: projectId, photos: uploaded.length }, { status: 201 });
   } catch (e: any) {

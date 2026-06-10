@@ -6,10 +6,12 @@ import {
   isMarketingCategory,
   isMarketingOrderStatus,
   marketingCategoriesLabel,
+  marketingOrderStatusLabel,
   normalizeMarketingRecipients,
   normalizeRecipientEmails,
   type MarketingRecipients,
 } from "@/lib/marketingOrders";
+import { sendPushToTool } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -238,6 +240,13 @@ export async function POST(req: Request) {
       console.warn("marketing order email failed", emailNotification.error);
     }
 
+    void sendPushToTool("marketing_order", {
+      title: "New marketing order",
+      body: `${marketingCategoriesLabel(categories)} — ${submitter_name || submitter_company || "a rep"}`,
+      url: "/admin/marketing-orders",
+      tag: `mo-${orderId}`,
+    });
+
     return NextResponse.json({ ok: true, id: orderId, email_notification: emailNotification }, { status: 201 });
   } catch (e: any) {
     console.error("marketing order route error", e);
@@ -338,6 +347,13 @@ export async function PATCH(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+
+    void sendPushToTool("marketing_order_status", {
+      title: "Marketing order updated",
+      body: `Order ${String(id).slice(0, 8)} is now ${marketingOrderStatusLabel(status)}.`,
+      url: "/admin/marketing-orders",
+      tag: `mo-status-${id}`,
+    });
 
     return NextResponse.json({ ok: true, order: data });
   } catch (e: any) {
