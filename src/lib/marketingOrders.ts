@@ -35,8 +35,39 @@ export function marketingCategoriesLabel(keys: string[] | null | undefined): str
 }
 
 // The per-category recipient map persisted on notification_settings. Keys are
-// category keys (above) plus the special "default" fallback. Values are emails.
-export type MarketingRecipients = Record<string, string>;
+// category keys (above) plus the special "default" fallback. Each category can
+// route to MULTIPLE emails.
+export type MarketingRecipients = Record<string, string[]>;
+
+// Coerce a stored value into a clean email list. Tolerates the legacy single-
+// string shape (pre-multi-recipient data in the JSONB column), a string[], or
+// a comma/semicolon/newline-separated string. Lowercases, trims, and dedupes.
+export function normalizeRecipientEmails(value: unknown): string[] {
+  const raw: string[] = Array.isArray(value)
+    ? value.map((v) => String(v ?? ""))
+    : typeof value === "string"
+      ? value.split(/[,;\n]/)
+      : [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const email = item.trim().toLowerCase();
+    if (email && !out.includes(email)) out.push(email);
+  }
+  return out;
+}
+
+// Normalize a whole stored recipients map (legacy strings → arrays).
+export function normalizeMarketingRecipients(
+  raw: Record<string, unknown> | null | undefined
+): MarketingRecipients {
+  const out: MarketingRecipients = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw)) {
+    const list = normalizeRecipientEmails(value);
+    if (list.length > 0) out[key] = list;
+  }
+  return out;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Order status workflow

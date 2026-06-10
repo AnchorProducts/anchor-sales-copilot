@@ -360,6 +360,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [deletingBox, setDeletingBox] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [metaForm, setMetaForm] = useState<{ name: string; sku: string; section: string }>({ name: "", sku: "", section: "solution" });
   const [form, setForm] = useState({
     title: "",
     category_key: "data_sheet",
@@ -702,6 +705,50 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
   }
 
+  function startEditMeta() {
+    if (!isAdmin || !product) return;
+    setMetaForm({ name: product.name ?? "", sku: product.sku ?? "", section: product.section ?? "solution" });
+    setEditingMeta(true);
+  }
+
+  async function saveMeta() {
+    if (!isAdmin || !product || savingMeta) return;
+    const nextName = metaForm.name.trim();
+    if (!nextName) {
+      setFormMsg("Name can’t be empty.");
+      setTimeout(() => setFormMsg(null), 3000);
+      return;
+    }
+    const nextSku = metaForm.sku.trim() || null;
+    const nextSection = metaForm.section;
+    setSavingMeta(true);
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, name: nextName, sku: nextSku, section: nextSection }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFormMsg(json?.error || "Update failed.");
+        setTimeout(() => setFormMsg(null), 3000);
+        setSavingMeta(false);
+        return;
+      }
+      setProduct((p) => (p ? { ...p, name: nextName, sku: nextSku, section: nextSection } : p));
+      setEditingMeta(false);
+      setFormMsg("Saved.");
+      setTimeout(() => setFormMsg(null), 1500);
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : "Update failed.");
+      setTimeout(() => setFormMsg(null), 3000);
+    } finally {
+      setSavingMeta(false);
+    }
+  }
+
   async function deleteTacklebox() {
     if (!isAdmin || !product) return;
     const name = catalogDisplayName(product.name) || product.name;
@@ -907,13 +954,76 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <div className="text-[12px] font-semibold text-[#047835]">{t("tackleBox")}</div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight text-black break-words">{catalogDisplayName(product?.name)}</h1>
 
-                <div className="mt-2 text-sm text-[#76777B]">
-                  {product?.sku ? `SKU: ${product.sku}` : t("noSku")}
-                  {product?.series ? ` • Series: ${product.series}` : ""}
-                  {product?.section ? ` • ${product.section}` : ""}
-                </div>
+                {isAdmin && editingMeta ? (
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <label className="grid gap-1">
+                      <span className="text-[12px] font-semibold text-black/70">Name</span>
+                      <input
+                        value={metaForm.name}
+                        onChange={(e) => setMetaForm((s) => ({ ...s, name: e.target.value }))}
+                        placeholder="Tacklebox name"
+                        className="h-9 w-72 max-w-full rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[12px] font-semibold text-black/70">SKU</span>
+                      <input
+                        value={metaForm.sku}
+                        onChange={(e) => setMetaForm((s) => ({ ...s, sku: e.target.value }))}
+                        placeholder="e.g. PSS-0320"
+                        className="h-9 w-48 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[12px] font-semibold text-black/70">Solution</span>
+                      <select
+                        value={metaForm.section}
+                        onChange={(e) => setMetaForm((s) => ({ ...s, section: e.target.value }))}
+                        className="h-9 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                      >
+                        <option value="solution">Solution</option>
+                        <option value="anchor">Anchor</option>
+                        <option value="internal_assets">Internal assets</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={saveMeta}
+                      disabled={savingMeta}
+                      className="inline-flex h-9 items-center rounded-full bg-[#047835] px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+                    >
+                      {savingMeta ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMeta(false)}
+                      disabled={savingMeta}
+                      className="inline-flex h-9 items-center rounded-full bg-black/5 px-4 text-[12px] font-semibold text-black/60 transition hover:bg-black/10 disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-[#76777B]">
+                    <span>
+                      {product?.sku ? `SKU: ${product.sku}` : t("noSku")}
+                      {product?.series ? ` • Series: ${product.series}` : ""}
+                      {product?.section ? ` • ${product.section}` : ""}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={startEditMeta}
+                        title="Edit SKU and solution"
+                        className="inline-flex items-center rounded-full bg-black/5 px-2.5 py-0.5 text-[11px] font-semibold text-black/55 transition hover:bg-black/10"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                )}
 
-                
+
               </div>
 
               <div className="shrink-0 flex flex-wrap items-center gap-2">

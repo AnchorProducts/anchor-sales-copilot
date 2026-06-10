@@ -10,17 +10,8 @@ type DocRow = {
   total_upvotes: number;
 };
 
-type CorrectionRow = {
-  id: string;
-  created_at: string;
-  correction_text: string;
-  proposed_doc_id: string | null;
-  status: string;
-};
-
 export default function LearningAdminPage() {
   const [docs, setDocs] = useState<DocRow[]>([]);
-  const [corrections, setCorrections] = useState<CorrectionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -28,7 +19,6 @@ export default function LearningAdminPage() {
     const res = await fetch("/api/admin/learning/summary", { cache: "no-store" });
     const json = await res.json();
     setDocs(json.docs || []);
-    setCorrections(json.corrections || []);
     setLoading(false);
   }
 
@@ -101,30 +91,10 @@ export default function LearningAdminPage() {
           </section>
 
           <section>
-            <div className="mb-2 font-medium">Open correction tickets</div>
-            <div className="border border-white/10">
-              {corrections.length === 0 ? (
-                <div className="p-3 opacity-70">No open corrections.</div>
-              ) : (
-                corrections.map((c) => (
-                  <div key={c.id} className="border-b border-white/10 p-3">
-                    <div className="opacity-70">
-                      {new Date(c.created_at).toLocaleString()}
-                    </div>
-                    <div className="mt-1">{c.correction_text}</div>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        className="border border-white/20 px-2 py-1"
-                        onClick={() =>
-                          act({ action: "close_correction", correctionId: c.id })
-                        }
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="mb-2 font-medium">Corrections</div>
+            <div className="border border-white/10 p-3 opacity-70">
+              Correction review and the per-correction on/off toggle now live in
+              Admin → Knowledge → Corrections.
             </div>
           </section>
         </div>

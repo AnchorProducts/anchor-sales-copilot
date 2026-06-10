@@ -145,6 +145,93 @@ function EmailListEditor({
   );
 }
 
+// Inline multi-email editor used per marketing category. Edits the array in the
+// parent's local state (via onChange); the section's single "Save" button
+// persists the whole map. Self-contained add-field with chip list + remove.
+function MarketingEmailField({
+  label,
+  emails,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  emails: string[];
+  placeholder: string;
+  onChange: (next: string[]) => void;
+}) {
+  const [input, setInput] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  function add() {
+    const value = input.trim().toLowerCase();
+    setErr(null);
+    if (!value) return;
+    if (!EMAIL_RE.test(value)) {
+      setErr("That doesn’t look like a valid email.");
+      return;
+    }
+    if (emails.includes(value)) {
+      setInput("");
+      return;
+    }
+    onChange([...emails, value]);
+    setInput("");
+  }
+
+  return (
+    <div className="grid gap-1.5 sm:grid-cols-[10rem_1fr] sm:items-start sm:gap-3">
+      <span className="pt-2 text-sm font-medium text-[var(--anchor-deep)]">{label}</span>
+      <div>
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder={placeholder}
+            className="h-10 flex-1 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+          />
+          <button
+            type="button"
+            onClick={add}
+            className="h-10 shrink-0 rounded-xl border border-[var(--anchor-green)] bg-[var(--anchor-green)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--anchor-deep)]"
+          >
+            Add
+          </button>
+        </div>
+        {err && <div className="mt-1 text-xs text-red-600">{err}</div>}
+        {emails.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {emails.map((email) => (
+              <li
+                key={email}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--anchor-mint)]/50 px-2.5 py-1 text-xs text-[var(--anchor-deep)]"
+              >
+                <span className="max-w-[220px] truncate" title={email}>
+                  {email}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onChange(emails.filter((e) => e !== email))}
+                  aria-label={`Remove ${email}`}
+                  className="text-[var(--anchor-deep)]/60 hover:text-red-600"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminNotificationsPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -320,24 +407,28 @@ export default function AdminNotificationsPage() {
     }
   }
 
-  function setMarketingEmail(key: string, value: string) {
-    setMarketingRecipients((prev) => ({ ...prev, [key]: value }));
+  function setMarketingEmails(key: string, emails: string[]) {
+    setMarketingRecipients((prev) => ({ ...prev, [key]: emails }));
   }
 
   async function saveMarketing() {
     setMarketingBusy(true);
     setMarketingMsg(null);
-    // Trim + validate each non-empty entry; empty entries clear that category.
+    // Trim + validate each email per category; empty lists clear that category.
     const payload: MarketingRecipients = {};
-    for (const [key, raw] of Object.entries(marketingRecipients)) {
-      const value = (raw || "").trim().toLowerCase();
-      if (!value) continue;
-      if (!EMAIL_RE.test(value)) {
-        setMarketingMsg({ kind: "err", text: `That doesn’t look like a valid email: ${raw}` });
-        setMarketingBusy(false);
-        return;
+    for (const [key, rawList] of Object.entries(marketingRecipients)) {
+      const emails: string[] = [];
+      for (const raw of rawList || []) {
+        const value = (raw || "").trim().toLowerCase();
+        if (!value) continue;
+        if (!EMAIL_RE.test(value)) {
+          setMarketingMsg({ kind: "err", text: `That doesn’t look like a valid email: ${raw}` });
+          setMarketingBusy(false);
+          return;
+        }
+        if (!emails.includes(value)) emails.push(value);
       }
-      payload[key] = value;
+      if (emails.length > 0) payload[key] = emails;
     }
     try {
       const res = await fetch("/api/admin/notification-settings", {
@@ -517,38 +608,32 @@ export default function AdminNotificationsPage() {
                       Marketing order recipients
                     </h2>
                     <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
-                      Route each order category to a specific address. Leave one blank to fall back to
-                      the default. If the default is blank too, it falls back to the{" "}
+                      Route each order category to one or more addresses — every recipient gets the
+                      order email. Leave a category empty to fall back to the default. If the default
+                      is empty too, it falls back to the{" "}
                       <code>MARKETING_ORDERS_NOTIFICATIONS_EMAIL</code> env var.
                     </p>
                   </div>
 
                   <div className="grid gap-3">
                     {MARKETING_CATEGORIES.map((cat) => (
-                      <label key={cat.key} className="grid gap-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-3">
-                        <span className="text-sm font-medium text-[var(--anchor-deep)]">{cat.label}</span>
-                        <input
-                          type="email"
-                          value={marketingRecipients[cat.key] || ""}
-                          onChange={(e) => setMarketingEmail(cat.key, e.target.value)}
-                          placeholder="uses default…"
-                          className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
-                        />
-                      </label>
+                      <MarketingEmailField
+                        key={cat.key}
+                        label={cat.label}
+                        emails={marketingRecipients[cat.key] || []}
+                        placeholder="add a recipient…"
+                        onChange={(next) => setMarketingEmails(cat.key, next)}
+                      />
                     ))}
 
                     <div className="my-1 border-t border-[var(--border-default)]" />
 
-                    <label className="grid gap-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-3">
-                      <span className="text-sm font-semibold text-[var(--anchor-deep)]">Default</span>
-                      <input
-                        type="email"
-                        value={marketingRecipients.default || ""}
-                        onChange={(e) => setMarketingEmail("default", e.target.value)}
-                        placeholder="marketing@anchorp.com"
-                        className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
-                      />
-                    </label>
+                    <MarketingEmailField
+                      label="Default"
+                      emails={marketingRecipients.default || []}
+                      placeholder="marketing@anchorp.com"
+                      onChange={(next) => setMarketingEmails("default", next)}
+                    />
                   </div>
 
                   <div className="mt-4 flex items-center gap-3">

@@ -10,6 +10,7 @@ import {
 } from "@/lib/solutions/solutionCatalog";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
+import { retrieveCorrections } from "@/lib/learning/corrections";
 import { maybeExtractKnowledge, maybeSummarizeSession, writeChatMessage } from "@/lib/learning/loops";
 import { supabaseRoute } from "@/lib/supabase/server";
 
@@ -463,7 +464,7 @@ Anchor Products ONLY manufactures attachment solutions for membrane-covered comm
 - Do NOT try to recommend a solution for a non-membrane roof. Redirect them to contact Anchor Products at (888) 575-2131 or anchorp.com if they need help determining compatibility.
 
 WHAT YOU DO:
-- Recommend the correct Anchor attachment solution based on what’s being secured and the roof membrane type.
+- Recommend the correct Anchor attachment solution based on what’s being secured. Membrane type does NOT change which solution applies — every solution supports every membrane — so it is not needed to make a recommendation.
 - Explain Anchor product families (2000-series, 3000-series, guy wire kits) and when each is used.
 - Clarify naming conventions — customers describe the same solution in many ways, and you know them all.
 - Ask clarifying questions whenever you need more information to give a good recommendation. You can ask more than one question if needed — just ask them naturally, not as a numbered list all at once.
@@ -483,7 +484,7 @@ TONE & STYLE:
 - Write naturally. Use a conversational tone, not a rigid template. Use bullet points when listing components or options, but don’t force them into every response — sometimes a clear paragraph is better.
 
 PRODUCT RULES:
-- Every Anchor solution is available for every supported membrane type. Identify the solution from what’s being secured first. Do NOT ask about membrane type until after the solution is confirmed and documents have been surfaced. Membrane is only needed to name the specific anchor model.
+- Every Anchor solution is available for every supported membrane type. Identify the solution from what’s being secured — membrane type is NOT needed for that, for surfacing documents, or for a general recommendation. Do NOT ask for membrane type as a routine step. The ONLY time to ask is when the user explicitly wants the exact anchor model/part number and hasn't already told you the membrane — and even then, ask at most once.
 - Never assume a membrane type. Only reference it if the user explicitly stated it.
 - Guy wire kits use ONLY 2000-series anchors. All guy wire applications are tie-down solutions.
 - Anchor bases are manufactured from the specified membrane material. Coatings are custom anchor colors.
@@ -686,7 +687,7 @@ FINAL BEHAVIOR
 --------------------------------------------------
 
 - Identify the solution from what’s being secured before asking anything else.
-- Only ask about membrane type AFTER the solution is identified and confirmed.
+- Do NOT ask about membrane type as a routine step. Recommend the solution and surface documents without it. Only ask for membrane when the user specifically needs the exact anchor model number and hasn't already provided it — never ask for it more than once, and never if it's already in conversation memory.
 - If “pipe” is mentioned without context, ask whether it runs horizontally or vertically before recommending.
 - Recognize multiple names for the same solution.
 - Always keep responses aligned with Anchor Products’ real-world practices and product families.
@@ -831,22 +832,53 @@ export async function POST(req: Request) {
 
     const transcript = incoming.map((m) => `${m.role}: ${m.content}`).join("\n");
 
-    // ── RAG: pull relevant knowledge chunks from past interactions ────────────
-    let knowledgeBlock = "";
-    try {
-      const chunks = await retrieveKnowledge(supabaseAdmin, intentText, { matchCount: 5 });
-      const useful = chunks.filter((c) => c.similarity > 0.75);
-      if (useful.length > 0) {
-        knowledgeBlock =
-          "Relevant knowledge from previous sales interactions (use to inform your answer):\n" +
-          useful.map((c, i) => `[${i + 1}] ${c.content.trim()}`).join("\n\n");
-      }
-    } catch {
-      // non-fatal — proceed without knowledge context
-    }
+    // ── Retrieval: RAG knowledge + verified corrections, in parallel ──────────
+    // The learning loop (corrections) overrides RAG/general knowledge when the
+    // question matches a past correction, so "tell me what's right and I'll learn
+    // from it" is real. Run both concurrently so corrections add no extra wait.
+    const [knowledgeBlock, correctionsBlock] = await Promise.all([
+      (async () => {
+        try {
+          const chunks = await retrieveKnowledge(supabaseAdmin, intentText, { matchCount: 5 });
+          const useful = chunks.filter((c) => c.similarity > 0.75);
+          if (useful.length > 0) {
+            return (
+              "Relevant knowledge from previous sales interactions (use to inform your answer):\n" +
+              useful.map((c, i) => `[${i + 1}] ${c.content.trim()}`).join("\n\n")
+            );
+          }
+        } catch {
+          // non-fatal — proceed without knowledge context
+        }
+        return "";
+      })(),
+      (async () => {
+        try {
+          const corrections = await retrieveCorrections(supabaseAdmin, intentText, {
+            matchCount: 3,
+            minSimilarity: 0.8,
+          });
+          if (corrections.length > 0) {
+            return (
+              "VERIFIED CORRECTIONS from the Anchor sales team. These take priority over everything else below — if the user's question matches one, use the corrected answer:\n" +
+              corrections
+                .map((c, i) => {
+                  const q = c.user_message ? `Q: ${c.user_message}\n` : "";
+                  return `[${i + 1}] ${q}Correct answer: ${c.correction}`;
+                })
+                .join("\n\n")
+            );
+          }
+        } catch {
+          // non-fatal — proceed without corrections
+        }
+        return "";
+      })(),
+    ]);
 
     const userPrompt = [
       preFolder ? `Detected solution context: ${preFolder}` : "",
+      correctionsBlock,
       memoryBlock,
       knowledgeBlock,
       `Conversation so far:\n${transcript}`,

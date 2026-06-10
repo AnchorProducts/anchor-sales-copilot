@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
@@ -97,6 +97,9 @@ export default function LeadDetail({ id }: { id: string }) {
   const [attachments, setAttachments] = useState<SignedAttachment[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncMode, setSyncMode] = useState<"manual" | "automatic">("manual");
+  // Tracks the lead id we've already auto-synced so automatic mode fires once.
+  const autoSyncedRef = useRef<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -130,6 +133,15 @@ export default function LeadDetail({ id }: { id: string }) {
           .eq("id", uid)
           .maybeSingle();
         setCurrentUserName(String((prof as any)?.full_name || ""));
+
+        // Fetched separately so a missing column (un-migrated DB) can't break
+        // the lead load. Defaults to manual on error.
+        const { data: syncProf } = await supabase
+          .from("profiles")
+          .select("netsuite_sync_mode")
+          .eq("id", uid)
+          .maybeSingle();
+        setSyncMode((syncProf as any)?.netsuite_sync_mode === "automatic" ? "automatic" : "manual");
       }
 
       // Server pre-signs URLs (browser client can't, storage RLS blocks it).
@@ -160,6 +172,19 @@ export default function LeadDetail({ id }: { id: string }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Automatic mode: the manual button is hidden, so sync the consult to NetSuite
+  // on its own once it's loaded (and not already synced). Fires once per lead.
+  useEffect(() => {
+    if (syncMode !== "automatic") return;
+    if (loading || syncing || !lead) return;
+    if ((lead.netsuite_sync_status || "pending") === "synced") return;
+    if (autoSyncedRef.current === lead.id) return;
+    autoSyncedRef.current = lead.id;
+    setSyncMsg("Auto-syncing to NetSuite…");
+    syncNetSuite();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncMode, loading, syncing, lead]);
 
   // Persist the current form state to the lead. Status stays "new" and the
   // assigned rep is always the current user. Returns the updated row, or null.
@@ -384,15 +409,20 @@ export default function LeadDetail({ id }: { id: string }) {
               </div>
             )}
 
-            <div className="mt-5 grid gap-2">
-              <Button
-                onClick={syncNetSuite}
-                disabled={syncing}
-                className="w-full"
-              >
-                {syncing ? t("syncing") : t("syncToNetSuite")}
-              </Button>
-            </div>
+            {/* Manual sync button only shows when the rep is in manual mode.
+                In automatic mode their leads sync on their own, so the button
+                disappears. */}
+            {syncMode === "manual" && (
+              <div className="mt-5 grid gap-2">
+                <Button
+                  onClick={syncNetSuite}
+                  disabled={syncing}
+                  className="w-full"
+                >
+                  {syncing ? t("syncing") : t("syncToNetSuite")}
+                </Button>
+              </div>
+            )}
             {syncMsg && (
               <div className="mt-3 text-xs text-[var(--anchor-gray)]">{syncMsg}</div>
             )}
@@ -401,6 +431,7 @@ export default function LeadDetail({ id }: { id: string }) {
             <div className="mt-6 border-t border-[var(--border-default)] pt-5">
               <div className="ds-caption mb-3">NetSuite</div>
               <dl className="grid gap-2 text-xs">
+                <Row label={t("syncMode")} value={syncMode === "automatic" ? t("syncModeAutomatic") : t("syncModeManual")} />
                 <Row label={t("syncStatus")} value={lead.netsuite_sync_status || "pending"} />
                 <Row label="Company" value={lead.netsuite_company_id || "—"} />
                 <Row label="Contact" value={lead.netsuite_contact_id || "—"} />
