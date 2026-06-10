@@ -10,6 +10,7 @@ import { US_STATES } from "@/lib/sales/states";
 import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import NotificationsCard from "@/app/components/settings/NotificationsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -282,6 +283,9 @@ export default function SettingsPage() {
               </div>
             </Card>
           )}
+
+          {/* ── Notifications ────────────────────────────────────── */}
+          <NotificationsCard />
 
           {/* ── Appearance ───────────────────────────────────────── */}
           <Card data-tutorial="settings-appearance" className="border-t-4 border-t-[var(--anchor-green)] p-5">

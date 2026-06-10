@@ -7,6 +7,7 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MARKETING_CATEGORIES, type MarketingRecipients } from "@/lib/marketingOrders";
+import ToolNotificationAssignments from "@/app/components/admin/ToolNotificationAssignments";
 
 export const dynamic = "force-dynamic";
 
@@ -486,6 +487,9 @@ export default function AdminNotificationsPage() {
               <Card className="p-5 text-sm text-[var(--anchor-gray)]">Loading…</Card>
             ) : (
               <div className="space-y-6">
+                {/* Push: assign users per tool */}
+                <ToolNotificationAssignments />
+
                 {/* Commission claims recipient */}
                 <Card className="p-5 sm:p-6">
                   <div className="mb-3">

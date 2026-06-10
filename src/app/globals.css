@@ -254,7 +254,7 @@ h2,
   padding-top: env(safe-area-inset-top);
   background:
     linear-gradient(90deg, rgba(156, 226, 187, 0.22), transparent 36%),
-    linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 38%, var(--anchor-green) 100%);
+    linear-gradient(120deg, #06100b 0%, var(--anchor-deep) 38%, var(--anchor-green) 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
@@ -557,11 +557,11 @@ input[type="datetime-local"] {
 }
 
 .anchor-app-bg {
-  background: linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
+  background: linear-gradient(120deg, #06100b 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
 }
 
 .anchor-topbar {
-  background: linear-gradient(120deg, var(--anchor-black) 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
+  background: linear-gradient(120deg, #06100b 0%, var(--anchor-deep) 40%, var(--anchor-green) 100%);
 }
 
 /* ── Hero feature visuals ──────────────────────────────────────────────── */

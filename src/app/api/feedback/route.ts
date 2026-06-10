@@ -46,6 +46,12 @@ export async function POST(req: Request) {
     const rating = clamp(Math.round(ratingRaw), 1, 5);
     const note = typeof body.note === "string" ? body.note.trim() : null;
 
+    // The question + answer this rating is about, so admins can see the context.
+    const user_message =
+      typeof body.userMessage === "string" ? body.userMessage.trim() || null : null;
+    const assistant_message =
+      typeof body.assistantMessage === "string" ? body.assistantMessage.trim() || null : null;
+
     const insertRow: any = {
       user_id: user.id,
       conversation_id,
@@ -62,11 +68,25 @@ export async function POST(req: Request) {
         body.assistantMessageId ?? body.assistant_message_id;
     }
 
-    const { data: inserted, error } = await supabase
+    const withMessages = { ...insertRow, user_message, assistant_message };
+
+    let inserted: { id: string } | null = null;
+    let error: { message: string } | null = null;
+    ({ data: inserted, error } = await supabase
       .from("knowledge_feedback")
-      .insert(insertRow)
+      .insert(withMessages)
       .select("id")
-      .maybeSingle();
+      .maybeSingle());
+
+    // If the message columns aren't migrated yet, don't lose the feedback —
+    // retry with the original fields.
+    if (error) {
+      ({ data: inserted, error } = await supabase
+        .from("knowledge_feedback")
+        .insert(insertRow)
+        .select("id")
+        .maybeSingle());
+    }
 
     if (error) return jsonError(error.message, 500);
 
