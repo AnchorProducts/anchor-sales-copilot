@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
+import {
+  imagesFromForm,
+  uploadSupportImages,
+  signSupportAttachments,
+  type SupportAttachment,
+} from "@/lib/support/attachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,12 +66,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const { data: messages, error: mErr } = await supabaseAdmin
       .from("support_messages")
-      .select("id,author_id,author_role,body,created_at")
+      .select("id,author_id,author_role,body,attachments,created_at")
       .eq("request_id", id)
       .order("created_at", { ascending: true });
     if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
 
-    return NextResponse.json({ request, messages: messages ?? [] });
+    // Sign attachment URLs for display.
+    const withAttachments = await Promise.all(
+      (messages ?? []).map(async (m) => ({
+        ...m,
+        attachments: await signSupportAttachments(
+          ((m as { attachments?: unknown }).attachments as SupportAttachment[]) ?? []
+        ),
+      }))
+    );
+
+    return NextResponse.json({ request, messages: withAttachments });
   } catch (e) {
     return NextResponse.json({ error: (e as Error)?.message || "Failed." }, { status: 500 });
   }
@@ -92,29 +108,54 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const message = clean((body as { message?: string }).message);
-    const close = (body as { close?: boolean }).close === true;
-    if (!message && !close) {
+    // Accept multipart (reply with image attachments) or legacy JSON.
+    const contentType = req.headers.get("content-type") || "";
+    let message = "";
+    let close = false;
+    let images: File[] = [];
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      message = clean(form.get("message"));
+      close = clean(form.get("close")) === "true";
+      images = imagesFromForm(form);
+    } else {
+      const body = await req.json().catch(() => ({}));
+      message = clean((body as { message?: string }).message);
+      close = (body as { close?: boolean }).close === true;
+    }
+    if (!message && !close && images.length === 0) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
     if (message.length > 5000) return NextResponse.json({ error: "Message is too long." }, { status: 400 });
 
-    if (message) {
-      const { error: insErr } = await supabaseAdmin.from("support_messages").insert({
-        request_id: id,
-        author_id: auth.user.id,
-        author_role: role || null,
-        body: message,
-      });
-      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    if (message || images.length > 0) {
+      const { data: msgRow, error: insErr } = await supabaseAdmin
+        .from("support_messages")
+        .insert({
+          request_id: id,
+          author_id: auth.user.id,
+          author_role: role || null,
+          body: message,
+        })
+        .select("id")
+        .single();
+      if (insErr || !msgRow?.id) {
+        return NextResponse.json({ error: insErr?.message || "Failed to send." }, { status: 500 });
+      }
+      if (images.length > 0) {
+        const { attachments, error: upErr } = await uploadSupportImages(id, images);
+        if (attachments.length > 0) {
+          await supabaseAdmin.from("support_messages").update({ attachments }).eq("id", msgRow.id);
+        }
+        if (upErr) console.warn("support reply attachment upload:", upErr);
+      }
     }
 
     // Admins can flip status. Sending a reply auto-reopens a closed thread
     // so the requester can see the new message in their list.
     let nextStatus: string | null = null;
     if (close && isAdmin) nextStatus = "closed";
-    else if (message && request.status === "closed") nextStatus = "open";
+    else if ((message || images.length > 0) && request.status === "closed") nextStatus = "open";
     if (nextStatus && nextStatus !== request.status) {
       await supabaseAdmin
         .from("support_requests")

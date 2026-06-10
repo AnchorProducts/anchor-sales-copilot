@@ -3,6 +3,7 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { sendPushToTool } from "@/lib/push/send";
+import { getToolRecipientEmails } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,21 +44,9 @@ async function sendNotableProjectEmail(params: {
 
   const resend = new Resend(resendKey);
 
-  // Admin-configured recipients (notification_settings) take precedence; fall
-  // back to the env var, then the shared reports address.
-  let configured: string[] = [];
-  try {
-    const { data } = await supabaseAdmin
-      .from("notification_settings")
-      .select("notable_project_emails")
-      .eq("id", 1)
-      .maybeSingle();
-    const list = (data?.notable_project_emails as string[] | null) ?? [];
-    configured = list.map((e) => clean(e)).filter(Boolean);
-  } catch {
-    configured = [];
-  }
-
+  // Recipients = the notable_project tool's assigned users + raw emails, with an
+  // env fallback so a submission never goes nowhere.
+  const configured = await getToolRecipientEmails("notable_project");
   const to =
     configured.length > 0
       ? configured

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendPushToTool } from "@/lib/push/send";
+import { emailToolUsers } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,6 +119,10 @@ export async function POST(req: NextRequest) {
         body: `${okCount} photo${okCount === 1 ? "" : "s"} uploaded for ${(product as any).name || "a tackle box"}.`,
         url: "/admin/asset-reviews",
         tag: `asset-${productId}`,
+      });
+      void emailToolUsers("asset_review", {
+        subject: "Photos awaiting review",
+        text: `${okCount} photo${okCount === 1 ? "" : "s"} uploaded for ${(product as any).name || "a tackle box"} and are awaiting review.`,
       });
     }
     return NextResponse.json({ results, failed: failed.length });
