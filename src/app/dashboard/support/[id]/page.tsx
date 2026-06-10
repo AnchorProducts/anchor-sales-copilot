@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MessageAttachments, { type SupportAttachmentView } from "@/app/components/support/MessageAttachments";
+import ImagePicker from "@/app/components/support/ImagePicker";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -26,6 +28,7 @@ type Message = {
   author_id: string;
   author_role: string | null;
   body: string;
+  attachments?: SupportAttachmentView[];
   created_at: string;
 };
 
@@ -52,6 +55,7 @@ export default function SupportThreadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [reply, setReply] = useState("");
+  const [replyImages, setReplyImages] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -89,17 +93,17 @@ export default function SupportThreadPage() {
     if (sending) return;
     setSendError(null);
     const m = reply.trim();
-    if (!m) { setSendError("Type a reply first."); return; }
+    if (!m && replyImages.length === 0) { setSendError("Type a reply or add an image first."); return; }
     try {
       setSending(true);
-      const res = await fetch(`/api/support/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: m }),
-      });
+      const fd = new FormData();
+      fd.append("message", m);
+      for (const f of replyImages) fd.append("images", f);
+      const res = await fetch(`/api/support/${id}`, { method: "POST", body: fd });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Failed to send.");
       setReply("");
+      setReplyImages([]);
       await load();
     } catch (e) {
       setSendError((e as Error).message);
@@ -162,6 +166,7 @@ export default function SupportThreadPage() {
                       <span className="text-[var(--anchor-gray)]">{formatStamp(m.created_at)}</span>
                     </div>
                     <div className="mt-2 whitespace-pre-wrap text-sm text-[var(--anchor-deep)]">{m.body}</div>
+                    <MessageAttachments attachments={m.attachments} />
                   </li>
                 );
               })}
@@ -178,6 +183,7 @@ export default function SupportThreadPage() {
                   placeholder="Add more detail or follow up here."
                   className="block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
                 />
+                <ImagePicker images={replyImages} onChange={setReplyImages} />
                 {sendError && (
                   <div className="rounded-xl bg-[#fef2f2] px-3 py-2 text-sm text-[#991b1b]">{sendError}</div>
                 )}

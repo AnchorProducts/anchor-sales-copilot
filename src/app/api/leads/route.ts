@@ -3,7 +3,8 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { resolveRepsByKind, resolveStatesForUser } from "@/lib/sales/regions";
-import { sendPushToTool } from "@/lib/push/send";
+import { sendPushToTool, sendPushToEmails } from "@/lib/push/send";
+import { emailToolUsers } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -378,17 +379,18 @@ export async function POST(req: Request) {
     // Pass the project ZIP so ZIP-split territories resolve to one rep, e.g. a
     // TX lead routes to Daymon (Houston/Gulf) or Robert (rest of TX), not both.
     const { internal: internalReps, external: externalReps } = await resolveRepsByKind(country, state, zip);
-    // Notify every internal (inside) rep configured for the project's state.
-    // Fall back to the external reps when no internal contact is set yet.
-    const notifyReps = (internalReps.length > 0 ? internalReps : externalReps)
-      .filter((r) => clean(r.email));
-    const notify_emails = notifyReps.map((r) => clean(r.email).toLowerCase()).filter(Boolean);
+    // Notify BOTH the internal (inside) and external (outside) reps configured
+    // for the project's state — internal first — deduped by email.
+    const notifyReps = [...internalReps, ...externalReps].filter((r) => clean(r.email));
+    const notify_emails = Array.from(
+      new Set(notifyReps.map((r) => clean(r.email).toLowerCase()).filter(Boolean))
+    );
     // Snapshot a primary contact onto the lead row for display/back-compat.
     const primaryExternal = externalReps[0] || null;
     const outside_sales_name = primaryExternal?.name || null;
     const outside_sales_email = primaryExternal?.email || null;
-    const inside_sales_name = notifyReps[0]?.name || outside_sales_name;
-    const inside_sales_email = notify_emails[0] || outside_sales_email;
+    const inside_sales_name = internalReps[0]?.name || outside_sales_name;
+    const inside_sales_email = (internalReps[0]?.email || "").toLowerCase() || outside_sales_email;
     const notification_email = inside_sales_email;
     const notification_name = inside_sales_name;
     const hasAssignment = internalReps.length > 0 || externalReps.length > 0;
@@ -444,10 +446,24 @@ export async function POST(req: Request) {
 
     const leadId = leadRow.id as string;
 
-    // Push: notify assigned users of a new consult (fire-and-forget).
+    // Notify assigned users of a new consult — both push and email (fire-and-forget).
     void sendPushToTool("new_consult", {
       title: "New consult submitted",
       body: customer_company || "A new consult was submitted.",
+      url: `/dashboard/opportunities/${leadId}`,
+      tag: `consult-${leadId}`,
+    });
+    void emailToolUsers("new_consult", {
+      subject: `New consult — ${customer_company || leadId.slice(0, 8)}`,
+      text: `A new consult was submitted${customer_company ? ` for ${customer_company}` : ""}.\n\nView: ${buildLeadDashboardUrl(req, leadId)}`,
+    });
+
+    // Regional routing: push the internal sales rep(s) for the submitter's state
+    // (they already get the email below). Same tag as above so a rep who is also
+    // a new_consult assignee sees one notification, not two.
+    void sendPushToEmails(notify_emails, {
+      title: "New consult in your region",
+      body: `${customer_company || "A new consult"} — ${upper(state)}`,
       url: `/dashboard/opportunities/${leadId}`,
       tag: `consult-${leadId}`,
     });
