@@ -37,3 +37,55 @@ export function marketingCategoriesLabel(keys: string[] | null | undefined): str
 // The per-category recipient map persisted on notification_settings. Keys are
 // category keys (above) plus the special "default" fallback. Values are emails.
 export type MarketingRecipients = Record<string, string>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Order status workflow
+//
+// `new → processing → shipped → fulfilled` is the linear progress path the
+// tracker renders as a stepper. `cancelled` is a terminal off-path state. Both
+// the rep history view and the admin status editor read from this list so the
+// allowed values never drift from the DB check constraint.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type MarketingOrderStatus = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+// Ordered progress steps shown in the tracker (excludes "cancelled").
+export const MARKETING_ORDER_PROGRESS: MarketingOrderStatus[] = [
+  { key: "new", label: "New", description: "Order received." },
+  { key: "processing", label: "Processing", description: "Being prepared by the marketing team." },
+  { key: "shipped", label: "Shipped", description: "On its way to you." },
+  { key: "fulfilled", label: "Fulfilled", description: "Delivered and complete." },
+];
+
+export const MARKETING_ORDER_CANCELLED: MarketingOrderStatus = {
+  key: "cancelled",
+  label: "Cancelled",
+  description: "This order was cancelled.",
+};
+
+// Every assignable status (progress steps + cancelled).
+export const MARKETING_ORDER_STATUSES: MarketingOrderStatus[] = [
+  ...MARKETING_ORDER_PROGRESS,
+  MARKETING_ORDER_CANCELLED,
+];
+
+export const MARKETING_ORDER_STATUS_KEYS = MARKETING_ORDER_STATUSES.map((s) => s.key);
+
+export function isMarketingOrderStatus(key: string): boolean {
+  return MARKETING_ORDER_STATUS_KEYS.includes(key);
+}
+
+export function marketingOrderStatusLabel(key: string | null | undefined): string {
+  if (!key) return MARKETING_ORDER_PROGRESS[0].label;
+  return MARKETING_ORDER_STATUSES.find((s) => s.key === key)?.label || key;
+}
+
+// Index of a status within the progress path; -1 for cancelled/unknown.
+export function marketingOrderProgressIndex(key: string | null | undefined): number {
+  if (!key) return 0;
+  return MARKETING_ORDER_PROGRESS.findIndex((s) => s.key === key);
+}

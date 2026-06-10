@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import MarketingOrderForm from "@/app/components/marketing/MarketingOrderForm";
+import MarketingOrderHistory from "@/app/components/marketing/MarketingOrderHistory";
 import { Card } from "@/app/components/ui/Card";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -12,6 +14,7 @@ export default function MarketingOrdersPage() {
   // Internal or external sales may submit; admins must "View app as" a sales
   // role to preview (admin-view is blocked).
   const { ready } = useFormAccess("sales");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const { t } = useTranslation();
   return (
@@ -34,7 +37,10 @@ export default function MarketingOrdersPage() {
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : (
-          <MarketingOrderForm />
+          <>
+            <MarketingOrderForm onSubmitted={() => setRefreshKey((k) => k + 1)} />
+            <MarketingOrderHistory refreshKey={refreshKey} />
+          </>
         )}
       </div>
     </main>

@@ -18,7 +18,7 @@ type UserProfile = {
   email: string | null;
 };
 
-export default function MarketingOrderForm() {
+export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () => void } = {}) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -136,6 +136,7 @@ export default function MarketingOrderForm() {
       setShipZip("");
       setNotes("");
       setSubmitting(false);
+      onSubmitted?.();
     } catch (e: any) {
       setError(e?.message || "Failed to submit order.");
       setSubmitting(false);
