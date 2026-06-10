@@ -111,6 +111,29 @@ export default function AdminMarketingOrdersPage() {
     }
   }
 
+  async function deleteOrder(id: string) {
+    if (!window.confirm("Delete this order from history? This can’t be undone.")) return;
+    setSavingId(id);
+    setUpdateErr(null);
+    const prev = items;
+    setItems((list) => list.filter((o) => o.id !== id)); // optimistic
+    try {
+      const res = await fetch(`/api/marketing-orders?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to delete order.");
+        setItems(prev);
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to delete order.");
+      setItems(prev);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -205,6 +228,15 @@ export default function AdminMarketingOrdersPage() {
                           ))}
                         </Select>
                         <span className="text-xs text-[var(--anchor-gray)]">{formatDateTime(o.created_at)}</span>
+                        <button
+                          type="button"
+                          onClick={() => deleteOrder(o.id)}
+                          disabled={savingId === o.id}
+                          title="Delete this order from history"
+                          className="inline-flex h-9 items-center rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
 

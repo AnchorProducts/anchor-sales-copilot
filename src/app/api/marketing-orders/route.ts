@@ -360,3 +360,27 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: e?.message || "Failed to update order." }, { status: 500 });
   }
 }
+
+// Admin-only: permanently delete an order from history. id passed as ?id=.
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await supabaseRoute();
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const profile = await getProfile(auth.user.id);
+    if (clean(profile?.role) !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const id = clean(new URL(req.url).searchParams.get("id"));
+    if (!id) return NextResponse.json({ error: "Missing order id." }, { status: 400 });
+
+    const { error } = await supabaseAdmin.from("marketing_orders").delete().eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true, id });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to delete order." }, { status: 500 });
+  }
+}
