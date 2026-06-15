@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import StateMultiSelect from "@/app/components/ui/StateMultiSelect";
 
 // A merged person: may have a login (profileId), an OEM roster entry
 // (contactId), or both. The editor writes to whichever record(s) apply.
@@ -25,6 +26,7 @@ export type Person = {
   anchorCommission: boolean; // OEM contacts: on an Anchor commission arrangement
   role: string | null; // profile role
   serviceState: string | null;
+  serviceStates: string[] | null;
   serviceZip: string | null;
   signedUp: boolean;
 };
@@ -75,8 +77,15 @@ export function PersonEditorModal({
   const [region, setRegion] = useState(person.region);
   const [anchorCommission, setAnchorCommission] = useState(person.anchorCommission);
   const [role, setRole] = useState<RoleKey>(asRoleKey(person.role));
-  const [serviceState, setServiceState] = useState(person.serviceState ?? "");
+  const [serviceStates, setServiceStates] = useState<string[]>(
+    person.serviceStates && person.serviceStates.length
+      ? person.serviceStates
+      : person.serviceState
+        ? [person.serviceState]
+        : []
+  );
   const [serviceZip, setServiceZip] = useState(person.serviceZip ?? "");
+  const coversTexas = serviceStates.some((s) => s.trim().toUpperCase() === "TX");
   const [newOem, setNewOem] = useState("");
 
   const [busy, setBusy] = useState(false);
@@ -116,7 +125,10 @@ export function PersonEditorModal({
     try {
       // 1) Profile (login) — only if this person has an account.
       if (person.profileId) {
-        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_state: serviceState, service_zip: serviceZip, anchor_commission: anchorCommission };
+        const states = Array.from(
+          new Set(serviceStates.map((s) => s.trim().toUpperCase()).filter(Boolean))
+        );
+        const patch: Record<string, unknown> = { id: person.profileId, full_name: fullName, phone, company, service_states: states, service_zip: states.includes("TX") ? serviceZip : "", anchor_commission: anchorCommission };
         if (email.trim().toLowerCase() !== person.email.trim().toLowerCase()) patch.email = email.trim();
         if (!isSelf) patch.role = role;
         const res = await fetch("/api/admin/users", {
@@ -241,8 +253,13 @@ export function PersonEditorModal({
               <Text label="Email" type="email" value={email} onChange={setEmail} />
               <Text label="Phone" type="tel" value={phone} onChange={setPhone} />
               <Text label="Company" value={company} onChange={setCompany} />
-              {hasLogin && <Text label="Service area / state" value={serviceState} onChange={setServiceState} />}
-              {hasLogin && serviceState.trim().toUpperCase() === "TX" && (
+              {hasLogin && (
+                <label className="grid gap-1.5 text-sm sm:col-span-2">
+                  <span className="font-semibold">Service area / states</span>
+                  <StateMultiSelect value={serviceStates} onChange={setServiceStates} />
+                </label>
+              )}
+              {hasLogin && coversTexas && (
                 <Text label="Service ZIP (TX — Houston/Gulf vs. rest)" value={serviceZip} onChange={setServiceZip} />
               )}
             </div>
