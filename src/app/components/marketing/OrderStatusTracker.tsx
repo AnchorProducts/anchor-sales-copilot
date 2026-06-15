@@ -3,6 +3,7 @@
 import {
   MARKETING_ORDER_PROGRESS,
   MARKETING_ORDER_CANCELLED,
+  MARKETING_ORDER_DELAYED,
   marketingOrderProgressIndex,
 } from "@/lib/marketingOrders";
 
@@ -11,6 +12,16 @@ import {
 // shows a single terminal banner instead.
 export default function OrderStatusTracker({ status }: { status: string | null | undefined }) {
   const key = status || "new";
+
+  // "delayed" details (projected ship date + reason) are rendered by the parent
+  // via OrderDelayBanner; show a compact off-path banner here for safety.
+  if (key === MARKETING_ORDER_DELAYED.key) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+        {MARKETING_ORDER_DELAYED.label} — {MARKETING_ORDER_DELAYED.description}
+      </div>
+    );
+  }
 
   if (key === MARKETING_ORDER_CANCELLED.key) {
     return (
