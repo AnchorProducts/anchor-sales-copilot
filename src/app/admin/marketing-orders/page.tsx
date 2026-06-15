@@ -77,6 +77,23 @@ export default function AdminMarketingOrdersPage() {
   // Falls back to the saved order values when a key isn't present.
   const [delayDateDraft, setDelayDateDraft] = useState<Record<string, string>>({});
   const [delayNotesDraft, setDelayNotesDraft] = useState<Record<string, string>>({});
+  // Two views: "active" (in-flight orders) and "archived" (fulfilled/cancelled).
+  const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+
+  const isArchived = (o: MarketingOrder) =>
+    o.status === "fulfilled" || o.status === "cancelled";
+
+  // Counts per view, so each tab can show a badge.
+  const counts = useMemo(() => {
+    let archived = 0;
+    for (const o of items) if (isArchived(o)) archived += 1;
+    return { active: items.length - archived, archived };
+  }, [items]);
+
+  const filteredItems = useMemo(
+    () => items.filter((o) => (activeTab === "archived" ? isArchived(o) : !isArchived(o))),
+    [items, activeTab]
+  );
 
   async function loadOrders() {
     const res = await fetch("/api/marketing-orders", { cache: "no-store" });
@@ -243,13 +260,49 @@ export default function AdminMarketingOrdersPage() {
               <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{updateErr}</Card>
             )}
 
+            {items.length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-2 border-b border-[var(--border-default)] pb-3">
+                {([
+                  { key: "active", label: "Active", count: counts.active },
+                  { key: "archived", label: "Archived", count: counts.archived },
+                ] as const).map((tab) => {
+                  const active = activeTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "bg-[var(--anchor-deep)] text-white"
+                          : "bg-[var(--surface-soft)] text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/60"
+                      }`}
+                    >
+                      {tab.label}
+                      <span
+                        className={`rounded-full px-1.5 text-[10px] ${
+                          active ? "bg-white/20" : "bg-black/10"
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {items.length === 0 && !loadErr ? (
               <Card className="p-6 text-center text-sm text-[var(--anchor-gray)]">
                 No marketing orders yet.
               </Card>
+            ) : filteredItems.length === 0 ? (
+              <Card className="p-6 text-center text-sm text-[var(--anchor-gray)]">
+                {activeTab === "archived" ? "No archived orders." : "No active orders."}
+              </Card>
             ) : (
               <div className="space-y-3">
-                {items.map((o) => (
+                {filteredItems.map((o) => (
                   <Card key={o.id} className="p-5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
