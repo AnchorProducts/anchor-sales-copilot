@@ -14,6 +14,8 @@ type AssetRow = {
   path: string;
   visibility: "public" | "internal";
   created_at: string;
+  revision: string | null;
+  last_updated: string | null;
 };
 
 type ProfileRow = { id: string; role: string };
@@ -43,6 +45,16 @@ function isMobileDevice() {
 function isDocxPath(path: string) {
   const p = String(path || "").toLowerCase().split("?")[0];
   return p.endsWith(".docx");
+}
+
+// "May 12, 2026" — used for the revision / last-updated badge.
+function formatDocDate(s: string | null) {
+  if (!s) return "—";
+  try {
+    return new Date(s).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  } catch {
+    return s;
+  }
 }
 
 function shouldDownload(asset: AssetRow) {
@@ -88,9 +100,14 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   const [uploading, setUploading] = useState(false);
   const [formMsg, setFormMsg] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [revision, setRevision] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [docxFile, setDocxFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+
+  // Per-card revision editor (internal users only).
+  const [revDrafts, setRevDrafts] = useState<Record<string, string>>({});
+  const [savingRevId, setSavingRevId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -145,7 +162,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
       // docs for this internal list
       const { data: a, error: aErr } = await supabase
         .from("assets")
-        .select("id,title,category_key,type,path,visibility,created_at")
+        .select("id,title,category_key,type,path,visibility,created_at,revision,last_updated")
         .eq("product_id", productId)
         .eq("visibility", "internal")
         .order("created_at", { ascending: false });
@@ -188,6 +205,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
       const fd = new FormData();
       fd.append("productId", productId);
       fd.append("title", t);
+      fd.append("revision", revision.trim());
       fd.append("pdf", pdfFile);
       fd.append("docx", docxFile);
 
@@ -219,6 +237,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
       }
 
       setTitle("");
+      setRevision("");
       setPdfFile(null);
       setDocxFile(null);
       setFileInputKey((k) => k + 1);
@@ -228,6 +247,36 @@ export default function InternalDocsList({ productId }: { productId: string }) {
     } catch (err: any) {
       setFormMsg(err?.message || "Upload failed.");
       setUploading(false);
+    }
+  }
+
+  // Set a document's revision label to match the QMS master. Changing it triggers
+  // the controlled-revision email (server-side).
+  async function saveRevision(asset: AssetRow) {
+    const next = (revDrafts[asset.id] ?? asset.revision ?? "").trim();
+    if (next === (asset.revision ?? "")) return; // no change
+    setSavingRevId(asset.id);
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/internal-assets/revision", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: asset.id, revision: next }),
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setFormMsg(json?.error || "Failed to update revision.");
+      } else {
+        setRevDrafts((d) => {
+          const { [asset.id]: _omit, ...rest } = d;
+          return rest;
+        });
+        await load();
+      }
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : "Failed to update revision.");
+    } finally {
+      setSavingRevId(null);
     }
   }
 
@@ -302,27 +351,68 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   const openInNewTab = !isPreviewable || mobile;
 
   return (
-    <a
-  key={a.id}
-  href={href}
-  {...(openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-  className="block w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 text-left transition hover:bg-black/[0.03]"
->
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
-          <div className="mt-1 text-[12px] text-[#76777B] truncate">
-            {a.category_key || a.type} • {a.visibility}
+    <div
+      key={a.id}
+      className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white"
+    >
+      <a
+        href={href}
+        {...(openInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        className="block w-full p-4 text-left transition hover:bg-black/[0.03]"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-black truncate">{a.title || "Untitled"}</div>
+            <div className="mt-1 text-[12px] text-[#76777B] truncate">
+              {a.category_key || a.type} • {a.visibility}
+            </div>
+            {/* Revision label — subtle, muted. Confirms the portal copy matches
+                the QMS master. Shows just the date when no revision is set. */}
+            <div className="mt-1 text-[11px] text-[#76777B]">
+              {a.revision ? (
+                <span className="font-semibold text-[#11500F]">{a.revision} · </span>
+              ) : null}
+              Updated {formatDocDate(a.last_updated ?? a.created_at)}
+            </div>
           </div>
-        </div>
 
-        <div className="w-full sm:w-auto sm:shrink-0">
-          <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
-            {isPreviewable ? "Open →" : "Download →"}
+          <div className="w-full sm:w-auto sm:shrink-0">
+            <div className="inline-flex w-full items-center justify-center rounded-xl bg-[#047835] px-3 py-2 text-[12px] font-semibold text-white whitespace-nowrap sm:w-auto">
+              {isPreviewable ? "Open →" : "Download →"}
+            </div>
           </div>
         </div>
-      </div>
-    </a>
+      </a>
+
+      {isInternalUser && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-black/5 px-4 py-2.5">
+          <label className="text-[11px] font-semibold text-[#76777B]" htmlFor={`rev-${a.id}`}>
+            Revision
+          </label>
+          <input
+            id={`rev-${a.id}`}
+            value={revDrafts[a.id] ?? a.revision ?? ""}
+            onChange={(e) => setRevDrafts((d) => ({ ...d, [a.id]: e.target.value }))}
+            placeholder="e.g. Rev C"
+            className="h-8 w-28 rounded-lg border border-black/10 bg-[#F6F7F8] px-2 text-[12px] outline-none focus:border-[#047835]"
+          />
+          <button
+            type="button"
+            onClick={() => saveRevision(a)}
+            disabled={
+              savingRevId === a.id ||
+              (revDrafts[a.id] ?? a.revision ?? "").trim() === (a.revision ?? "")
+            }
+            className="inline-flex h-8 items-center rounded-lg bg-[#047835] px-3 text-[12px] font-semibold text-white disabled:opacity-50"
+          >
+            {savingRevId === a.id ? "Saving…" : "Save"}
+          </button>
+          <span className="text-[11px] text-[#76777B]">
+            Match the QMS master — saving notifies the revision owner.
+          </span>
+        </div>
+      )}
+    </div>
   );
 })}
 
@@ -346,6 +436,18 @@ export default function InternalDocsList({ productId }: { productId: string }) {
                 placeholder="Agreement title (ex: Independent Rep Agreement v1)"
                 className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
               />
+
+              <div>
+                <input
+                  value={revision}
+                  onChange={(e) => setRevision(e.target.value)}
+                  placeholder="Revision (optional, ex: Rev C) — match the QMS master"
+                  className="h-10 w-full rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                />
+                <div className="mt-1 text-[11px] text-[#76777B]">
+                  Type the revision number that matches the QMS master. Leave blank if not controlled.
+                </div>
+              </div>
 
               <div className="grid gap-3 sm:grid-cols-2" key={fileInputKey}>
                 <label className="rounded-2xl border border-black/10 bg-[#F6F7F8] p-4">

@@ -52,6 +52,11 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     label: "Weekly analytics report",
     description: "The Friday analytics summary — email + push.",
   },
+  {
+    key: "document_revision",
+    label: "Document revision change",
+    description: "A controlled document's revision label is updated (update the QMS master).",
+  },
 ];
 
 export const NOTIFICATION_TOOL_KEYS = NOTIFICATION_TOOLS.map((t) => t.key);
