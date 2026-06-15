@@ -231,7 +231,7 @@ export async function GET() {
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,categories,items,quantity,needed_by,ship_to,notes,status,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
+        "id,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -246,8 +246,9 @@ export async function GET() {
 
     const orders = (data || []) as any[];
 
-    // Resolve who last updated each order's status, so the submitting rep can
-    // see which admin to contact. One batched lookup; mapped onto each order.
+    // Resolve who last updated each order's status (also the person who set any
+    // delay), so the submitting rep knows which admin to contact. One batched
+    // lookup; mapped onto each order.
     const updaterIds = Array.from(
       new Set(orders.map((o) => o.updated_by).filter((v): v is string => !!v))
     );
@@ -292,32 +293,80 @@ export async function PATCH(req: Request) {
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const id = clean(body?.id);
-    const status = clean(body?.status);
     if (!id) return NextResponse.json({ error: "Missing order id." }, { status: 400 });
-    if (!status || !isMarketingOrderStatus(status)) {
-      return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+
+    const now = new Date().toISOString();
+    const updates: Record<string, unknown> = { updated_by: auth.user.id, updated_at: now };
+
+    // A PATCH may change the status and/or the delay details (projected ship date
+    // + reason). Each is optional; at least one real change must be present.
+    const hasStatus = body?.status !== undefined;
+    const hasProjected = body?.projected_ship_date !== undefined;
+    const hasDelayNotes = body?.delay_notes !== undefined;
+
+    let status = "";
+    if (hasStatus) {
+      status = clean(body?.status);
+      if (!status || !isMarketingOrderStatus(status)) {
+        return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+      }
+      updates.status = status;
+    }
+
+    // Projected ship date: empty clears it; otherwise must be a YYYY-MM-DD date.
+    const projectedShipDate = hasProjected ? clean(body?.projected_ship_date) || null : undefined;
+    if (projectedShipDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(projectedShipDate) || Number.isNaN(Date.parse(projectedShipDate))) {
+        return NextResponse.json({ error: "Projected ship date is invalid." }, { status: 400 });
+      }
+    }
+    const delayNotes = hasDelayNotes ? clean(body?.delay_notes) || null : undefined;
+
+    if (hasStatus && status !== "delayed") {
+      // Leaving the delayed state clears its details, so stale info never lingers.
+      updates.projected_ship_date = null;
+      updates.delay_notes = null;
+    } else {
+      if (hasProjected) updates.projected_ship_date = projectedShipDate;
+      if (hasDelayNotes) updates.delay_notes = delayNotes;
+    }
+
+    if (!hasStatus && !hasProjected && !hasDelayNotes) {
+      return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin
       .from("marketing_orders")
-      .update({ status, updated_by: auth.user.id, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq("id", id)
-      .select("id,status,updated_at")
+      .select("id,status,projected_ship_date,delay_notes,updated_at")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
-    void sendPushToTool("marketing_order_status", {
-      title: "Marketing order updated",
-      body: `Order ${String(id).slice(0, 8)} is now ${marketingOrderStatusLabel(status)}.`,
-      url: "/admin/marketing-orders",
-      tag: `mo-status-${id}`,
-    });
-    void emailToolUsers("marketing_order_status", {
-      subject: `Marketing order updated — ${marketingOrderStatusLabel(status)}`,
-      text: `Order ${String(id).slice(0, 8)} is now ${marketingOrderStatusLabel(status)}.`,
-    });
+    const shortId = String(id).slice(0, 8);
+
+    if (hasStatus) {
+      const label = marketingOrderStatusLabel(status);
+      let detail = `Order ${shortId} is now ${label}.`;
+      if (status === "delayed") {
+        const finalProjected = (data as any).projected_ship_date as string | null;
+        const finalNotes = (data as any).delay_notes as string | null;
+        if (finalProjected) detail += ` Projected ship date: ${finalProjected}.`;
+        if (finalNotes) detail += ` Reason: ${finalNotes}`;
+      }
+      void sendPushToTool("marketing_order_status", {
+        title: "Marketing order updated",
+        body: detail,
+        url: "/admin/marketing-orders",
+        tag: `mo-status-${id}`,
+      });
+      void emailToolUsers("marketing_order_status", {
+        subject: `Marketing order updated — ${label}`,
+        text: detail,
+      });
+    }
 
     return NextResponse.json({ ok: true, order: data });
   } catch (e: any) {

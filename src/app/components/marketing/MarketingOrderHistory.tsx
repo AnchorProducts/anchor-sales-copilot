@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
 import { marketingCategoriesLabel } from "@/lib/marketingOrders";
 import OrderStatusTracker from "./OrderStatusTracker";
+import OrderDelayBanner from "./OrderDelayBanner";
 
 type MarketingOrder = {
   id: string;
@@ -14,6 +15,8 @@ type MarketingOrder = {
   ship_to: string | null;
   notes: string | null;
   status: string | null;
+  projected_ship_date: string | null;
+  delay_notes: string | null;
   created_at: string | null;
   updated_at: string | null;
   updated_by_name: string | null;
@@ -116,10 +119,20 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
               </div>
 
               <div className="mt-4">
-                <OrderStatusTracker status={o.status} />
+                {o.status === "delayed" ? (
+                  <OrderDelayBanner
+                    projectedShipDate={o.projected_ship_date}
+                    notes={o.delay_notes}
+                    byName={o.updated_by_name}
+                    at={o.updated_at}
+                    contactEmail={o.updated_by_email}
+                  />
+                ) : (
+                  <OrderStatusTracker status={o.status} />
+                )}
               </div>
 
-              {(o.updated_by_name || o.updated_by_email) && (
+              {o.status !== "delayed" && (o.updated_by_name || o.updated_by_email) && (
                 <div className="mt-3 rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--anchor-gray)]">
                   Status updated by{" "}
                   <span className="font-semibold text-[var(--anchor-deep)]">

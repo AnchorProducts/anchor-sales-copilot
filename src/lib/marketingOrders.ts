@@ -73,9 +73,10 @@ export function normalizeMarketingRecipients(
 // Order status workflow
 //
 // `new → processing → shipped → fulfilled` is the linear progress path the
-// tracker renders as a stepper. `cancelled` is a terminal off-path state. Both
-// the rep history view and the admin status editor read from this list so the
-// allowed values never drift from the DB check constraint.
+// tracker renders as a stepper. `delayed` and `cancelled` are off-path states
+// shown as banners instead of steps; `delayed` carries a projected ship date and
+// a reason. Both the rep history view and the admin status editor read from this
+// list so the allowed values never drift from the DB check constraint.
 // ────────────────────────────────────────────────────────────────────────────
 
 export type MarketingOrderStatus = {
@@ -92,15 +93,23 @@ export const MARKETING_ORDER_PROGRESS: MarketingOrderStatus[] = [
   { key: "fulfilled", label: "Fulfilled", description: "Delivered and complete." },
 ];
 
+// Off-path: order is held up. Carries projected_ship_date + delay_notes.
+export const MARKETING_ORDER_DELAYED: MarketingOrderStatus = {
+  key: "delayed",
+  label: "Delayed",
+  description: "Held up — see the projected ship date and reason.",
+};
+
 export const MARKETING_ORDER_CANCELLED: MarketingOrderStatus = {
   key: "cancelled",
   label: "Cancelled",
   description: "This order was cancelled.",
 };
 
-// Every assignable status (progress steps + cancelled).
+// Every assignable status (progress steps + delayed + cancelled).
 export const MARKETING_ORDER_STATUSES: MarketingOrderStatus[] = [
   ...MARKETING_ORDER_PROGRESS,
+  MARKETING_ORDER_DELAYED,
   MARKETING_ORDER_CANCELLED,
 ];
 
