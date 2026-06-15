@@ -53,6 +53,9 @@ export async function POST(req: Request) {
     const fd = await req.formData();
     const productId = String(fd.get("productId") || "").trim();
     const title = String(fd.get("title") || "").trim();
+    // Manually-entered revision label that matches the QMS master (e.g. "Rev C").
+    // Optional; null until a human confirms it.
+    const revision = String(fd.get("revision") || "").trim() || null;
     const pdf = fd.get("pdf");
     const docx = fd.get("docx");
 
@@ -93,6 +96,7 @@ export async function POST(req: Request) {
     if (upDocErr) return NextResponse.json({ error: upDocErr.message }, { status: 400 });
 
     // insert 2 assets rows (internal only)
+    const nowIso = new Date().toISOString();
     const { error: insErr } = await supabaseAdmin.from("assets").insert([
       {
         product_id: productId,
@@ -101,6 +105,9 @@ export async function POST(req: Request) {
         category_key: "rep_agreement_pdf",
         path: pdfPath,
         visibility: "internal",
+        revision,
+        last_updated: nowIso,
+        updated_by: user.id,
       },
       {
         product_id: productId,
@@ -109,6 +116,9 @@ export async function POST(req: Request) {
         category_key: "rep_agreement_docx",
         path: docxPath,
         visibility: "internal",
+        revision,
+        last_updated: nowIso,
+        updated_by: user.id,
       },
     ]);
 
