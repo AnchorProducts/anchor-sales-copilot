@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
-import { Input, Select } from "@/app/components/ui/Field";
-import { US_STATES } from "@/lib/sales/states";
+import { Input } from "@/app/components/ui/Field";
+import StateMultiSelect from "@/app/components/ui/StateMultiSelect";
 import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -40,8 +40,9 @@ export default function SettingsPage() {
   const [company, setCompany]   = useState("");
   const [phone, setPhone]       = useState("");
   const [email, setEmail]       = useState("");
-  const [serviceState, setServiceState] = useState("");
-  const [serviceZip, setServiceZip]     = useState("");
+  const [serviceStates, setServiceStates] = useState<string[]>([]);
+  const [serviceZip, setServiceZip]       = useState("");
+  const coversTexas = serviceStates.some((s) => s.trim().toUpperCase() === "TX");
 
   // NetSuite sync (internal reps only)
   const [isInternalRep, setIsInternalRep] = useState(false);
@@ -62,7 +63,7 @@ export default function SettingsPage() {
 
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name,company,phone,service_state,service_zip,role")
+        .select("full_name,company,phone,service_state,service_states,service_zip,role")
         .eq("id", ud.user.id)
         .maybeSingle();
 
@@ -71,7 +72,15 @@ export default function SettingsPage() {
         setFullName((prof as any).full_name || "");
         setCompany((prof as any).company   || "");
         setPhone((prof as any).phone       || "");
-        setServiceState((prof as any).service_state || "");
+        // Prefer the multi-state array; fall back to the legacy single column.
+        const states = (prof as any).service_states as string[] | null;
+        setServiceStates(
+          Array.isArray(states) && states.length
+            ? states
+            : (prof as any).service_state
+              ? [(prof as any).service_state]
+              : []
+        );
         setServiceZip((prof as any).service_zip || "");
         const role = String((prof as any).role || "");
         setIsInternalRep(role === "admin" || role === "anchor_rep");
@@ -108,10 +117,15 @@ export default function SettingsPage() {
     const { data: ud } = await supabase.auth.getUser();
     if (!ud.user) { setSaving(false); router.replace("/"); return; }
 
+    // Normalize, uppercase, and de-dupe the selected states.
+    const states = Array.from(
+      new Set(serviceStates.map((s) => s.trim().toUpperCase()).filter(Boolean))
+    );
+
     // Texas is split by ZIP between reps, so a TX service area needs a ZIP for
     // us to show the right Anchor rep.
     const zip = serviceZip.replace(/\D/g, "").slice(0, 5);
-    if (serviceState.trim().toUpperCase() === "TX" && zip.length < 5) {
+    if (states.includes("TX") && zip.length < 5) {
       setSaving(false);
       setSaveErr("Enter your 5-digit ZIP code for Texas so we can match you to the right rep.");
       return;
@@ -123,8 +137,10 @@ export default function SettingsPage() {
         full_name: fullName.trim() || null,
         company:   company.trim()  || null,
         phone:     phone.trim()    || null,
-        service_state: serviceState.trim() || null,
-        service_zip: zip || null,
+        service_states: states,
+        // Keep the legacy single column synced to the first state.
+        service_state: states[0] || null,
+        service_zip: states.includes("TX") ? zip || null : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", ud.user.id);
@@ -209,14 +225,13 @@ export default function SettingsPage() {
 
               <label className="grid gap-1.5 text-sm">
                 <span className="font-semibold">{t("serviceArea")}</span>
-                <Select value={serviceState} onChange={(e) => setServiceState(e.target.value)} className="h-11 px-3 text-sm">
-                  <option value="">{t("serviceAreaPlaceholder")}</option>
-                  {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
-                </Select>
-                <span className="text-[11px] text-[var(--anchor-gray)]">{t("serviceAreaHint")}</span>
+                <StateMultiSelect value={serviceStates} onChange={setServiceStates} />
+                <span className="text-[11px] text-[var(--anchor-gray)]">
+                  {t("serviceAreaHint")} Add every state you cover — each one connects you to its sales reps.
+                </span>
               </label>
 
-              {serviceState.trim().toUpperCase() === "TX" && (
+              {coversTexas && (
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-semibold">ZIP code</span>
                   <Input
