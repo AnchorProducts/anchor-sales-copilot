@@ -71,7 +71,7 @@ export function mergeEmails(...lists: (string[] | string | null | undefined)[]):
 // Best-effort; no-op if Resend/recipients are missing.
 export async function emailToolUsers(
   toolKey: string,
-  opts: { subject: string; text: string }
+  opts: { subject: string; text: string; html?: string }
 ): Promise<void> {
   try {
     const key = (process.env.RESEND_API_KEY || "").trim();
@@ -81,7 +81,15 @@ export async function emailToolUsers(
     const from =
       (process.env.LEAD_NOTIFICATIONS_FROM || "").trim() || "Anchor Co-Pilot <reports@anchorp.com>";
     const resend = new Resend(key);
-    await resend.emails.send({ from, to, subject: opts.subject, text: opts.text });
+    // `text` is always sent as the plain-text fallback; `html` upgrades clients
+    // that render it.
+    await resend.emails.send({
+      from,
+      to,
+      subject: opts.subject,
+      text: opts.text,
+      ...(opts.html ? { html: opts.html } : {}),
+    });
   } catch (e) {
     console.warn("[notify] emailToolUsers failed:", e);
   }

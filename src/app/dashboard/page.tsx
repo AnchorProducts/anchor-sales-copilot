@@ -174,12 +174,10 @@ const initials = (s: string) =>
 function RepPopover({
   salesReps,
   internalReps,
-  serviceState,
   onClose,
 }: {
   salesReps: SalesRepLite[];
   internalReps: SalesRepLite[];
-  serviceState: string;
   onClose: () => void;
 }) {
   const row =
@@ -254,7 +252,7 @@ export default function DashboardPage() {
   const [booting, setBooting] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
-  const [serviceState, setServiceState] = useState<string>("");
+  const [serviceStates, setServiceStates] = useState<string[]>([]);
   const [serviceZip, setServiceZip] = useState<string>("");
   const [salesReps, setSalesReps] = useState<SalesRepLite[]>([]);
   const [internalReps, setInternalReps] = useState<SalesRepLite[]>([]);
@@ -324,7 +322,7 @@ export default function DashboardPage() {
 
       let { data: prof } = await supabase
         .from("profiles")
-        .select("role,user_type,email,service_state,service_zip,full_name,anchor_commission")
+        .select("role,user_type,email,service_state,service_states,service_zip,full_name,anchor_commission")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -351,7 +349,7 @@ export default function DashboardPage() {
             },
             { onConflict: "id" }
           )
-          .select("role,user_type,email,service_state,service_zip,full_name,anchor_commission")
+          .select("role,user_type,email,service_state,service_states,service_zip,full_name,anchor_commission")
           .single();
         prof = created ?? null;
       }
@@ -359,7 +357,15 @@ export default function DashboardPage() {
       if (!alive) return;
       const p = prof as Record<string, unknown> | null;
       setRole(String((p?.role as string) || ""));
-      setServiceState(String((p?.service_state as string) || ""));
+      // Prefer the multi-state array; fall back to the legacy single column.
+      const states = p?.service_states as string[] | null;
+      setServiceStates(
+        Array.isArray(states) && states.length
+          ? states
+          : p?.service_state
+            ? [String(p.service_state)]
+            : []
+      );
       setServiceZip(String((p?.service_zip as string) || ""));
       setFullName(String((p?.full_name as string) || (user.user_metadata?.full_name as string) || (user.email as string) || ""));
       setCanSeeCommission((p?.anchor_commission as boolean) === true);
@@ -385,26 +391,47 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [booting, supabase]);
 
-  // Fetch the assigned sales reps when the user's service state is known.
-  // A state can have multiple external reps; we show all of them.
+  // Fetch the assigned sales reps for every state the user covers. Each state
+  // can have multiple reps, and the user can cover multiple states — so we query
+  // per state and merge, de-duped by email (falling back to name).
+  const serviceStatesKey = serviceStates.join(",");
   useEffect(() => {
-    if (!serviceState) { setSalesReps([]); setInternalReps([]); return; }
+    if (serviceStates.length === 0) { setSalesReps([]); setInternalReps([]); return; }
     let alive = true;
     (async () => {
       try {
-        const qs = new URLSearchParams({ state: serviceState });
-        if (serviceZip) qs.set("zip", serviceZip);
-        const res = await fetch(`/api/sales-reps/by-state?${qs.toString()}`, { cache: "no-store" });
-        const json = await res.json().catch(() => null);
+        const results = await Promise.all(
+          serviceStates.map(async (state) => {
+            const qs = new URLSearchParams({ state });
+            // ZIP only narrows TX (Houston/Gulf vs. rest); harmless elsewhere.
+            if (serviceZip) qs.set("zip", serviceZip);
+            const res = await fetch(`/api/sales-reps/by-state?${qs.toString()}`, { cache: "no-store" });
+            const json = await res.json().catch(() => null);
+            return {
+              external: (Array.isArray(json?.reps) ? json.reps : []) as SalesRepLite[],
+              internal: (Array.isArray(json?.internal) ? json.internal : []) as SalesRepLite[],
+            };
+          })
+        );
         if (!alive) return;
-        setSalesReps(Array.isArray(json?.reps) ? json.reps : []);
-        setInternalReps(Array.isArray(json?.internal) ? json.internal : []);
+        const dedupe = (reps: SalesRepLite[]) => {
+          const seen = new Set<string>();
+          const out: SalesRepLite[] = [];
+          for (const r of reps) {
+            const key = (r.email || r.name || "").trim().toLowerCase();
+            if (key && !seen.has(key)) { seen.add(key); out.push(r); }
+          }
+          return out;
+        };
+        setSalesReps(dedupe(results.flatMap((r) => r.external)));
+        setInternalReps(dedupe(results.flatMap((r) => r.internal)));
       } catch {
         if (alive) { setSalesReps([]); setInternalReps([]); }
       }
     })();
     return () => { alive = false; };
-  }, [serviceState, serviceZip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceStatesKey, serviceZip]);
 
   // Fetch the user's most-recent feature so the hero reflects the last thing
   // they opened. Re-run whenever the dashboard regains focus — on mobile,
@@ -528,7 +555,7 @@ export default function DashboardPage() {
     ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "user" as IconName, tutorialKey: "stat-reps" }
     : isInternal
     ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
-    : { label: "Service State", value: serviceState || "—", trend: serviceState ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceState || "Set", tutorialKey: "stat-service-state" };
+    : { label: serviceStates.length > 1 ? "Service States" : "Service State", value: serviceStates.length ? serviceStates.join(", ") : "—", trend: serviceStates.length ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceStates.length ? serviceStates.join(", ") : "Set", tutorialKey: "stat-service-state" };
 
   const stat2 = isAdmin
     ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
@@ -836,7 +863,7 @@ export default function DashboardPage() {
                       <>
                         <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
                         <div className="absolute bottom-full right-0 z-[120] mb-3 w-64">
-                          <RepPopover salesReps={salesReps} internalReps={internalReps} serviceState={serviceState} onClose={() => setRepModalOpen(false)} />
+                          <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setRepModalOpen(false)} />
                         </div>
                       </>
                     )}
@@ -1029,7 +1056,7 @@ export default function DashboardPage() {
                           <>
                             <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
                             <div className="absolute bottom-full left-1/2 z-[120] mb-3 w-64 -translate-x-1/2">
-                              <RepPopover salesReps={salesReps} internalReps={internalReps} serviceState={serviceState} onClose={() => setRepModalOpen(false)} />
+                              <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setRepModalOpen(false)} />
                             </div>
                           </>
                         )}

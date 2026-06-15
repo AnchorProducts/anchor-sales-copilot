@@ -18,6 +18,116 @@ function clean(v: any) {
   return String(v || "").trim();
 }
 
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Absolute base URL for in-app links inside emails. Mirrors the leads route:
+// configured env first, then the request origin.
+function appBaseUrl(req: Request) {
+  const configured =
+    clean(process.env.NEXT_PUBLIC_APP_URL) ||
+    clean(process.env.NEXT_PUBLIC_SITE_URL) ||
+    clean(process.env.VERCEL_URL);
+  if (configured) return configured.startsWith("http") ? configured : `https://${configured}`;
+  return new URL(req.url).origin;
+}
+
+// Friendly calendar-date label for emails (input is YYYY-MM-DD).
+function emailDate(s: string | null) {
+  if (!s) return null;
+  try {
+    return new Date(`${s}T00:00:00`).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return s;
+  }
+}
+
+// Per-status badge colors for the HTML email.
+function statusBadgeStyle(status: string): { bg: string; fg: string } {
+  switch (status) {
+    case "delayed":
+      return { bg: "#fef3c7", fg: "#92400e" };
+    case "cancelled":
+      return { bg: "#fee2e2", fg: "#991b1b" };
+    case "fulfilled":
+      return { bg: "#9CE2BB", fg: "#11500F" };
+    case "shipped":
+    case "processing":
+      return { bg: "#dcfce7", fg: "#047835" };
+    default: // new
+      return { bg: "#eef2f5", fg: "#76777B" };
+  }
+}
+
+// Branded HTML for the "order status updated" email.
+function renderStatusEmail(opts: {
+  label: string;
+  status: string;
+  shortId: string;
+  orderUrl: string;
+  projectedShipDate: string | null;
+  delayNotes: string | null;
+}): string {
+  const badge = statusBadgeStyle(opts.status);
+  const projected = emailDate(opts.projectedShipDate);
+
+  const delayBlock =
+    opts.status === "delayed" && (projected || opts.delayNotes)
+      ? `
+      <tr><td style="padding:0 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;">
+          <tr><td style="padding:16px 18px;font-family:Helvetica,Arial,sans-serif;color:#92400e;">
+            <div style="font-size:13px;font-weight:700;letter-spacing:.02em;">⏳ This order is delayed</div>
+            ${projected ? `<div style="margin-top:8px;font-size:14px;"><strong>Projected ship date:</strong> ${escapeHtml(projected)}</div>` : ""}
+            ${opts.delayNotes ? `<div style="margin-top:6px;font-size:14px;line-height:1.5;">${escapeHtml(opts.delayNotes)}</div>` : ""}
+          </td></tr>
+        </table>
+      </td></tr>`
+      : "";
+
+  return `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f3f5f4;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f4;padding:24px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:92vw;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+        <!-- header -->
+        <tr><td style="background:#11500F;padding:20px 32px;font-family:Helvetica,Arial,sans-serif;">
+          <div style="color:#9CE2BB;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">Anchor Co-Pilot</div>
+          <div style="color:#ffffff;font-size:13px;margin-top:2px;">Marketing Orders</div>
+        </td></tr>
+        <!-- title -->
+        <tr><td style="padding:28px 32px 8px;font-family:Helvetica,Arial,sans-serif;">
+          <span style="display:inline-block;background:${badge.bg};color:${badge.fg};font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;">${escapeHtml(opts.label)}</span>
+          <h1 style="margin:14px 0 0;font-size:20px;line-height:1.3;color:#1a1a1a;">Order #${escapeHtml(opts.shortId)} was updated</h1>
+          <p style="margin:6px 0 0;font-size:14px;color:#76777B;">This order's status is now <strong style="color:#11500F;">${escapeHtml(opts.label)}</strong>.</p>
+        </td></tr>
+        <tr><td style="height:20px;"></td></tr>
+        ${delayBlock}
+        <!-- cta -->
+        <tr><td style="padding:24px 32px 8px;font-family:Helvetica,Arial,sans-serif;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:#047835;">
+            <a href="${opts.orderUrl}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">View order in the app →</a>
+          </td></tr></table>
+        </td></tr>
+        <!-- footer -->
+        <tr><td style="padding:24px 32px 28px;font-family:Helvetica,Arial,sans-serif;border-top:1px solid #eef2f5;margin-top:12px;">
+          <p style="margin:16px 0 0;font-size:12px;color:#9aa0a6;line-height:1.5;">You're receiving this because you manage marketing orders in Anchor Co-Pilot.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 async function getProfile(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("profiles")
@@ -349,13 +459,17 @@ export async function PATCH(req: Request) {
 
     if (hasStatus) {
       const label = marketingOrderStatusLabel(status);
+      const finalProjected = (data as any).projected_ship_date as string | null;
+      const finalNotes = (data as any).delay_notes as string | null;
+
       let detail = `Order ${shortId} is now ${label}.`;
       if (status === "delayed") {
-        const finalProjected = (data as any).projected_ship_date as string | null;
-        const finalNotes = (data as any).delay_notes as string | null;
         if (finalProjected) detail += ` Projected ship date: ${finalProjected}.`;
         if (finalNotes) detail += ` Reason: ${finalNotes}`;
       }
+
+      const orderUrl = `${appBaseUrl(req)}/admin/marketing-orders`;
+
       void sendPushToTool("marketing_order_status", {
         title: "Marketing order updated",
         body: detail,
@@ -364,7 +478,15 @@ export async function PATCH(req: Request) {
       });
       void emailToolUsers("marketing_order_status", {
         subject: `Marketing order updated — ${label}`,
-        text: detail,
+        text: `${detail}\n\nView the order: ${orderUrl}`,
+        html: renderStatusEmail({
+          label,
+          status,
+          shortId,
+          orderUrl,
+          projectedShipDate: finalProjected,
+          delayNotes: finalNotes,
+        }),
       });
     }
 

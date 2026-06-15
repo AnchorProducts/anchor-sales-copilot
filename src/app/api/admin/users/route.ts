@@ -36,8 +36,8 @@ export async function GET() {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-  const COLS = "id, email, full_name, phone, company, role, user_type, service_state, service_zip, anchor_commission, created_at";
-  const COLS_NO_AC = "id, email, full_name, phone, company, role, user_type, service_state, service_zip, created_at";
+  const COLS = "id, email, full_name, phone, company, role, user_type, service_state, service_states, service_zip, anchor_commission, created_at";
+  const COLS_NO_AC = "id, email, full_name, phone, company, role, user_type, service_state, service_states, service_zip, created_at";
 
   const first = await supabaseAdmin.from("profiles").select(COLS).order("created_at", { ascending: false });
   // Tolerate the anchor_commission column not being migrated yet.
@@ -107,8 +107,18 @@ export async function PATCH(req: Request) {
   if (Object.prototype.hasOwnProperty.call(body, "company")) {
     update.company = clean(body.company) || null;
   }
-  if (Object.prototype.hasOwnProperty.call(body, "service_state")) {
-    update.service_state = clean(body.service_state) || null;
+  if (Object.prototype.hasOwnProperty.call(body, "service_states")) {
+    // Normalize, uppercase, de-dupe; keep the legacy single column synced.
+    const raw = Array.isArray(body.service_states) ? body.service_states : [];
+    const states = Array.from(
+      new Set(raw.map((s) => clean(s).toUpperCase()).filter(Boolean))
+    );
+    update.service_states = states;
+    update.service_state = states[0] || null;
+  } else if (Object.prototype.hasOwnProperty.call(body, "service_state")) {
+    const state = clean(body.service_state).toUpperCase() || null;
+    update.service_state = state;
+    update.service_states = state ? [state] : [];
   }
   if (Object.prototype.hasOwnProperty.call(body, "service_zip")) {
     update.service_zip = clean(body.service_zip).replace(/\D/g, "").slice(0, 5) || null;
