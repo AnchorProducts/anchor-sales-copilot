@@ -8,7 +8,7 @@ import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { marketingCategoriesLabel, MARKETING_ORDER_STATUSES } from "@/lib/marketingOrders";
 import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
-import { Select } from "@/app/components/ui/Field";
+import { Input, Select, Textarea } from "@/app/components/ui/Field";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,8 @@ type MarketingOrder = {
   ship_to: string | null;
   notes: string | null;
   status: string | null;
+  projected_ship_date: string | null;
+  delay_notes: string | null;
   submitter_name: string | null;
   submitter_company: string | null;
   submitter_email: string | null;
@@ -71,6 +73,10 @@ export default function AdminMarketingOrdersPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [updateErr, setUpdateErr] = useState<string | null>(null);
+  // Per-order working drafts for the delay editor (projected ship date + notes).
+  // Falls back to the saved order values when a key isn't present.
+  const [delayDateDraft, setDelayDateDraft] = useState<Record<string, string>>({});
+  const [delayNotesDraft, setDelayNotesDraft] = useState<Record<string, string>>({});
 
   async function loadOrders() {
     const res = await fetch("/api/marketing-orders", { cache: "no-store" });
@@ -106,6 +112,42 @@ export default function AdminMarketingOrdersPage() {
     } catch (e: any) {
       setUpdateErr(e?.message || "Failed to update status.");
       setItems(prev);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  // Save the delay details (projected ship date + reason) for a delayed order.
+  async function saveDelay(id: string, projectedShipDate: string, delayNotes: string) {
+    setSavingId(id);
+    setUpdateErr(null);
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          projected_ship_date: projectedShipDate,
+          delay_notes: delayNotes,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to save delay details.");
+      } else {
+        // Drop the drafts so the inputs reflect the freshly saved values.
+        setDelayDateDraft((d) => {
+          const { [id]: _omit, ...rest } = d;
+          return rest;
+        });
+        setDelayNotesDraft((d) => {
+          const { [id]: _omit, ...rest } = d;
+          return rest;
+        });
+        await loadOrders();
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to save delay details.");
     } finally {
       setSavingId(null);
     }
@@ -240,9 +282,11 @@ export default function AdminMarketingOrdersPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4">
-                      <OrderStatusTracker status={o.status} />
-                    </div>
+                    {o.status !== "delayed" && (
+                      <div className="mt-4">
+                        <OrderStatusTracker status={o.status} />
+                      </div>
+                    )}
 
                     {(o.updated_by_name || o.updated_by_email) && (
                       <div className="mt-3 text-xs text-[var(--anchor-gray)]">
@@ -252,6 +296,53 @@ export default function AdminMarketingOrdersPage() {
                         </span>
                         {o.updated_by_name && o.updated_by_email ? ` · ${o.updated_by_email}` : ""}
                         {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
+                      </div>
+                    )}
+
+                    {o.status === "delayed" && (
+                      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                        <div className="text-xs font-semibold text-amber-900">Delay details</div>
+                        <div className="mt-2 grid gap-3 sm:grid-cols-[auto,1fr] sm:items-start">
+                          <label className="text-xs text-amber-900">
+                            <span className="font-semibold">Projected ship date</span>
+                            <Input
+                              type="date"
+                              value={delayDateDraft[o.id] ?? o.projected_ship_date ?? ""}
+                              onChange={(e) =>
+                                setDelayDateDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                              }
+                              className="mt-1 h-9 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs text-amber-900">
+                            <span className="font-semibold">Reason for delay</span>
+                            <Textarea
+                              value={delayNotesDraft[o.id] ?? o.delay_notes ?? ""}
+                              onChange={(e) =>
+                                setDelayNotesDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                              }
+                              rows={2}
+                              placeholder="e.g. Vendor backordered until 6/30; waiting on artwork approval."
+                              className="mt-1 text-sm"
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              saveDelay(
+                                o.id,
+                                delayDateDraft[o.id] ?? o.projected_ship_date ?? "",
+                                delayNotesDraft[o.id] ?? o.delay_notes ?? ""
+                              )
+                            }
+                            disabled={savingId === o.id}
+                            className="inline-flex h-9 items-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                          >
+                            Save delay details
+                          </button>
+                        </div>
                       </div>
                     )}
 
