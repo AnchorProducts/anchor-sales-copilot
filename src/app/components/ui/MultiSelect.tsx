@@ -74,12 +74,16 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
         type="button"
         onClick={onTriggerClick}
         style={{ touchAction: "manipulation" }}
-        className="ds-select flex min-h-[44px] w-full items-center justify-between px-3 py-2 text-left"
+        // Grid with a minmax(0,1fr) label track + auto chevron track keeps the
+        // trigger pinned to its wrapper width and truncates the selected label.
+        // This is more robust than flex+min-width:0, which iOS Safari can ignore
+        // for form controls (letting the box grow past its card on long labels).
+        className="ds-select grid min-h-[44px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left"
       >
-        <span className={cn("min-w-0 flex-1 truncate text-sm leading-snug", value.length === 0 && "text-black/40")}>
+        <span className={cn("min-w-0 truncate text-sm leading-snug", value.length === 0 && "text-black/40")}>
           {triggerLabel}
         </span>
-        <span className="ml-2 shrink-0 text-[10px] text-black/40">{open ? "▴" : "▾"}</span>
+        <span className="text-[10px] text-black/40">{open ? "▴" : "▾"}</span>
       </button>
 
       {open && (
