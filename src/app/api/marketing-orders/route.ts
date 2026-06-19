@@ -8,7 +8,7 @@ import {
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
 } from "@/lib/marketingOrders";
-import { sendPushToTool } from "@/lib/push/send";
+import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
@@ -196,6 +196,48 @@ async function sendMarketingOrderEmail(params: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
+// Confirmation email to the rep who submitted the order, acknowledging receipt
+// and pointing them at their order-history view to track status.
+async function sendMarketingOrderCreatorEmail(params: {
+  orderId: string;
+  to: string;
+  categories: string[];
+  items: string;
+  quantity: string | null;
+  neededBy: string | null;
+  shipTo: string | null;
+  notes: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+
+  const lines: string[] = [];
+  lines.push(`We received your marketing order (ID: ${params.orderId.slice(0, 8)}).`);
+  lines.push("");
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push(`Quantity: ${params.quantity || "—"}`);
+  lines.push(`Needed by: ${params.neededBy || "—"}`);
+  lines.push("");
+  lines.push("Ship to:");
+  lines.push(params.shipTo || "(none)");
+  lines.push("");
+  lines.push("Notes:");
+  lines.push(params.notes || "(none)");
+  lines.push("");
+  lines.push("You can track its status from the Marketing Orders tab in Anchor Co-Pilot.");
+
+  const subject = `We got your marketing order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+
+  const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await supabaseRoute();
@@ -315,6 +357,37 @@ export async function POST(req: Request) {
       body: `${marketingCategoriesLabel(categories)} — ${submitter_name || submitter_company || "a rep"}`,
       url: "/admin/marketing-orders",
       tag: `mo-${orderId}`,
+    });
+
+    // Notify the creator too: a confirmation email + a push to their devices, in
+    // addition to the admin notifications above. Best-effort — failures here must
+    // never block the successful order submission.
+    if (submitter_email) {
+      try {
+        await sendMarketingOrderCreatorEmail({
+          orderId,
+          to: submitter_email,
+          categories,
+          items,
+          quantity,
+          neededBy: needed_by,
+          shipTo: ship_to,
+          notes,
+        });
+      } catch (creatorEmailErr: any) {
+        console.warn("marketing order creator email failed", creatorEmailErr?.message || creatorEmailErr);
+      }
+    }
+
+    // sendPushToUser (unlike sendPushToTool) has no internal try/catch, so guard
+    // the fire-and-forget call to avoid an unhandled rejection after the 201.
+    void sendPushToUser(user.id, {
+      title: "Marketing order received",
+      body: `${marketingCategoriesLabel(categories)} — we got your order and it's being processed.`,
+      url: "/marketing-orders",
+      tag: `mo-creator-${orderId}`,
+    }).catch((pushErr) => {
+      console.warn("marketing order creator push failed", pushErr?.message || pushErr);
     });
 
     return NextResponse.json({ ok: true, id: orderId, email_notification: emailNotification }, { status: 201 });

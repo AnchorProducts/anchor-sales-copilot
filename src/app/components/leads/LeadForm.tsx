@@ -17,6 +17,7 @@ import {
 } from "@/lib/solutions/solutionCatalog";
 import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
 import { trackEvent } from "@/lib/analytics/track";
+import { compressImages } from "@/lib/media/compressImage";
 
 type FormState = {
   project_name: string;
@@ -208,10 +209,14 @@ export default function LeadForm() {
     setSolutions((prev) => prev.filter((s) => s.id !== id));
   }
 
-  function addSolutionFiles(id: string, newFiles: File[]) {
+  async function addSolutionFiles(id: string, newFiles: File[]) {
     if (!newFiles.length) return;
+    // Compress photos in the browser before they're held in state / uploaded.
+    // Keeps the POST body under the platform request-size limit so large roof
+    // photos don't trigger a 413. Non-images pass through untouched.
+    const processed = await compressImages(newFiles);
     setSolutions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, files: [...s.files, ...newFiles] } : s))
+      prev.map((s) => (s.id === id ? { ...s, files: [...s.files, ...processed] } : s))
     );
   }
 
@@ -328,9 +333,27 @@ export default function LeadForm() {
       });
 
       const text = await res.text();
-      const json = text ? JSON.parse(text) : {};
+      let json: { id?: string; error?: string } = {};
+      let parseFailed = false;
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        // The server returned a non-JSON body (e.g. a plain-text
+        // "Request Entity Too Large" page when the uploaded photos exceed the
+        // request size limit, or an HTML error page). Surface a clear message
+        // instead of a raw "JSON Parse error" from JSON.parse.
+        parseFailed = true;
+        json = {
+          error:
+            res.status === 413
+              ? "The photos attached are too large to upload. Please remove or compress some and try again."
+              : "The server returned an unexpected response. Please try again.",
+        };
+      }
 
-      if (!res.ok) {
+      // A 2xx with an unparseable body is still a failure — never fall through to
+      // the success path (and a bogus tracking event) on a malformed response.
+      if (!res.ok || parseFailed) {
         setError(json?.error || "Failed to submit consult.");
         setSubmitting(false);
         return;
@@ -580,7 +603,7 @@ export default function LeadForm() {
                           type="file"
                           multiple
                           accept="image/*,video/*"
-                          onChange={(e) => addSolutionFiles(entry.id, Array.from(e.target.files || []))}
+                          onChange={(e) => void addSolutionFiles(entry.id, Array.from(e.target.files || []))}
                           className="sr-only"
                         />
                         <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-[var(--surface-soft)] px-4 py-6 text-center transition-colors active:border-[var(--anchor-green)] active:bg-[#F0FDF4]">
