@@ -803,9 +803,13 @@ function SolutionTypeSelect({
   onChange: (label: string) => void;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm">
+    // flex-col + min-w-0 so the wrapper sizes to the card width and lets the
+    // trigger's text truncate — a grid wrapper here sizes its column to the
+    // selected option's full text, pushing the control past the card edge.
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm">
       <span className="font-semibold">Solution Type *</span>
       <MultiSelect
+        className="min-w-0"
         options={SOLUTION_OPTIONS.map((o) => o.label)}
         sections={SOLUTION_SECTIONS_WITH_OTHER}
         value={value ? [value] : []}
