@@ -8,6 +8,7 @@ import {
   signSupportAttachments,
   type SupportAttachment,
 } from "@/lib/support/attachments";
+import { appUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -166,6 +167,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Email the requester when an admin replies (skip self-reply edge case).
     if (isAdmin && message && request.created_by !== auth.user.id) {
       try { await emailRequesterOnReply({
+        req,
         requestId: id,
         subject: request.subject,
         body: message,
@@ -184,6 +186,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 async function emailRequesterOnReply(args: {
+  req: Request;
   requestId: string;
   subject: string;
   body: string;
@@ -205,7 +208,7 @@ async function emailRequesterOnReply(args: {
     args.body,
     "",
     `Subject: ${args.subject}`,
-    `Open the thread in the app to reply: /dashboard/support/${args.requestId}`,
+    `Open the thread in the app to reply: ${appUrl(`/dashboard/support/${args.requestId}`, args.req)}`,
   ].join("\n");
 
   await resend.emails.send({

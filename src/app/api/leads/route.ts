@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { resolveRepsByKind, resolveStatesForUser } from "@/lib/sales/regions";
 import { sendPushToTool, sendPushToEmails } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
+import { appUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -172,18 +173,7 @@ async function findUserIdByEmail(email: string) {
 }
 
 function buildLeadDashboardUrl(req: Request, leadId: string) {
-  const configuredBase =
-    clean(process.env.NEXT_PUBLIC_APP_URL) ||
-    clean(process.env.NEXT_PUBLIC_SITE_URL) ||
-    clean(process.env.VERCEL_URL);
-
-  const base = configuredBase
-    ? configuredBase.startsWith("http")
-      ? configuredBase
-      : `https://${configuredBase}`
-    : new URL(req.url).origin;
-
-  return `${base}/dashboard/opportunities/${encodeURIComponent(leadId)}`;
+  return appUrl(`/dashboard/opportunities/${encodeURIComponent(leadId)}`, req);
 }
 
 async function sendInsideSalesLeadEmail(params: {
