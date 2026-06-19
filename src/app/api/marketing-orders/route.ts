@@ -10,6 +10,7 @@ import {
 } from "@/lib/marketingOrders";
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
+import { appUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,17 +25,6 @@ function escapeHtml(s: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-// Absolute base URL for in-app links inside emails. Mirrors the leads route:
-// configured env first, then the request origin.
-function appBaseUrl(req: Request) {
-  const configured =
-    clean(process.env.NEXT_PUBLIC_APP_URL) ||
-    clean(process.env.NEXT_PUBLIC_SITE_URL) ||
-    clean(process.env.VERCEL_URL);
-  if (configured) return configured.startsWith("http") ? configured : `https://${configured}`;
-  return new URL(req.url).origin;
 }
 
 // Friendly calendar-date label for emails (input is YYYY-MM-DD).
@@ -541,7 +531,7 @@ export async function PATCH(req: Request) {
         if (finalNotes) detail += ` Reason: ${finalNotes}`;
       }
 
-      const orderUrl = `${appBaseUrl(req)}/admin/marketing-orders`;
+      const orderUrl = appUrl("/admin/marketing-orders", req);
 
       void sendPushToTool("marketing_order_status", {
         title: "Marketing order updated",
