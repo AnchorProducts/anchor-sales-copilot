@@ -5,6 +5,8 @@ import { Card } from "@/app/components/ui/Card";
 import { marketingCategoriesLabel } from "@/lib/marketingOrders";
 import OrderStatusTracker from "./OrderStatusTracker";
 import OrderDelayBanner from "./OrderDelayBanner";
+import MarketingOrderChat from "./MarketingOrderChat";
+import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
 
 type MarketingOrder = {
   id: string;
@@ -58,6 +60,17 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
   const [items, setItems] = useState<MarketingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which order's chat thread is currently expanded.
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const { counts: unread, markRead } = useOrderUnread();
+
+  function toggleChat(orderId: string) {
+    setOpenChatId((cur) => {
+      const next = cur === orderId ? null : orderId;
+      if (next) markRead(orderId);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let alive = true;
@@ -176,6 +189,29 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                   </div>
                 )}
               </dl>
+
+              <div className="mt-4 border-t border-[var(--border-default)] pt-3">
+                <button
+                  type="button"
+                  onClick={() => toggleChat(o.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                >
+                  💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                  {unread[o.id] > 0 && openChatId !== o.id && (
+                    <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
+                      {unread[o.id]}
+                    </span>
+                  )}
+                </button>
+                {openChatId === o.id && (
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs text-[var(--anchor-gray)]">
+                      Message the Anchor team about this order — ask questions, clarify details, or share photos.
+                    </p>
+                    <MarketingOrderChat orderId={o.id} />
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
