@@ -10,7 +10,7 @@ import {
 } from "@/lib/marketingOrders";
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
-import { appUrl } from "@/lib/appUrl";
+import { internalAppUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -531,7 +531,9 @@ export async function PATCH(req: Request) {
         if (finalNotes) detail += ` Reason: ${finalNotes}`;
       }
 
-      const orderUrl = appUrl("/admin/marketing-orders", req);
+      // Status-update notifications go to the marketing-order managers, who work
+      // in the internal app — pin the link there regardless of sending deployment.
+      const orderUrl = internalAppUrl("/admin/marketing-orders");
 
       void sendPushToTool("marketing_order_status", {
         title: "Marketing order updated",

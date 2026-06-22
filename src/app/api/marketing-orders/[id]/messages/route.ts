@@ -11,7 +11,7 @@ import {
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
 import { marketingCategoriesLabel } from "@/lib/marketingOrders";
-import { appUrl } from "@/lib/appUrl";
+import { internalAppUrl, repAppUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,9 +201,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       if (order.submitter_email) {
         try {
+          // Link the rep to THEIR app (external reps → external app; internal
+          // reps → internal app), not whichever app the admin replied from.
+          const repProfile = order.created_by ? await getProfile(order.created_by) : null;
           await emailRepOnMessage({
-            req,
-            orderId: id,
+            orderUrl: repAppUrl("/marketing-orders", repProfile?.role),
             shortId,
             label,
             body: preview,
@@ -216,8 +218,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         }
       }
     } else {
-      // Rep → whoever manages marketing orders.
-      const orderUrl = appUrl("/admin/marketing-orders", req);
+      // Rep → whoever manages marketing orders. Admins use the internal app.
+      const orderUrl = internalAppUrl("/admin/marketing-orders");
       void sendPushToTool("marketing_order", {
         title: `New message on order ${shortId}`,
         body: `${authorName} (${label}): ${preview}`,
@@ -271,8 +273,7 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ id: string }
 }
 
 async function emailRepOnMessage(args: {
-  req: Request;
-  orderId: string;
+  orderUrl: string;
   shortId: string;
   label: string;
   body: string;
@@ -292,7 +293,7 @@ async function emailRepOnMessage(args: {
     "",
     args.body,
     "",
-    `Open the order to reply: ${appUrl("/marketing-orders", args.req)}`,
+    `Open the order to reply: ${args.orderUrl}`,
   ].join("\n");
 
   const result = await resend.emails.send({
