@@ -57,8 +57,11 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "small-electrical-box-frame-3000", label: "Small Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
   // Medium ← old "Electrical Disconnect" tackle box (assets live there)
   { key: "medium-electrical-box-frame-3000", label: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Electrical Disconnect", legacyFolder: "solutions/electrical-disconnect" },
-  // Large ← old "Roof Mounted Box" tackle box
-  { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Roof Mounted Box", legacyFolder: "solutions/roof-box" },
+  // Large — matches the active "Large Electrical Box Frame - w/ 3000 Series
+  // U-Anchor" product by name → solutions/large-electrical-box-frame-w-3000-series-u-anchor.
+  // (Dropped the stale "Roof Mounted Box" / solutions/roof-box mapping — that
+  // folder was deleted after content moved to the large-box folder.)
+  { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
 
   // Pipe & Conduit Supports (legacy: Roof Pipe Support family)
   { key: "pss-0320-roller-assembly", label: "PSS 0320 - Pipe Support Securement - Roller Assembly", category: "pipe-conduit-supports", legacyName: "Roller Pipe Support", legacyFolder: "solutions/roof-pipe/roller" },
