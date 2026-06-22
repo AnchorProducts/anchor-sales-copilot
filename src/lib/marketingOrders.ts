@@ -129,3 +129,20 @@ export function marketingOrderProgressIndex(key: string | null | undefined): num
   if (!key) return 0;
   return MARKETING_ORDER_PROGRESS.findIndex((s) => s.key === key);
 }
+
+// Tailwind classes for a scannable colored status pill (used in list/card UIs).
+export function marketingOrderStatusPill(key: string | null | undefined): string {
+  switch (key) {
+    case "delayed":
+      return "bg-amber-100 text-amber-800";
+    case "cancelled":
+      return "bg-red-100 text-red-700";
+    case "fulfilled":
+      return "bg-[var(--anchor-mint)] text-[var(--anchor-deep)]";
+    case "shipped":
+    case "processing":
+      return "bg-green-100 text-green-700";
+    default: // new / unknown
+      return "bg-[var(--surface-strong)] text-[var(--anchor-gray)]";
+  }
+}

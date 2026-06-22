@@ -6,7 +6,12 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { marketingCategoriesLabel, MARKETING_ORDER_STATUSES } from "@/lib/marketingOrders";
+import {
+  marketingCategoriesLabel,
+  marketingOrderStatusLabel,
+  marketingOrderStatusPill,
+  MARKETING_ORDER_STATUSES,
+} from "@/lib/marketingOrders";
 import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
 import MarketingOrderChat from "@/app/components/marketing/MarketingOrderChat";
 import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
@@ -316,17 +321,47 @@ export default function AdminMarketingOrdersPage() {
             ) : (
               <div className="space-y-3">
                 {filteredItems.map((o) => (
-                  <Card key={o.id} className="p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
-                        {marketingCategoriesLabel(o.categories)}
-                      </span>
-                      <div className="flex items-center gap-2">
+                  <Card key={o.id} className="overflow-hidden p-0">
+                    {/* Header: category + status at a glance, with quiet order id/date */}
+                    <div className="border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 sm:px-5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
+                          {marketingCategoriesLabel(o.categories)}
+                        </span>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${marketingOrderStatusPill(o.status)}`}
+                        >
+                          {marketingOrderStatusLabel(o.status)}
+                        </span>
+                        {unread[o.id] > 0 && openChatId !== o.id && (
+                          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
+                            💬 {unread[o.id]} new
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 text-[11px] text-[var(--anchor-gray)]">
+                        #{o.id.slice(0, 8)} · Ordered {formatDateTime(o.created_at)}
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-4 sm:px-5">
+                      {/* What they ordered — the headline */}
+                      <p className="text-sm font-medium leading-snug text-black">{o.items}</p>
+
+                      {/* Status control: a clear, full-width tap target on mobile */}
+                      <div className="mt-4">
+                        <label
+                          htmlFor={`status-${o.id}`}
+                          className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
+                        >
+                          Update status
+                        </label>
                         <Select
+                          id={`status-${o.id}`}
                           value={o.status || "new"}
                           onChange={(e) => updateStatus(o.id, e.target.value)}
                           disabled={savingId === o.id}
-                          className="h-9 px-2 text-xs"
+                          className="mt-1 h-11 w-full text-sm sm:h-10 sm:w-60"
                           aria-label="Order status"
                         >
                           {MARKETING_ORDER_STATUSES.map((s) => (
@@ -335,65 +370,54 @@ export default function AdminMarketingOrdersPage() {
                             </option>
                           ))}
                         </Select>
-                        <span className="text-xs text-[var(--anchor-gray)]">{formatDateTime(o.created_at)}</span>
-                        <button
-                          type="button"
-                          onClick={() => deleteOrder(o.id)}
-                          disabled={savingId === o.id}
-                          title="Delete this order from history"
-                          className="inline-flex h-9 items-center rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
                       </div>
-                    </div>
 
-                    {o.status !== "delayed" && (
-                      <div className="mt-4">
-                        <OrderStatusTracker status={o.status} />
-                      </div>
-                    )}
-
-                    {(o.updated_by_name || o.updated_by_email) && (
-                      <div className="mt-3 text-xs text-[var(--anchor-gray)]">
-                        Status last updated by{" "}
-                        <span className="font-semibold text-[var(--anchor-deep)]">
-                          {o.updated_by_name || o.updated_by_email}
-                        </span>
-                        {o.updated_by_name && o.updated_by_email ? ` · ${o.updated_by_email}` : ""}
-                        {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
-                      </div>
-                    )}
-
-                    {o.status === "delayed" && (
-                      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
-                        <div className="text-xs font-semibold text-amber-900">Delay details</div>
-                        <div className="mt-2 grid gap-3 sm:grid-cols-[auto,1fr] sm:items-start">
-                          <label className="text-xs text-amber-900">
-                            <span className="font-semibold">Projected ship date</span>
-                            <Input
-                              type="date"
-                              value={delayDateDraft[o.id] ?? o.projected_ship_date ?? ""}
-                              onChange={(e) =>
-                                setDelayDateDraft((d) => ({ ...d, [o.id]: e.target.value }))
-                              }
-                              className="mt-1 h-9 text-sm"
-                            />
-                          </label>
-                          <label className="text-xs text-amber-900">
-                            <span className="font-semibold">Reason for delay</span>
-                            <Textarea
-                              value={delayNotesDraft[o.id] ?? o.delay_notes ?? ""}
-                              onChange={(e) =>
-                                setDelayNotesDraft((d) => ({ ...d, [o.id]: e.target.value }))
-                              }
-                              rows={2}
-                              placeholder="e.g. Vendor backordered until 6/30; waiting on artwork approval."
-                              className="mt-1 text-sm"
-                            />
-                          </label>
+                      {o.status !== "delayed" && (
+                        <div className="mt-4 overflow-x-auto">
+                          <div className="min-w-[260px]">
+                            <OrderStatusTracker status={o.status} />
+                          </div>
                         </div>
-                        <div className="mt-2">
+                      )}
+
+                      {(o.updated_by_name || o.updated_by_email) && (
+                        <div className="mt-3 text-xs text-[var(--anchor-gray)]">
+                          Last updated by{" "}
+                          <span className="font-semibold text-[var(--anchor-deep)]">
+                            {o.updated_by_name || o.updated_by_email}
+                          </span>
+                          {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
+                        </div>
+                      )}
+
+                      {o.status === "delayed" && (
+                        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                          <div className="text-xs font-semibold text-amber-900">Delay details</div>
+                          <div className="mt-2 space-y-3">
+                            <label className="block text-xs text-amber-900">
+                              <span className="font-semibold">Projected ship date</span>
+                              <Input
+                                type="date"
+                                value={delayDateDraft[o.id] ?? o.projected_ship_date ?? ""}
+                                onChange={(e) =>
+                                  setDelayDateDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                                }
+                                className="mt-1 h-11 w-full text-sm sm:h-10"
+                              />
+                            </label>
+                            <label className="block text-xs text-amber-900">
+                              <span className="font-semibold">Reason for delay</span>
+                              <Textarea
+                                value={delayNotesDraft[o.id] ?? o.delay_notes ?? ""}
+                                onChange={(e) =>
+                                  setDelayNotesDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                                }
+                                rows={3}
+                                placeholder="e.g. Vendor backordered until 6/30; waiting on artwork approval."
+                                className="mt-1 w-full text-sm"
+                              />
+                            </label>
+                          </div>
                           <button
                             type="button"
                             onClick={() =>
@@ -404,59 +428,101 @@ export default function AdminMarketingOrdersPage() {
                               )
                             }
                             disabled={savingId === o.id}
-                            className="inline-flex h-9 items-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                            className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50 sm:w-auto"
                           >
                             Save delay details
                           </button>
                         </div>
-                      </div>
-                    )}
-
-                    <div className="mt-4 text-sm text-black">{o.items}</div>
-
-                    <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs text-[var(--anchor-gray)] sm:grid-cols-2">
-                      <div>
-                        <dt className="inline font-semibold text-[var(--anchor-deep)]">Quantity: </dt>
-                        <dd className="inline">{o.quantity || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt className="inline font-semibold text-[var(--anchor-deep)]">Needed by: </dt>
-                        <dd className="inline">{formatDate(o.needed_by)}</dd>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <dt className="inline font-semibold text-[var(--anchor-deep)]">Ship to: </dt>
-                        <dd className="inline whitespace-pre-line">{o.ship_to || "—"}</dd>
-                      </div>
-                      {o.notes && (
-                        <div className="sm:col-span-2">
-                          <dt className="inline font-semibold text-[var(--anchor-deep)]">Notes: </dt>
-                          <dd className="inline whitespace-pre-line">{o.notes}</dd>
-                        </div>
                       )}
-                    </dl>
 
-                    <div className="mt-3 border-t border-[var(--border-default)] pt-3 text-xs text-[var(--anchor-gray)]">
-                      <span className="font-semibold text-[var(--anchor-deep)]">
-                        {o.submitter_name || "—"}
-                      </span>
-                      {o.submitter_company ? ` · ${o.submitter_company}` : ""}
-                      {o.submitter_email ? ` · ${o.submitter_email}` : ""}
-                      {o.submitter_phone ? ` · ${o.submitter_phone}` : ""}
-                    </div>
-
-                    <div className="mt-3 border-t border-[var(--border-default)] pt-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleChat(o.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
-                      >
-                        💬 {openChatId === o.id ? "Hide messages" : "Messages"}
-                        {unread[o.id] > 0 && openChatId !== o.id && (
-                          <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
-                            {unread[o.id]}
-                          </span>
+                      {/* Order details — stacked label/value, scannable on a phone */}
+                      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                        <div>
+                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                            Quantity
+                          </dt>
+                          <dd className="mt-0.5 text-sm text-black">{o.quantity || "—"}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                            Needed by
+                          </dt>
+                          <dd className="mt-0.5 text-sm text-black">{formatDate(o.needed_by)}</dd>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                            Ship to
+                          </dt>
+                          <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.ship_to || "—"}</dd>
+                        </div>
+                        {o.notes && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                              Notes
+                            </dt>
+                            <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.notes}</dd>
+                          </div>
                         )}
-                      </button>
+                      </dl>
+
+                      {/* Who submitted it — with tappable contact links */}
+                      <div className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                          From
+                        </div>
+                        <div className="mt-0.5 text-sm font-semibold text-[var(--anchor-deep)]">
+                          {o.submitter_name || "—"}
+                          {o.submitter_company && (
+                            <span className="font-normal text-[var(--anchor-gray)]"> · {o.submitter_company}</span>
+                          )}
+                        </div>
+                        {(o.submitter_email || o.submitter_phone) && (
+                          <div className="mt-1 flex flex-col gap-0.5 text-xs sm:flex-row sm:flex-wrap sm:gap-x-4">
+                            {o.submitter_email && (
+                              <a
+                                href={`mailto:${o.submitter_email}`}
+                                className="break-all font-medium text-[var(--anchor-green)] underline"
+                              >
+                                {o.submitter_email}
+                              </a>
+                            )}
+                            {o.submitter_phone && (
+                              <a
+                                href={`tel:${o.submitter_phone}`}
+                                className="font-medium text-[var(--anchor-green)] underline"
+                              >
+                                {o.submitter_phone}
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions: Messages (primary) and a de-emphasized Delete */}
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-default)] pt-4">
+                        <button
+                          type="button"
+                          onClick={() => toggleChat(o.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                        >
+                          💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                          {unread[o.id] > 0 && openChatId !== o.id && (
+                            <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
+                              {unread[o.id]}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteOrder(o.id)}
+                          disabled={savingId === o.id}
+                          title="Delete this order from history"
+                          className="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+
                       {openChatId === o.id && (
                         <div className="mt-3">
                           <p className="mb-2 text-xs text-[var(--anchor-gray)]">
