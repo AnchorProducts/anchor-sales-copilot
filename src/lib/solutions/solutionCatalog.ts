@@ -77,20 +77,12 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "weather-stand-equipment-2000", label: "Weather/Stand Equipment - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/weather-station" },
   { key: "tower-securement-non-penetrating-base-2000", label: "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/elevated-stack/roof-stack" },
 
-  // H-Frame Supports (legacy: Attached / Existing Pipe-Frame & Duct Securement)
-  { key: "h-frame-corridor-support", label: "H-Frame Corridor Support", category: "h-frame-supports", comingSoon: true, legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "existing-h-frame-exterior-bracing-2000", label: "Existing H-Frame Securement - Exterior Bracing w/ 2000 Series U-Anchor", category: "h-frame-supports", legacyName: "Existing Pipe-Frame", legacyFolder: "solutions/pipe-frame/existing" },
-  { key: "existing-h-frame-interior-bracing-3000", label: "Existing H-Frame Securement - Interior Bracing w/ 3000 Series U-Anchor", category: "h-frame-supports", legacyName: "Existing Pipe-Frame", legacyFolder: "solutions/pipe-frame/existing" },
-  { key: "existing-h-frame-rigid-knee-bracing", label: "Existing H-Frame Securement - Rigid Knee Bracing", category: "h-frame-supports", comingSoon: true, legacyFolder: "solutions/pipe-frame/existing" },
-  { key: "pipe-hanger-frame-3000", label: "Pipe Hanger Frame - 3000 Series U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "pipe-hanger-frame-roller-3000", label: "Pipe Hanger Frame, Roller - 3000 Series U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "strut-frame-exterior-bracing-u-anchor", label: "Strut Frame Securement - Exterior Bracing w/ U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "duct-frame-3000", label: "Duct Frame - 3000 Series U-Anchor", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
-  { key: "existing-duct-frame-securement", label: "Existing Duct Frame Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
-  { key: "existing-duct-securement", label: "Existing Duct Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
-  { key: "std-h-frame-24x24-300", label: "24\" x 24\" Standard H-Frame - w/ 300 Series U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "std-h-frame-36x36-300", label: "36\" x 36\" Standard H-Frame - w/ 300 Series U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
-  { key: "std-h-frame-36x48-300", label: "36\" x 48\" Standard H-Frame - w/ 300 Series U-Anchor", category: "h-frame-supports", legacyName: "Attached Pipe-Frame", legacyFolder: "solutions/pipe-frame/attached" },
+  // H-Frame Supports — collapsed to the 3 products shown on the website
+  // Resource Library tab. Each maps to its knowledge-bucket folder via the
+  // matching active `products` row (resolved by legacyName → SPECIAL_PREFIXES).
+  { key: "duct-securement", label: "Duct Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
+  { key: "existing-h-frame", label: "Existing H-Frame", category: "h-frame-supports", legacyName: "Existing Pipe Frame", legacyFolder: "solutions/pipe-frame/exisiting" },
+  { key: "attached-h-frame", label: "Attached H-Frame", category: "h-frame-supports", legacyName: "Attached Pipe Frame", legacyFolder: "solutions/pipe-frame/attached" },
 
   // Rooftop Solar (all coming soon — legacyFolder points at existing solar docs for chatbot context)
   { key: "solar-panel-claw-hibred", label: "Solar Mount Panel Claw HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
