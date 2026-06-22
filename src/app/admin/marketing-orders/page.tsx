@@ -8,6 +8,8 @@ import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { marketingCategoriesLabel, MARKETING_ORDER_STATUSES } from "@/lib/marketingOrders";
 import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
+import MarketingOrderChat from "@/app/components/marketing/MarketingOrderChat";
+import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +81,17 @@ export default function AdminMarketingOrdersPage() {
   const [delayNotesDraft, setDelayNotesDraft] = useState<Record<string, string>>({});
   // Two views: "active" (in-flight orders) and "archived" (fulfilled/cancelled).
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+  // Which order's chat thread is currently expanded.
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const { counts: unread, markRead } = useOrderUnread();
+
+  function toggleChat(orderId: string) {
+    setOpenChatId((cur) => {
+      const next = cur === orderId ? null : orderId;
+      if (next) markRead(orderId);
+      return next;
+    });
+  }
 
   const isArchived = (o: MarketingOrder) =>
     o.status === "fulfilled" || o.status === "cancelled";
@@ -429,6 +442,29 @@ export default function AdminMarketingOrdersPage() {
                       {o.submitter_company ? ` · ${o.submitter_company}` : ""}
                       {o.submitter_email ? ` · ${o.submitter_email}` : ""}
                       {o.submitter_phone ? ` · ${o.submitter_phone}` : ""}
+                    </div>
+
+                    <div className="mt-3 border-t border-[var(--border-default)] pt-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleChat(o.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                      >
+                        💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                        {unread[o.id] > 0 && openChatId !== o.id && (
+                          <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
+                            {unread[o.id]}
+                          </span>
+                        )}
+                      </button>
+                      {openChatId === o.id && (
+                        <div className="mt-3">
+                          <p className="mb-2 text-xs text-[var(--anchor-gray)]">
+                            Chat with {o.submitter_name || "the rep"} about this order — clarify details or share photos.
+                          </p>
+                          <MarketingOrderChat orderId={o.id} />
+                        </div>
+                      )}
                     </div>
                   </Card>
                 ))}
