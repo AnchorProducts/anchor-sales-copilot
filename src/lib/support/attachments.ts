@@ -20,21 +20,23 @@ export function imagesFromForm(form: FormData, field = "images"): File[] {
   return form.getAll(field).filter((f): f is File => f instanceof File && f.size > 0);
 }
 
-// Upload images for a request; returns metadata to store on the message. On any
-// validation/upload error, returns what uploaded plus an error string.
-export async function uploadSupportImages(
-  requestId: string,
+// Upload images under an arbitrary path prefix; returns metadata to store on the
+// message row. On any validation/upload error, returns what uploaded plus an
+// error string. Shared by any thread feature (support, marketing orders, …).
+export async function uploadImages(
+  pathPrefix: string,
   files: File[]
 ): Promise<{ attachments: SupportAttachment[]; error?: string }> {
   const attachments: SupportAttachment[] = [];
   const imgs = files.slice(0, MAX_FILES);
+  const prefix = pathPrefix.replace(/\/+$/, "");
   for (const file of imgs) {
     const ct = (file.type || "").toLowerCase();
     if (!ALLOWED.has(ct)) return { attachments, error: `Unsupported file type: ${file.name}` };
     if (file.size > MAX_BYTES) return { attachments, error: `${file.name} is too large (max 8 MB).` };
 
     const safeName = (file.name || "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "image";
-    const path = `support/${requestId}/${crypto.randomUUID()}-${safeName}`;
+    const path = `${prefix}/${crypto.randomUUID()}-${safeName}`;
     const buf = Buffer.from(await file.arrayBuffer());
     const { error } = await supabaseAdmin.storage
       .from(BUCKET)
@@ -43,6 +45,14 @@ export async function uploadSupportImages(
     attachments.push({ path, filename: safeName, content_type: ct, size: file.size });
   }
   return { attachments };
+}
+
+// Upload images for a support request (bytes live under support/<requestId>/).
+export async function uploadSupportImages(
+  requestId: string,
+  files: File[]
+): Promise<{ attachments: SupportAttachment[]; error?: string }> {
+  return uploadImages(`support/${requestId}`, files);
 }
 
 // Attach short-lived signed URLs for display.
