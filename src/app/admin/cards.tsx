@@ -120,6 +120,14 @@ export const CARDS: AdminCard[] = [
     icon: "package",
   },
   {
+    key: "fm-intake",
+    title: "Rooftop Equipment Intake (FM)",
+    description: "Universal rooftop equipment intake form — customer, roof, engineering, and roof-mounted equipment details for securement recommendations.",
+    badge: "Config",
+    href: "/admin/fm-intake",
+    icon: "clipboard",
+  },
+  {
     key: "knowledge",
     title: "Knowledge",
     description: "Curate Copilot knowledge sources, corrections, and indexed content.",
