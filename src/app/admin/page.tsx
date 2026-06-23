@@ -53,10 +53,15 @@ export default function AdminHubPage() {
     return () => { alive = false; };
   }, [router, supabase]);
 
-  const visibleCards = useMemo(
-    () => CARDS.filter((c) => !hiddenKeys.has(c.key)),
-    [hiddenKeys]
-  );
+  // Admins see every tool. Deactivated ones (off in Manage Tools) stay visible to
+  // admins but are marked "Inactive" — they're still hidden from everyone else,
+  // since only admins can reach /admin at all. This lets an admin preview a tool
+  // that hasn't been released yet.
+  const orderedCards = useMemo(() => {
+    const active = CARDS.filter((c) => !hiddenKeys.has(c.key));
+    const inactive = CARDS.filter((c) => hiddenKeys.has(c.key));
+    return [...active, ...inactive];
+  }, [hiddenKeys]);
 
   return (
     <main className="ds-page">
@@ -85,8 +90,8 @@ export default function AdminHubPage() {
               </Link>
             </div>
             <div data-tutorial="admin-grid" className="grid grid-cols-2 gap-3 [grid-auto-flow:dense] sm:gap-4 md:gap-5 lg:grid-cols-4">
-              {visibleCards.map((card, i) => (
-                <BentoTile key={card.key} card={card} index={i} />
+              {orderedCards.map((card, i) => (
+                <BentoTile key={card.key} card={card} index={i} inactive={hiddenKeys.has(card.key)} />
               ))}
             </div>
           </>
@@ -96,7 +101,7 @@ export default function AdminHubPage() {
   );
 }
 
-function BentoTile({ card, index }: { card: AdminCard; index: number }) {
+function BentoTile({ card, index, inactive }: { card: AdminCard; index: number; inactive?: boolean }) {
   const isLink = !card.comingSoon && !!card.href;
   // Featured tile always spans 2 cols. Regular tiles get a varied pattern at
   // both mobile (2-col grid) and lg (4-col grid) so the gallery has rhythm at
@@ -111,9 +116,13 @@ function BentoTile({ card, index }: { card: AdminCard; index: number }) {
     const lgPattern = ["lg:col-span-2", "lg:col-span-1", "lg:col-span-1", "lg:col-span-2", "lg:col-span-1"];
     span = `${mobileSpan} ${lgPattern[index % lgPattern.length]}`;
   }
-  const inner = card.featured ? <FeaturedTileInner card={card} /> : <RegularTileInner card={card} />;
+  const inner = card.featured ? (
+    <FeaturedTileInner card={card} inactive={inactive} />
+  ) : (
+    <RegularTileInner card={card} inactive={inactive} />
+  );
 
-  const wrap = `group ${span} ${isLink ? "transition-transform duration-200 hover:-translate-y-0.5" : "cursor-default opacity-80"}`;
+  const wrap = `group ${span} ${isLink ? "transition-transform duration-200 hover:-translate-y-0.5" : "cursor-default opacity-80"} ${inactive ? "opacity-70" : ""}`;
   // Stable per-tile hook so the admin walkthrough can spotlight each tool.
   const tutorialId = "admin-tile-" + card.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -127,7 +136,7 @@ function BentoTile({ card, index }: { card: AdminCard; index: number }) {
   return <div data-tutorial={tutorialId} className={wrap}>{inner}</div>;
 }
 
-function FeaturedTileInner({ card }: { card: AdminCard }) {
+function FeaturedTileInner({ card, inactive }: { card: AdminCard; inactive?: boolean }) {
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-[var(--anchor-deep)] to-[#1d6b4a] p-5 text-white shadow-md transition-all duration-200 group-hover:brightness-110 group-hover:shadow-xl sm:p-6 lg:p-8">
       {/* Subtle decorative icon */}
@@ -140,9 +149,12 @@ function FeaturedTileInner({ card }: { card: AdminCard }) {
         <span className="inline-flex items-center justify-center rounded-xl bg-white/15 p-3">
           <TileIcon name={card.icon} className="h-7 w-7 text-white" />
         </span>
-        <span className={`ds-badge !rounded-full bg-white/15 text-white`}>
-          {card.badge}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {inactive && (
+            <span className="ds-badge !rounded-full bg-white/25 text-white">Inactive</span>
+          )}
+          <span className={`ds-badge !rounded-full bg-white/15 text-white`}>{card.badge}</span>
+        </div>
       </div>
 
       <div className="relative mt-5 flex-1">
@@ -160,16 +172,21 @@ function FeaturedTileInner({ card }: { card: AdminCard }) {
   );
 }
 
-function RegularTileInner({ card }: { card: AdminCard }) {
+function RegularTileInner({ card, inactive }: { card: AdminCard; inactive?: boolean }) {
   return (
     <Card className="flex h-full flex-col p-4 transition-all duration-200 group-hover:border-[var(--anchor-green)] group-hover:bg-[var(--anchor-mint)]/30 group-hover:shadow-md sm:p-5 lg:p-6">
       <div className="flex items-start justify-between gap-3">
         <span className="inline-flex items-center justify-center rounded-xl bg-[var(--anchor-mint)]/40 p-2.5 text-[var(--anchor-deep)]">
           <TileIcon name={card.icon} className="h-5 w-5" />
         </span>
-        <span className={`ds-badge !rounded-full ${BADGE_STYLE[card.badge]}`}>
-          {card.badge}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {inactive && (
+            <span className="ds-badge !rounded-full bg-[var(--surface-strong)] text-[var(--anchor-gray)]">
+              Inactive
+            </span>
+          )}
+          <span className={`ds-badge !rounded-full ${BADGE_STYLE[card.badge]}`}>{card.badge}</span>
+        </div>
       </div>
 
       <div className="mt-4 flex-1">
