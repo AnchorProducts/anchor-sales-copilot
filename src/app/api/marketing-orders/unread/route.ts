@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { insideRepVisibleOrderIds } from "@/lib/marketing/territory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,19 +20,23 @@ export async function GET() {
 
     const { data: prof } = await supabaseAdmin
       .from("profiles")
-      .select("role")
+      .select("role,email")
       .eq("id", me)
       .maybeSingle();
     const role = clean((prof as { role?: string } | null)?.role);
+    const email = clean((prof as { email?: string } | null)?.email);
     if (role !== "admin" && role !== "anchor_rep" && role !== "external_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const isAdmin = role === "admin";
 
-    // Non-admins can only see threads on their own orders, so restrict the
-    // message scan to those order ids.
+    // Scope the message scan to the orders this viewer can see, so unread counts
+    // match the order list: admins → everything; inside reps → orders from their
+    // territory; external reps → their own orders.
     let orderIds: string[] | null = null;
-    if (!isAdmin) {
+    if (role === "anchor_rep") {
+      orderIds = await insideRepVisibleOrderIds(email);
+      if (orderIds.length === 0) return NextResponse.json({ counts: {}, total: 0 });
+    } else if (role !== "admin") {
       const { data: orders } = await supabaseAdmin
         .from("marketing_orders")
         .select("id")

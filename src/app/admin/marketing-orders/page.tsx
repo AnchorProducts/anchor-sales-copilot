@@ -14,6 +14,7 @@ import {
 } from "@/lib/marketingOrders";
 import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
 import MarketingOrderChat from "@/app/components/marketing/MarketingOrderChat";
+import MarketingOrderActivity from "@/app/components/marketing/MarketingOrderActivity";
 import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 
@@ -38,6 +39,13 @@ type MarketingOrder = {
   updated_at: string | null;
   updated_by_name: string | null;
   updated_by_email: string | null;
+  last_activity: {
+    note: string;
+    to_status: string | null;
+    created_at: string | null;
+    admin_name: string | null;
+    admin_email: string | null;
+  } | null;
 };
 
 function formatDateTime(s: string | null) {
@@ -76,6 +84,7 @@ export default function AdminMarketingOrdersPage() {
 
   const [ready, setReady] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("");
   const [items, setItems] = useState<MarketingOrder[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -88,7 +97,17 @@ export default function AdminMarketingOrdersPage() {
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   // Which order's chat thread is currently expanded.
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Which order's activity log is currently expanded.
+  const [openActivityId, setOpenActivityId] = useState<string | null>(null);
+  // A phase move can't commit until the admin says what they did. Selecting a new
+  // status stages it here and reveals a required note; saving applies both.
+  const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
+  const [phaseNoteDraft, setPhaseNoteDraft] = useState<Record<string, string>>({});
   const { counts: unread, markRead } = useOrderUnread();
+
+  function toggleActivity(orderId: string) {
+    setOpenActivityId((cur) => (cur === orderId ? null : orderId));
+  }
 
   function toggleChat(orderId: string) {
     setOpenChatId((cur) => {
@@ -124,29 +143,57 @@ export default function AdminMarketingOrdersPage() {
     setItems(json?.items || []);
   }
 
-  async function updateStatus(id: string, status: string) {
+  // Stage a phase change: the admin picks a new status, but nothing is saved until
+  // they describe what they did. Re-selecting the current status cancels.
+  function stageStatus(o: MarketingOrder, status: string) {
+    const current = o.status || "new";
+    setUpdateErr(null);
+    if (status === current) {
+      cancelPhaseChange(o.id);
+      return;
+    }
+    setPendingStatus((d) => ({ ...d, [o.id]: status }));
+  }
+
+  function cancelPhaseChange(id: string) {
+    setPendingStatus((d) => {
+      const { [id]: _omit, ...rest } = d;
+      return rest;
+    });
+    setPhaseNoteDraft((d) => {
+      const { [id]: _omit, ...rest } = d;
+      return rest;
+    });
+  }
+
+  // Commit the staged phase change with the required note. The API rejects the
+  // move without one, so every phase transition leaves an attributed record.
+  async function commitPhaseChange(id: string) {
+    const status = pendingStatus[id];
+    if (!status) return;
+    const note = (phaseNoteDraft[id] || "").trim();
+    if (!note) {
+      setUpdateErr("Add a note describing what you did before moving this order.");
+      return;
+    }
     setSavingId(id);
     setUpdateErr(null);
-    // Optimistic status flip for a snappy tracker; revert on failure.
-    const prev = items;
-    setItems((list) => list.map((o) => (o.id === id ? { ...o, status } : o)));
     try {
       const res = await fetch("/api/marketing-orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({ id, status, note }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         setUpdateErr(json?.error || "Failed to update status.");
-        setItems(prev);
       } else {
-        // Refresh so the "updated by" attribution reflects this change.
+        cancelPhaseChange(id);
+        // Refresh so the attribution + latest-activity line reflect this change.
         await loadOrders();
       }
     } catch (e: any) {
       setUpdateErr(e?.message || "Failed to update status.");
-      setItems(prev);
     } finally {
       setSavingId(null);
     }
@@ -227,12 +274,14 @@ export default function AdminMarketingOrdersPage() {
         .eq("id", data.user.id)
         .maybeSingle();
 
-      const role = String((prof as { role?: string } | null)?.role || "");
-      if (role !== "admin") {
-        setAccessError("Admin access only.");
+      const userRole = String((prof as { role?: string } | null)?.role || "");
+      // Admins and inside (anchor) reps fulfill marketing orders.
+      if (userRole !== "admin" && userRole !== "anchor_rep") {
+        setAccessError("This page is for the Anchor fulfillment team.");
         setReady(true);
         return;
       }
+      setRole(userRole);
 
       await loadOrders();
       if (!alive) return;
@@ -251,7 +300,7 @@ export default function AdminMarketingOrdersPage() {
         subtitle="Submitted order history"
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
-          { label: "Admin Console", href: "/admin" },
+          ...(role === "admin" ? [{ label: "Admin Console", href: "/admin" }] : []),
         ]}
       />
 
@@ -358,8 +407,8 @@ export default function AdminMarketingOrdersPage() {
                         </label>
                         <Select
                           id={`status-${o.id}`}
-                          value={o.status || "new"}
-                          onChange={(e) => updateStatus(o.id, e.target.value)}
+                          value={pendingStatus[o.id] ?? o.status ?? "new"}
+                          onChange={(e) => stageStatus(o, e.target.value)}
                           disabled={savingId === o.id}
                           className="mt-1 h-11 w-full text-sm sm:h-10 sm:w-60"
                           aria-label="Order status"
@@ -371,6 +420,46 @@ export default function AdminMarketingOrdersPage() {
                           ))}
                         </Select>
                       </div>
+
+                      {/* Required note before a phase change can be saved, so every
+                          admin sees who did what and no one duplicates the work. */}
+                      {pendingStatus[o.id] && pendingStatus[o.id] !== (o.status || "new") && (
+                        <div className="mt-3 rounded-xl border border-[var(--anchor-deep)]/30 bg-[var(--anchor-mint)]/30 p-3">
+                          <div className="text-xs font-semibold text-[var(--anchor-deep)]">
+                            Moving to {marketingOrderStatusLabel(pendingStatus[o.id])} — what did you do?
+                          </div>
+                          <Textarea
+                            value={phaseNoteDraft[o.id] ?? ""}
+                            onChange={(e) =>
+                              setPhaseNoteDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                            }
+                            rows={3}
+                            placeholder="e.g. Printed 50 brochures, boxed them, and handed off to shipping."
+                            className="mt-2 w-full text-sm"
+                          />
+                          <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+                            Required. This is logged against your name so the team can see this order is handled.
+                          </p>
+                          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => commitPhaseChange(o.id)}
+                              disabled={savingId === o.id || !(phaseNoteDraft[o.id] ?? "").trim()}
+                              className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--anchor-deep)] px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                            >
+                              {savingId === o.id ? "Saving…" : "Save update"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => cancelPhaseChange(o.id)}
+                              disabled={savingId === o.id}
+                              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border-default)] bg-white px-4 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--surface-soft)] disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {o.status !== "delayed" && (
                         <div className="mt-4 overflow-x-auto">
@@ -387,6 +476,20 @@ export default function AdminMarketingOrdersPage() {
                             {o.updated_by_name || o.updated_by_email}
                           </span>
                           {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
+                        </div>
+                      )}
+
+                      {/* Latest logged action, up front, so anyone scanning the
+                          list sees this order is being handled — and by whom. */}
+                      {o.last_activity && (
+                        <div className="mt-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-soft)] px-3 py-2 text-xs">
+                          <span className="font-semibold text-[var(--anchor-deep)]">
+                            {o.last_activity.admin_name || o.last_activity.admin_email || "Admin"}
+                          </span>
+                          {o.last_activity.created_at ? ` · ${formatDateTime(o.last_activity.created_at)}` : ""}
+                          <div className="mt-0.5 whitespace-pre-line text-[var(--anchor-gray)]">
+                            {o.last_activity.note}
+                          </div>
                         </div>
                       )}
 
@@ -499,29 +602,49 @@ export default function AdminMarketingOrdersPage() {
                       </div>
 
                       {/* Actions: Messages (primary) and a de-emphasized Delete */}
-                      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-default)] pt-4">
-                        <button
-                          type="button"
-                          onClick={() => toggleChat(o.id)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
-                        >
-                          💬 {openChatId === o.id ? "Hide messages" : "Messages"}
-                          {unread[o.id] > 0 && openChatId !== o.id && (
-                            <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
-                              {unread[o.id]}
-                            </span>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteOrder(o.id)}
-                          disabled={savingId === o.id}
-                          title="Delete this order from history"
-                          className="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-default)] pt-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleChat(o.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                          >
+                            💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                            {unread[o.id] > 0 && openChatId !== o.id && (
+                              <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
+                                {unread[o.id]}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleActivity(o.id)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                          >
+                            🧾 {openActivityId === o.id ? "Hide activity" : "Activity log"}
+                          </button>
+                        </div>
+                        {role === "admin" && (
+                          <button
+                            type="button"
+                            onClick={() => deleteOrder(o.id)}
+                            disabled={savingId === o.id}
+                            title="Delete this order from history"
+                            className="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
+
+                      {openActivityId === o.id && (
+                        <div className="mt-3">
+                          <p className="mb-2 text-xs text-[var(--anchor-gray)]">
+                            Who did what and when on this order. Add a note to claim it or record a step so no one doubles up.
+                          </p>
+                          <MarketingOrderActivity orderId={o.id} onLogged={loadOrders} />
+                        </div>
+                      )}
 
                       {openChatId === o.id && (
                         <div className="mt-3">
