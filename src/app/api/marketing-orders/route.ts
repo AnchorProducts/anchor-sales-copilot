@@ -8,9 +8,16 @@ import {
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
 } from "@/lib/marketingOrders";
-import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
+import { sendPushToTool, sendPushToUser, sendPushToEmails } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
 import { internalAppUrl } from "@/lib/appUrl";
+import { loadAllSalesReps } from "@/lib/sales/regions";
+import {
+  submitterStates,
+  insideRepEmailsFor,
+  resolveInsideRepEmails,
+  insideRepCanAccessOrder,
+} from "@/lib/marketing/territory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,7 +128,7 @@ function renderStatusEmail(opts: {
 async function getProfile(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("role,full_name,company,phone,email")
+    .select("role,full_name,company,phone,email,service_states,service_state,service_zip")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -224,6 +231,54 @@ async function sendMarketingOrderCreatorEmail(params: {
   const subject = `We got your marketing order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
 
   const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
+// Notify the outside rep's assigned inside salesperson that their rep submitted a
+// marketing order — inside sales now fulfills these. Self-contained (full order
+// details inline) and points at the fulfillment view.
+async function sendMarketingOrderInsideRepEmail(params: {
+  orderId: string;
+  to: string[];
+  submitterName: string | null;
+  submitterCompany: string | null;
+  categories: string[];
+  items: string;
+  quantity: string | null;
+  neededBy: string | null;
+  shipTo: string | null;
+  notes: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+  const who = params.submitterName || params.submitterCompany || "Your outside rep";
+  const fulfillUrl = internalAppUrl("/admin/marketing-orders");
+
+  const lines: string[] = [];
+  lines.push(`${who} submitted a marketing order (ID: ${params.orderId.slice(0, 8)}).`);
+  lines.push("");
+  lines.push(`Submitted by: ${params.submitterName || "—"}${params.submitterCompany ? ` (${params.submitterCompany})` : ""}`);
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push(`Quantity: ${params.quantity || "—"}`);
+  lines.push(`Needed by: ${params.neededBy || "—"}`);
+  lines.push("");
+  lines.push("Ship to:");
+  lines.push(params.shipTo || "(none)");
+  lines.push("");
+  lines.push("Notes:");
+  lines.push(params.notes || "(none)");
+  lines.push("");
+  lines.push(`Fulfill this order: ${fulfillUrl}`);
+
+  const subject = `Marketing order from ${who} — ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+
+  const result = await resend.emails.send({ from, to: params.to, subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
@@ -380,6 +435,49 @@ export async function POST(req: Request) {
       console.warn("marketing order creator push failed", pushErr?.message || pushErr);
     });
 
+    // Notify the outside rep's assigned inside salesperson — they now fulfill
+    // these orders, so they get the order the moment their rep submits it. Routed
+    // by the rep's own service state(s)/ZIP, the same way consults route. Only
+    // applies when an OUTSIDE (external) rep submits; internal/admin submissions
+    // already reach the marketing team via the tool notification above. All
+    // best-effort — never block the successful submission.
+    if (profile.role === "external_rep") {
+      try {
+        const insideEmails = await resolveInsideRepEmails(profile);
+        if (insideEmails.length) {
+          try {
+            await sendMarketingOrderInsideRepEmail({
+              orderId,
+              to: insideEmails,
+              submitterName: submitter_name,
+              submitterCompany: submitter_company,
+              categories,
+              items,
+              quantity,
+              neededBy: needed_by,
+              shipTo: ship_to,
+              notes,
+            });
+          } catch (insideEmailErr: any) {
+            console.warn("marketing order inside-rep email failed", insideEmailErr?.message || insideEmailErr);
+          }
+          void sendPushToEmails(insideEmails, {
+            title: "Marketing order from your rep",
+            body: `${submitter_name || submitter_company || "Your outside rep"} ordered ${marketingCategoriesLabel(categories)}.`,
+            url: "/admin/marketing-orders",
+            tag: `mo-inside-${orderId}`,
+          });
+        } else {
+          console.warn(
+            "marketing order: no inside rep resolved for submitter",
+            submitter_email || orderId
+          );
+        }
+      } catch (insideErr: any) {
+        console.warn("marketing order inside-rep notify failed", insideErr?.message || insideErr);
+      }
+    }
+
     return NextResponse.json({ ok: true, id: orderId, email_notification: emailNotification }, { status: 201 });
   } catch (e: any) {
     console.error("marketing order route error", e);
@@ -400,49 +498,130 @@ export async function GET() {
     if (role !== "admin" && role !== "anchor_rep" && role !== "external_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    // Admins and inside (anchor) reps fulfill orders, so they see the full queue
+    // and the coordination log. External reps only ever see their own orders.
+    const isFulfiller = role === "admin" || role === "anchor_rep";
 
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
+        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
       )
       .order("created_at", { ascending: false })
       .limit(500);
 
-    // Non-admins only ever see the orders they themselves submitted.
-    if (role !== "admin") {
+    if (!isFulfiller) {
       query = query.eq("created_by", auth.user.id);
     }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const orders = (data || []) as any[];
+    let orders = (data || []) as any[];
+
+    // Inside (anchor) reps see ONLY orders submitted by an outside rep in their
+    // own territory — the same outside-rep→inside-rep routing used to notify them
+    // on submit ("who gets notified" == "who can see it"). Admins see everything.
+    if (role === "anchor_rep") {
+      const meEmail = clean(profile?.email).toLowerCase();
+      if (!meEmail) {
+        orders = [];
+      } else {
+        const allReps = await loadAllSalesReps();
+        const submitterIds = Array.from(
+          new Set(orders.map((o) => o.created_by).filter((v): v is string => !!v))
+        );
+        const subMap = new Map<string, { role: string; states: string[]; zip: string | null }>();
+        if (submitterIds.length) {
+          const { data: subs } = await supabaseAdmin
+            .from("profiles")
+            .select("id,role,service_states,service_state,service_zip")
+            .in("id", submitterIds);
+          for (const s of (subs || []) as any[]) {
+            subMap.set(s.id, {
+              role: clean(s.role),
+              states: submitterStates(s),
+              zip: clean(s.service_zip) || null,
+            });
+          }
+        }
+        // Cache the territory test per submitter so shared submitters resolve once.
+        const mineBySubmitter = new Map<string, boolean>();
+        orders = orders.filter((o) => {
+          const sub = o.created_by ? subMap.get(o.created_by) : undefined;
+          // Only outside reps' orders are routed to an inside rep's territory.
+          if (!sub || sub.role !== "external_rep") return false;
+          let mine = mineBySubmitter.get(o.created_by);
+          if (mine === undefined) {
+            mine = insideRepEmailsFor(allReps, sub.states, sub.zip).has(meEmail);
+            mineBySubmitter.set(o.created_by, mine);
+          }
+          return mine;
+        });
+      }
+    }
+
+    // Fulfillers (admins + inside reps) get the latest activity-log entry per
+    // order, so the "who's on it" line is visible at a glance and nobody redoes
+    // work already underway. External reps never see the internal coordination
+    // log. One batched, ordered lookup; first row per order is the most recent.
+    const latestActivity = new Map<
+      string,
+      { note: string; to_status: string | null; admin_id: string | null; created_at: string }
+    >();
+    if (isFulfiller && orders.length) {
+      const { data: acts } = await supabaseAdmin
+        .from("marketing_order_activity")
+        .select("order_id,note,to_status,admin_id,created_at")
+        .in("order_id", orders.map((o) => o.id))
+        .order("created_at", { ascending: false });
+      for (const a of (acts || []) as any[]) {
+        if (!latestActivity.has(a.order_id)) {
+          latestActivity.set(a.order_id, {
+            note: a.note,
+            to_status: a.to_status,
+            admin_id: a.admin_id,
+            created_at: a.created_at,
+          });
+        }
+      }
+    }
 
     // Resolve who last updated each order's status (also the person who set any
-    // delay), so the submitting rep knows which admin to contact. One batched
-    // lookup; mapped onto each order.
-    const updaterIds = Array.from(
-      new Set(orders.map((o) => o.updated_by).filter((v): v is string => !!v))
-    );
-    const updaterMap = new Map<string, { name: string | null; email: string | null }>();
-    if (updaterIds.length) {
-      const { data: updaters } = await supabaseAdmin
+    // delay), so the submitting rep knows which admin to contact — plus the admins
+    // behind the latest activity entries. One batched lookup; mapped onto orders.
+    const profileIds = new Set<string>();
+    for (const o of orders) if (o.updated_by) profileIds.add(o.updated_by);
+    for (const a of latestActivity.values()) if (a.admin_id) profileIds.add(a.admin_id);
+    const nameMap = new Map<string, { name: string | null; email: string | null }>();
+    if (profileIds.size) {
+      const { data: people } = await supabaseAdmin
         .from("profiles")
         .select("id,full_name,email")
-        .in("id", updaterIds);
-      for (const u of (updaters || []) as any[]) {
-        updaterMap.set(u.id, { name: clean(u.full_name) || null, email: clean(u.email) || null });
+        .in("id", Array.from(profileIds));
+      for (const u of (people || []) as any[]) {
+        nameMap.set(u.id, { name: clean(u.full_name) || null, email: clean(u.email) || null });
       }
     }
 
     const items = orders.map((o) => {
-      const updater = o.updated_by ? updaterMap.get(o.updated_by) : undefined;
-      const { updated_by, ...rest } = o;
+      const updater = o.updated_by ? nameMap.get(o.updated_by) : undefined;
+      const act = latestActivity.get(o.id);
+      const actor = act?.admin_id ? nameMap.get(act.admin_id) : undefined;
+      const { updated_by, created_by, ...rest } = o;
       return {
         ...rest,
         updated_by_name: updater?.name ?? null,
         updated_by_email: updater?.email ?? null,
+        last_activity: act
+          ? {
+              note: act.note,
+              to_status: act.to_status,
+              created_at: act.created_at,
+              admin_name: actor?.name ?? null,
+              admin_email: actor?.email ?? null,
+            }
+          : null,
       };
     });
 
@@ -452,7 +631,8 @@ export async function GET() {
   }
 }
 
-// Admin-only: update an order's status (the tracker's source of truth).
+// Fulfiller-only (admins + inside reps): update an order's status (the tracker's
+// source of truth) and log what was done.
 export async function PATCH(req: Request) {
   try {
     const supabase = await supabaseRoute();
@@ -460,13 +640,33 @@ export async function PATCH(req: Request) {
     if (authErr || !auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const profile = await getProfile(auth.user.id);
-    if (clean(profile?.role) !== "admin") {
+    const role = clean(profile?.role);
+    if (role !== "admin" && role !== "anchor_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const id = clean(body?.id);
     if (!id) return NextResponse.json({ error: "Missing order id." }, { status: 400 });
+
+    // Current state, so we can tell a real phase move from a no-op and record the
+    // "from" status in the activity log.
+    const { data: current, error: curErr } = await supabaseAdmin
+      .from("marketing_orders")
+      .select("status,created_by")
+      .eq("id", id)
+      .maybeSingle();
+    if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
+    if (!current) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    const fromStatus = clean((current as { status: string | null }).status) || "new";
+
+    // Inside reps may only update orders in their own territory (admins: any).
+    if (
+      role === "anchor_rep" &&
+      !(await insideRepCanAccessOrder(clean(profile?.email), (current as any).created_by))
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const now = new Date().toISOString();
     const updates: Record<string, unknown> = { updated_by: auth.user.id, updated_at: now };
@@ -477,6 +677,11 @@ export async function PATCH(req: Request) {
     const hasProjected = body?.projected_ship_date !== undefined;
     const hasDelayNotes = body?.delay_notes !== undefined;
 
+    // The accountability note: what the admin did. Required to move an order to a
+    // new phase, so every admin can see who handled what and no two people redo
+    // the same work.
+    const note = clean(body?.note);
+
     let status = "";
     if (hasStatus) {
       status = clean(body?.status);
@@ -484,6 +689,16 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Invalid status." }, { status: 400 });
       }
       updates.status = status;
+    }
+
+    // A real phase move = status provided and actually different from the current
+    // one. That's the action we gate behind a required note.
+    const isPhaseMove = hasStatus && status !== fromStatus;
+    if (isPhaseMove && !note) {
+      return NextResponse.json(
+        { error: "Describe what you did before moving this order to a new phase." },
+        { status: 400 }
+      );
     }
 
     // Projected ship date: empty clears it; otherwise must be a YYYY-MM-DD date.
@@ -518,6 +733,31 @@ export async function PATCH(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
+    // Log the action so every admin shares one attributed history of the order.
+    // A phase move always logs (note is required above). A note with no phase
+    // change logs too — that's an admin claiming/commenting on the order.
+    let loggedActivity: any = null;
+    if (isPhaseMove || note) {
+      const { data: act } = await supabaseAdmin
+        .from("marketing_order_activity")
+        .insert({
+          order_id: id,
+          admin_id: auth.user.id,
+          from_status: isPhaseMove ? fromStatus : (hasStatus ? status : fromStatus),
+          to_status: hasStatus ? status : fromStatus,
+          note: note || `Moved to ${marketingOrderStatusLabel(status || fromStatus)}.`,
+        })
+        .select("id,from_status,to_status,note,created_at")
+        .single();
+      loggedActivity = act
+        ? {
+            ...act,
+            admin_name: clean(profile?.full_name) || null,
+            admin_email: clean(profile?.email) || null,
+          }
+        : null;
+    }
+
     const shortId = String(id).slice(0, 8);
 
     if (hasStatus) {
@@ -530,6 +770,9 @@ export async function PATCH(req: Request) {
         if (finalProjected) detail += ` Projected ship date: ${finalProjected}.`;
         if (finalNotes) detail += ` Reason: ${finalNotes}`;
       }
+      // Carry the admin's "what I did" note so other admins see it without opening
+      // the order — the whole point of requiring it.
+      if (note) detail += ` — ${clean(profile?.full_name) || "Admin"}: ${note}`;
 
       // Status-update notifications go to the marketing-order managers, who work
       // in the internal app — pin the link there regardless of sending deployment.
@@ -555,7 +798,7 @@ export async function PATCH(req: Request) {
       });
     }
 
-    return NextResponse.json({ ok: true, order: data });
+    return NextResponse.json({ ok: true, order: data, activity: loggedActivity });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to update order." }, { status: 500 });
   }

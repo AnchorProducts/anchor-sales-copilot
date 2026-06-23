@@ -12,6 +12,7 @@ import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
 import { marketingCategoriesLabel } from "@/lib/marketingOrders";
 import { internalAppUrl, repAppUrl } from "@/lib/appUrl";
+import { insideRepCanAccessOrder } from "@/lib/marketing/territory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,8 +48,24 @@ async function loadOrder(id: string) {
     | null;
 }
 
-// GET = the order's chat thread. Readable by an admin or the rep who created
-// the order. Attachment URLs are signed for display.
+// Who may read/post in an order's thread: admins and the order's own rep always;
+// inside (anchor) reps only when the order falls in their territory.
+async function canAccessThread(
+  role: string | null | undefined,
+  email: string | null | undefined,
+  userId: string,
+  orderCreatedBy: string | null
+): Promise<boolean> {
+  const r = clean(role);
+  if (r === "admin") return true;
+  if (orderCreatedBy === userId) return true;
+  if (r === "anchor_rep") return insideRepCanAccessOrder(clean(email), orderCreatedBy);
+  return false;
+}
+
+// GET = the order's chat thread. Readable by an admin, the rep who created the
+// order, or an inside rep whose territory the order falls in. Attachment URLs are
+// signed for display.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -60,11 +77,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const prof = await getProfile(auth.user.id);
     const role = clean(prof?.role);
-    const isAdmin = role === "admin";
 
     const order = await loadOrder(id);
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!isAdmin && order.created_by !== auth.user.id) {
+    // Admins and the order's own rep always have access. Inside reps additionally
+    // need the order to fall in their territory.
+    if (!(await canAccessThread(role, prof?.email, auth.user.id, order.created_by))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -129,13 +147,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const prof = await getProfile(auth.user.id);
     const role = clean(prof?.role);
-    const isAdmin = role === "admin";
 
     const order = await loadOrder(id);
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!isAdmin && order.created_by !== auth.user.id) {
+    if (!(await canAccessThread(role, prof?.email, auth.user.id, order.created_by))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    // A fulfiller (admin or inside rep) posting notifies the order's rep; the rep
+    // posting notifies the fulfillment team.
+    const isTeam = role === "admin" || role === "anchor_rep";
 
     // Accept multipart (message + image attachments) or plain JSON.
     const contentType = req.headers.get("content-type") || "";
@@ -184,13 +204,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Notify the other party. Best-effort — a failed notification must never
     // fail the message that was already saved.
-    const authorName = clean(prof?.full_name) || (isAdmin ? "Anchor" : "A rep");
+    const authorName = clean(prof?.full_name) || (isTeam ? "Anchor" : "A rep");
     const shortId = String(id).slice(0, 8);
     const label = marketingCategoriesLabel(order.categories);
     const preview = message ? message.slice(0, 140) : `📎 Sent ${images.length} photo(s)`;
 
-    if (isAdmin) {
-      // Admin → the rep who placed the order.
+    if (isTeam) {
+      // Anchor team (admin or inside rep) → the rep who placed the order.
       if (order.created_by) {
         void sendPushToUser(order.created_by, {
           title: `New message about your order`,
@@ -250,11 +270,11 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ id: string }
     if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const prof = await getProfile(auth.user.id);
-    const isAdmin = clean(prof?.role) === "admin";
+    const role = clean(prof?.role);
 
     const order = await loadOrder(id);
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!isAdmin && order.created_by !== auth.user.id) {
+    if (!(await canAccessThread(role, prof?.email, auth.user.id, order.created_by))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
