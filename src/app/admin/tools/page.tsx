@@ -135,7 +135,8 @@ export default function AdminToolsPage() {
             {/* Admin Console tools */}
             <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Admin Console tools</h2>
             <p className="mb-4 mt-1 text-sm text-[var(--anchor-gray)]">
-              Deactivated tools are hidden from the Admin Console for everyone. {activeCount} of {CARDS.length} active.
+              Deactivated tools stay visible to admins on the console (marked “Inactive”) so you can
+              preview them, but they’re hidden from everyone else. {activeCount} of {CARDS.length} active.
             </p>
             <div className="flex flex-col gap-2.5">
               {CARDS.map((card) => {
