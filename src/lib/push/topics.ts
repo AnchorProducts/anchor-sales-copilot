@@ -57,6 +57,11 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     label: "Document revision change",
     description: "A controlled document's revision label is updated (update the QMS master).",
   },
+  {
+    key: "inventory_low_stock",
+    label: "Inventory low stock",
+    description: "A marketing inventory item drops to or below its low-stock threshold.",
+  },
 ];
 
 export const NOTIFICATION_TOOL_KEYS = NOTIFICATION_TOOLS.map((t) => t.key);

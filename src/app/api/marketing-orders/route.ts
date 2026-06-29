@@ -19,6 +19,7 @@ import {
   insideRepCanAccessOrder,
   resolveInsideRepsFor,
 } from "@/lib/marketing/territory";
+import { consumeStock, notifyLowStockIfCrossed } from "@/lib/inventory/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -703,6 +704,65 @@ export async function PATCH(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
+    // Inventory link: when an order is fulfilled, the fulfiller may record which
+    // inventory item(s) it consumed (orders store free-text items, so the link is
+    // explicit, not inferred). Each entry decrements that item's available stock
+    // and writes a usage row. Only applied when the order's resulting status is
+    // "fulfilled". Best-effort per item — a stock issue logs a warning but never
+    // un-fulfills the order; the per-item outcomes are returned to the caller.
+    const effectiveStatus = hasStatus ? status : fromStatus;
+    let consumption: Array<{ item_id: string; quantity: number; ok: boolean; reason?: string }> = [];
+    if (effectiveStatus === "fulfilled" && Array.isArray(body?.consumed) && body.consumed.length) {
+      for (const raw of body.consumed as any[]) {
+        const itemId = clean(raw?.item_id);
+        const qty = Math.floor(Number(raw?.quantity));
+        if (!itemId || !Number.isFinite(qty) || qty <= 0) {
+          consumption.push({ item_id: itemId, quantity: qty || 0, ok: false, reason: "invalid" });
+          continue;
+        }
+        const { data: item } = await supabaseAdmin
+          .from("marketing_inventory_items")
+          .select("id,name,quantity_available,quantity_out,low_stock_threshold")
+          .eq("id", itemId)
+          .maybeSingle();
+        if (!item) {
+          consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "not_found" });
+          continue;
+        }
+        const available = (item as any).quantity_available as number;
+        if (qty > available) {
+          consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "insufficient" });
+          continue;
+        }
+        const moved = await consumeStock(itemId, qty, available);
+        if (!moved.ok) {
+          consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "conflict" });
+          continue;
+        }
+        await supabaseAdmin.from("marketing_order_item_usage").insert({
+          order_id: id,
+          item_id: itemId,
+          quantity: qty,
+          created_by: auth.user.id,
+        });
+        void notifyLowStockIfCrossed(
+          {
+            id: itemId,
+            name: clean((item as any).name),
+            quantity_available: moved.available,
+            quantity_out: (item as any).quantity_out || 0,
+            low_stock_threshold: (item as any).low_stock_threshold || 0,
+          },
+          available
+        );
+        consumption.push({ item_id: itemId, quantity: qty, ok: true });
+      }
+      const failed = consumption.filter((c) => !c.ok);
+      if (failed.length) {
+        console.warn("marketing order fulfillment: some inventory decrements failed", failed);
+      }
+    }
+
     // Log the action so every admin shares one attributed history of the order.
     // A phase move always logs (note is required above). A note with no phase
     // change logs too — that's an admin claiming/commenting on the order.
@@ -768,7 +828,7 @@ export async function PATCH(req: Request) {
       });
     }
 
-    return NextResponse.json({ ok: true, order: data, activity: loggedActivity });
+    return NextResponse.json({ ok: true, order: data, activity: loggedActivity, consumption });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to update order." }, { status: 500 });
   }
