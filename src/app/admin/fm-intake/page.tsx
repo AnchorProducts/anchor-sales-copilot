@@ -1,10 +1,8 @@
-// Rooftop Equipment Intake (FM) is temporarily paused (Coming soon). The full
-// implementation is preserved in RealFmIntakePage.tsx — restore by rendering it
-// here again.
-import ComingSoon from "@/app/components/ui/ComingSoon";
+// FM intake back office: submissions list + review/decide, plus a New intake tab.
+import AdminFMIntakePage from "./RealFmIntakePage";
 
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return <ComingSoon title="Rooftop Equipment Intake (FM)" />;
+  return <AdminFMIntakePage />;
 }
