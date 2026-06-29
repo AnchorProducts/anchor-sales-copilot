@@ -95,6 +95,9 @@ export default function AdminMarketingOrdersPage({
   const [delayNotesDraft, setDelayNotesDraft] = useState<Record<string, string>>({});
   // Two views: "active" (in-flight orders) and "archived" (fulfilled/cancelled).
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+  // Which order card is expanded. The list shows compact summary cards; clicking
+  // one opens its full details (status editor, tracker, messages, activity).
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
   // Which order's chat thread is currently expanded.
   const [openChatId, setOpenChatId] = useState<string | null>(null);
   // Which order's activity log is currently expanded.
@@ -112,6 +115,10 @@ export default function AdminMarketingOrdersPage({
     Record<string, Array<{ item_id: string; quantity: string }>>
   >({});
   const { counts: unread, markRead } = useOrderUnread();
+
+  function toggleOrder(orderId: string) {
+    setOpenOrderId((cur) => (cur === orderId ? null : orderId));
+  }
 
   function toggleActivity(orderId: string) {
     setOpenActivityId((cur) => (cur === orderId ? null : orderId));
@@ -429,8 +436,15 @@ export default function AdminMarketingOrdersPage({
               <div className="space-y-3">
                 {filteredItems.map((o) => (
                   <Card key={o.id} className="overflow-hidden p-0">
-                    {/* Header: category + status at a glance, with quiet order id/date */}
-                    <div className="border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 sm:px-5">
+                    {/* Header — click to open/close the full order. Shows
+                        category + status at a glance, plus a one-line preview
+                        when collapsed. */}
+                    <button
+                      type="button"
+                      onClick={() => toggleOrder(o.id)}
+                      aria-expanded={openOrderId === o.id}
+                      className="w-full border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 text-left transition hover:bg-[var(--anchor-mint)]/30 sm:px-5"
+                    >
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
                           {marketingCategoriesLabel(o.categories)}
@@ -441,16 +455,27 @@ export default function AdminMarketingOrdersPage({
                           {marketingOrderStatusLabel(o.status)}
                         </span>
                         {unread[o.id] > 0 && openChatId !== o.id && (
-                          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
                             💬 {unread[o.id]} new
                           </span>
                         )}
+                        <span
+                          className={`ml-auto text-[var(--anchor-gray)] transition-transform ${
+                            openOrderId === o.id ? "rotate-180" : ""
+                          }`}
+                          aria-hidden
+                        >
+                          ▾
+                        </span>
                       </div>
-                      <div className="mt-1.5 text-[11px] text-[var(--anchor-gray)]">
-                        #{o.id.slice(0, 8)} · Ordered {formatDateTime(o.created_at)}
+                      <div className="mt-1.5 truncate text-sm font-medium text-black">{o.items}</div>
+                      <div className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
+                        #{o.id.slice(0, 8)} · {o.submitter_name || o.submitter_company || "—"} · Ordered{" "}
+                        {formatDateTime(o.created_at)}
                       </div>
-                    </div>
+                    </button>
 
+                    {openOrderId === o.id && (
                     <div className="px-4 py-4 sm:px-5">
                       {/* What they ordered — the headline */}
                       <p className="text-sm font-medium leading-snug text-black">{o.items}</p>
@@ -771,6 +796,7 @@ export default function AdminMarketingOrdersPage({
                         </div>
                       )}
                     </div>
+                    )}
                   </Card>
                 ))}
               </div>
