@@ -94,6 +94,7 @@ export const CARDS: AdminCard[] = [
     badge: "Analytics",
     href: "/admin/rooftop-reports",
     icon: "shield",
+    comingSoon: true,
   },
   {
     key: "rooftop-logic",
@@ -102,6 +103,7 @@ export const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/rooftop-logic",
     icon: "shield",
+    comingSoon: true,
   },
   {
     key: "notable-projects",
@@ -126,6 +128,7 @@ export const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/fm-intake",
     icon: "clipboard",
+    comingSoon: true,
   },
   {
     key: "knowledge",
