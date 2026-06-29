@@ -567,7 +567,7 @@ export default function DashboardPage() {
   const stats = isInternal && !isAdmin ? [] : [stat1, stat2];
 
   // Quick actions list (role-gated)
-  type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean };
+  type Action = { key: string; href: string; label: string; desc: string; icon: IconName; badge: string; external?: boolean; comingSoon?: boolean };
   const actions: Action[] = [];
 
   // Internal vs external sales (NOT admin view). Submission forms are available
@@ -583,7 +583,7 @@ export default function DashboardPage() {
     actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
     actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
     actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: t("projectIdentifierDesc"),   icon: "clipboard", badge: "Projects"   });
-    actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: t("rooftopAuditDesc"),        icon: "shield",   badge: "Safety"     });
+    actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: "Coming soon — temporarily unavailable.", icon: "shield",   badge: "Soon", comingSoon: true });
     actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
     actions.push({ key: "marketing-orders", href: "/marketing-orders",        label: "Marketing Orders",     desc: "Order samples, brochures, swag, and other marketing collateral.", icon: "package", badge: "Marketing" });
     // Commission is external-only (matches the page + API gate). isExternal is
@@ -821,7 +821,9 @@ export default function DashboardPage() {
                 const span = isTopUsed ? "col-span-2" : "col-span-1";
                 const tutorialKey = `qa-${a.key}`;
                 const Wrap = (props: { children: React.ReactNode; className: string }) =>
-                  a.external ? (
+                  a.comingSoon ? (
+                    <div data-tutorial={tutorialKey} aria-disabled className={`${props.className} cursor-default opacity-60`}>{props.children}</div>
+                  ) : a.external ? (
                     <a href={a.href} target="_blank" rel="noopener noreferrer" data-tutorial={tutorialKey} className={props.className}>{props.children}</a>
                   ) : (
                     <Link href={a.href} data-tutorial={tutorialKey} className={props.className}>{props.children}</Link>
@@ -1011,7 +1013,9 @@ export default function DashboardPage() {
                     const span = isTopUsed ? "lg:col-span-2" : "lg:col-span-1";
                     const tutorialKey = `qa-${a.key}`;
                   const Wrap = (props: { children: React.ReactNode; className: string }) =>
-                    a.external ? (
+                    a.comingSoon ? (
+                      <div data-tutorial={tutorialKey} aria-disabled className={`${props.className} cursor-default opacity-60`}>{props.children}</div>
+                    ) : a.external ? (
                       <a href={a.href} target="_blank" rel="noopener noreferrer" data-tutorial={tutorialKey} className={props.className}>{props.children}</a>
                     ) : (
                       <Link href={a.href} data-tutorial={tutorialKey} className={props.className}>{props.children}</Link>
