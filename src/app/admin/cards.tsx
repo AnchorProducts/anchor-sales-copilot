@@ -112,19 +112,11 @@ export const CARDS: AdminCard[] = [
     icon: "camera",
   },
   {
-    key: "marketing-orders",
-    title: "Marketing Orders",
-    description: "Samples, brochure, swag, and collateral orders submitted by internal and external sales reps.",
-    badge: "Analytics",
-    href: "/admin/marketing-orders",
-    icon: "package",
-  },
-  {
-    key: "inventory",
-    title: "Marketing Inventory",
-    description: "Track marketing stock — samples, brochures, swag — with photos and low-stock alerts, plus check items out for tradeshows and back in.",
+    key: "marketing-center",
+    title: "Marketing Admin Center",
+    description: "Marketing orders, inventory, and tradeshow checkouts in one place — samples, brochures, swag, and collateral ordered by reps, plus stock and low-stock alerts.",
     badge: "Config",
-    href: "/admin/inventory",
+    href: "/admin/marketing",
     icon: "package",
   },
   {
