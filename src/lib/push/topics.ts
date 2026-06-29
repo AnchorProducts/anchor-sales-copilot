@@ -62,6 +62,11 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     label: "Inventory low stock",
     description: "A marketing inventory item drops to or below its low-stock threshold.",
   },
+  {
+    key: "fm_intake",
+    label: "Rooftop Equipment Intake (FM)",
+    description: "A Rooftop Equipment Intake (FM form) is submitted for review.",
+  },
 ];
 
 export const NOTIFICATION_TOOL_KEYS = NOTIFICATION_TOOLS.map((t) => t.key);

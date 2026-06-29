@@ -3,6 +3,8 @@ import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 import { internalAppUrl } from "@/lib/appUrl";
+import { sendPushToTool } from "@/lib/push/send";
+import { getToolRecipientEmails, mergeEmails } from "@/lib/push/recipients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,19 +60,21 @@ async function uploadFiles(
 
 // Recipients for the intake notification: a configured address, falling back so a
 // submission never goes nowhere.
-function notifyRecipients(): string[] {
-  const raw =
-    clean(process.env.FM_INTAKE_NOTIFICATIONS_EMAIL) ||
-    clean(process.env.LEAD_NOTIFICATIONS_FROM) ||
-    "reports@anchorp.com";
-  return raw
-    .split(/[,;\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+// Recipients = the fm_intake tool's assigned users + raw emails, with an env
+// fallback so a submission never goes nowhere.
+async function resolveFmRecipients(): Promise<string[]> {
+  const configured = await getToolRecipientEmails("fm_intake");
+  if (configured.length > 0) return configured;
+  return mergeEmails(
+    process.env.FM_INTAKE_NOTIFICATIONS_EMAIL ||
+      process.env.LEAD_NOTIFICATIONS_FROM ||
+      "reports@anchorp.com"
+  );
 }
 
 async function sendIntakeEmail(opts: {
   id: string;
+  to: string[];
   p: Record<string, any>;
   equipment: string[];
   fileCount: number;
@@ -96,7 +100,7 @@ async function sendIntakeEmail(opts: {
 
   const result = await resend.emails.send({
     from,
-    to: notifyRecipients(),
+    to: opts.to,
     subject: `Rooftop Equipment Intake — ${name} (${opts.id.slice(0, 8)})`,
     text: lines.join("\n"),
   });
@@ -168,11 +172,24 @@ export async function POST(req: Request) {
       }
     }
 
+    const who =
+      [clean(customer.firstName), clean(customer.lastName)].filter(Boolean).join(" ") ||
+      clean(customer.companyName) ||
+      "a customer";
+
     try {
-      await sendIntakeEmail({ id, p: payload, equipment, fileCount: files.length });
+      const to = await resolveFmRecipients();
+      await sendIntakeEmail({ id, to, p: payload, equipment, fileCount: files.length });
     } catch (e: any) {
       console.warn("fm intake email failed", e?.message || e);
     }
+
+    void sendPushToTool("fm_intake", {
+      title: "New rooftop equipment intake",
+      body: `${who}${equipment.length ? ` — ${equipment.join(", ")}` : ""}`,
+      url: "/admin/fm-intake",
+      tag: `fm-${id}`,
+    });
 
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
@@ -184,5 +201,62 @@ export async function POST(req: Request) {
     }
     console.error("fm intake route error", e);
     return NextResponse.json({ error: e?.message || "Failed to submit intake." }, { status: 500 });
+  }
+}
+
+// Admin-only: the submissions list (the back office). Summary fields per row plus
+// attachment count and the reviewer's name.
+export async function GET() {
+  try {
+    const supabase = await supabaseRoute();
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((await getRole(auth.user.id)) !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("fm_intake_submissions")
+      .select(
+        "id,first_name,last_name,email,phone,company_name,project_name,project_address,equipment,attachments,status,review_notes,reviewed_by,reviewed_at,created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const rows = (data || []) as any[];
+    const reviewerIds = Array.from(new Set(rows.map((r) => r.reviewed_by).filter(Boolean)));
+    const names = new Map<string, string>();
+    if (reviewerIds.length) {
+      const { data: people } = await supabaseAdmin
+        .from("profiles")
+        .select("id,full_name,email")
+        .in("id", reviewerIds);
+      for (const p of (people || []) as any[]) {
+        names.set(p.id, clean(p.full_name) || clean(p.email) || "");
+      }
+    }
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      phone: r.phone,
+      company_name: r.company_name,
+      project_name: r.project_name,
+      project_address: r.project_address,
+      equipment: r.equipment || [],
+      attachment_count: Array.isArray(r.attachments) ? r.attachments.length : 0,
+      status: r.status || "new",
+      review_notes: r.review_notes || null,
+      reviewed_by_name: r.reviewed_by ? names.get(r.reviewed_by) || null : null,
+      reviewed_at: r.reviewed_at,
+      created_at: r.created_at,
+    }));
+
+    return NextResponse.json({ items });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to load submissions." }, { status: 500 });
   }
 }
