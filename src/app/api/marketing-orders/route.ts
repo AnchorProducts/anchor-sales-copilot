@@ -8,15 +8,16 @@ import {
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
 } from "@/lib/marketingOrders";
-import { sendPushToTool, sendPushToUser, sendPushToEmails } from "@/lib/push/send";
+import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
+import { marketingRegionToolKey } from "@/lib/push/topics";
 import { internalAppUrl } from "@/lib/appUrl";
 import { loadAllSalesReps } from "@/lib/sales/regions";
 import {
   submitterStates,
   insideRepEmailsFor,
-  resolveInsideRepEmails,
   insideRepCanAccessOrder,
+  resolveInsideRepsFor,
 } from "@/lib/marketing/territory";
 
 export const runtime = "nodejs";
@@ -235,54 +236,6 @@ async function sendMarketingOrderCreatorEmail(params: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
-// Notify the outside rep's assigned inside salesperson that their rep submitted a
-// marketing order — inside sales now fulfills these. Self-contained (full order
-// details inline) and points at the fulfillment view.
-async function sendMarketingOrderInsideRepEmail(params: {
-  orderId: string;
-  to: string[];
-  submitterName: string | null;
-  submitterCompany: string | null;
-  categories: string[];
-  items: string;
-  quantity: string | null;
-  neededBy: string | null;
-  shipTo: string | null;
-  notes: string | null;
-}) {
-  const resendKey = clean(process.env.RESEND_API_KEY);
-  if (!resendKey) return;
-
-  const resend = new Resend(resendKey);
-  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
-  const categoryLabel = marketingCategoriesLabel(params.categories);
-  const who = params.submitterName || params.submitterCompany || "Your outside rep";
-  const fulfillUrl = internalAppUrl("/admin/marketing-orders");
-
-  const lines: string[] = [];
-  lines.push(`${who} submitted a marketing order (ID: ${params.orderId.slice(0, 8)}).`);
-  lines.push("");
-  lines.push(`Submitted by: ${params.submitterName || "—"}${params.submitterCompany ? ` (${params.submitterCompany})` : ""}`);
-  lines.push(`Categories: ${categoryLabel}`);
-  lines.push(`Item(s): ${params.items}`);
-  lines.push(`Quantity: ${params.quantity || "—"}`);
-  lines.push(`Needed by: ${params.neededBy || "—"}`);
-  lines.push("");
-  lines.push("Ship to:");
-  lines.push(params.shipTo || "(none)");
-  lines.push("");
-  lines.push("Notes:");
-  lines.push(params.notes || "(none)");
-  lines.push("");
-  lines.push(`Fulfill this order: ${fulfillUrl}`);
-
-  const subject = `Marketing order from ${who} — ${categoryLabel} (${params.orderId.slice(0, 8)})`;
-
-  const result = await resend.emails.send({ from, to: params.to, subject, text: lines.join("\n") });
-  const maybeError = (result as any)?.error;
-  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
-}
-
 export async function POST(req: Request) {
   try {
     const supabase = await supabaseRoute();
@@ -435,46 +388,63 @@ export async function POST(req: Request) {
       console.warn("marketing order creator push failed", pushErr?.message || pushErr);
     });
 
-    // Notify the outside rep's assigned inside salesperson — they now fulfill
-    // these orders, so they get the order the moment their rep submits it. Routed
-    // by the rep's own service state(s)/ZIP, the same way consults route. Only
-    // applies when an OUTSIDE (external) rep submits; internal/admin submissions
-    // already reach the marketing team via the tool notification above. All
-    // best-effort — never block the successful submission.
+    // Route the order to its REGION'S MANAGER — not the inside rep directly. Per
+    // the inside sales manager, marketing orders must not go straight to the
+    // inside salespeople. So we resolve the submitter's territory to its inside
+    // rep(s) (existing routing), then notify each inside rep's per-region tool —
+    // whose recipients are the manager(s) an admin assigned in settings. If a
+    // region has no one assigned, nothing routes there and the marketing_order
+    // tool above (admins) is the safety net. Only outside-rep submissions route
+    // this way; internal/admin submissions already reach the team via that tool.
+    // Inside reps still SEE and work their orders via the GET/PATCH scoping below.
+    // All best-effort — never block the successful submission.
     if (profile.role === "external_rep") {
       try {
-        const insideEmails = await resolveInsideRepEmails(profile);
-        if (insideEmails.length) {
-          try {
-            await sendMarketingOrderInsideRepEmail({
-              orderId,
-              to: insideEmails,
-              submitterName: submitter_name,
-              submitterCompany: submitter_company,
-              categories,
-              items,
-              quantity,
-              neededBy: needed_by,
-              shipTo: ship_to,
-              notes,
-            });
-          } catch (insideEmailErr: any) {
-            console.warn("marketing order inside-rep email failed", insideEmailErr?.message || insideEmailErr);
-          }
-          void sendPushToEmails(insideEmails, {
-            title: "Marketing order from your rep",
-            body: `${submitter_name || submitter_company || "Your outside rep"} ordered ${marketingCategoriesLabel(categories)}.`,
-            url: "/admin/marketing-orders",
-            tag: `mo-inside-${orderId}`,
-          });
-        } else {
-          console.warn(
-            "marketing order: no inside rep resolved for submitter",
-            submitter_email || orderId
-          );
+        const insideReps = await resolveInsideRepsFor(profile);
+        const regionKeys = Array.from(
+          new Set(
+            insideReps.map((r) => clean(r.id)).filter(Boolean).map((id) => marketingRegionToolKey(id))
+          )
+        );
+        if (regionKeys.length === 0) {
+          console.warn("marketing order: no region resolved for submitter", submitter_email || orderId);
         }
-      } catch (insideErr: any) {
-        console.warn("marketing order inside-rep notify failed", insideErr?.message || insideErr);
+
+        const who = submitter_name || submitter_company || "an outside rep";
+        const categoryLabel = marketingCategoriesLabel(categories);
+        const fulfillUrl = internalAppUrl("/admin/marketing-orders");
+        const text = [
+          `${who} submitted a marketing order (ID: ${orderId.slice(0, 8)}).`,
+          "",
+          `Submitted by: ${submitter_name || "—"}${submitter_company ? ` (${submitter_company})` : ""}`,
+          `Categories: ${categoryLabel}`,
+          `Item(s): ${items}`,
+          `Quantity: ${quantity || "—"}`,
+          `Needed by: ${needed_by || "—"}`,
+          "",
+          "Ship to:",
+          ship_to || "(none)",
+          "",
+          "Notes:",
+          notes || "(none)",
+          "",
+          `Fulfill this order: ${fulfillUrl}`,
+        ].join("\n");
+
+        for (const regionKey of regionKeys) {
+          void sendPushToTool(regionKey, {
+            title: "Marketing order in your region",
+            body: `${who} ordered ${categoryLabel}.`,
+            url: "/admin/marketing-orders",
+            tag: `mo-${orderId}`,
+          });
+          void emailToolUsers(regionKey, {
+            subject: `Marketing order from ${who} — ${categoryLabel} (${orderId.slice(0, 8)})`,
+            text,
+          });
+        }
+      } catch (regionErr: any) {
+        console.warn("marketing order region notify failed", regionErr?.message || regionErr);
       }
     }
 
