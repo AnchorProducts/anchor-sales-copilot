@@ -120,6 +120,14 @@ export const CARDS: AdminCard[] = [
     icon: "package",
   },
   {
+    key: "inventory",
+    title: "Marketing Inventory",
+    description: "Track marketing stock — samples, brochures, swag — with photos and low-stock alerts, plus check items out for tradeshows and back in.",
+    badge: "Config",
+    href: "/admin/inventory",
+    icon: "package",
+  },
+  {
     key: "fm-intake",
     title: "Rooftop Equipment Intake (FM)",
     description: "Universal rooftop equipment intake form — customer, roof, engineering, and roof-mounted equipment details for securement recommendations.",
