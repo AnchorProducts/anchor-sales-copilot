@@ -433,9 +433,14 @@ export default function AdminMarketingOrdersPage({
                 {activeTab === "archived" ? "No archived orders." : "No active orders."}
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredItems.map((o) => (
-                  <Card key={o.id} className="overflow-hidden p-0">
+                  <Card
+                    key={o.id}
+                    className={`overflow-hidden p-0 ${
+                      openOrderId === o.id ? "col-span-2 lg:col-span-3 xl:col-span-4" : ""
+                    }`}
+                  >
                     {/* Header — click to open/close the full order. Shows
                         category + status at a glance, plus a one-line preview
                         when collapsed. */}
