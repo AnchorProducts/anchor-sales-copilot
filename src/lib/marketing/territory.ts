@@ -20,17 +20,19 @@ export function submitterStates(profile: any): string[] {
   return single ? [single] : [];
 }
 
-// Inside (internal) salesperson emails assigned to a territory — the state(s) an
-// outside rep covers, narrowed by ZIP for split territories. Pure and in-memory
-// against a preloaded sales_reps list, so it can run per-order in a list scan.
-// Mirrors resolveRegionalReps: narrow the full covering set by ZIP, then keep the
-// internal reps.
-export function insideRepEmailsFor(
+// Inside (internal) reps assigned to a territory — the state(s) an outside rep
+// covers, narrowed by ZIP for split territories. Pure and in-memory against a
+// preloaded sales_reps list, so it can run per-order in a list scan. Mirrors
+// resolveRegionalReps: narrow the full covering set by ZIP, then keep the
+// internal reps, de-duped by id. This is the one place the outside-rep → inside-
+// rep "region" is resolved; emails and region tool keys both derive from it.
+export function insideRepsFor(
   allReps: SalesRep[],
   states: string[],
   zip: string | null
-): Set<string> {
-  const out = new Set<string>();
+): SalesRep[] {
+  const seen = new Set<string>();
+  const out: SalesRep[] = [];
   for (const raw of states) {
     const state = clean(raw).toUpperCase();
     if (!state) continue;
@@ -38,21 +40,40 @@ export function insideRepEmailsFor(
       (r) => Array.isArray(r.states) && r.states.some((s) => clean(s).toUpperCase() === state)
     );
     for (const rep of narrowRepsByZip(covering, zip)) {
-      if (rep.kind === "internal") {
-        const email = clean(rep.email).toLowerCase();
-        if (email) out.add(email);
-      }
+      if (rep.kind !== "internal") continue;
+      // Dedupe by id when present, else by lowercased email — a rep can cover
+      // several of the submitter's states and must only appear once.
+      const dedupeKey = clean(rep.id) || clean(rep.email).toLowerCase();
+      if (!dedupeKey || seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      out.push(rep);
     }
   }
   return out;
 }
 
-// Resolve the inside salesperson(s) assigned to an outside rep's own territory.
-// Used to notify them the moment their rep submits an order.
-export async function resolveInsideRepEmails(profile: any): Promise<string[]> {
+// Inside (internal) salesperson emails assigned to a territory. Thin wrapper over
+// insideRepsFor for callers that only need the address set (visibility scoping).
+export function insideRepEmailsFor(
+  allReps: SalesRep[],
+  states: string[],
+  zip: string | null
+): Set<string> {
+  const out = new Set<string>();
+  for (const rep of insideRepsFor(allReps, states, zip)) {
+    const email = clean(rep.email).toLowerCase();
+    if (email) out.add(email);
+  }
+  return out;
+}
+
+// Resolve the inside rep record(s) for an outside rep's own territory. Used on
+// submit to map the order to its region notification tool(s) — i.e. the
+// configured regional manager — without notifying the inside rep directly.
+export async function resolveInsideRepsFor(profile: any): Promise<SalesRep[]> {
   const allReps = await loadAllSalesReps();
   const zip = clean(profile?.service_zip) || null;
-  return Array.from(insideRepEmailsFor(allReps, submitterStates(profile), zip));
+  return insideRepsFor(allReps, submitterStates(profile), zip);
 }
 
 // True if an inside rep (by email) may see/act on an order placed by `orderCreatedBy`.
