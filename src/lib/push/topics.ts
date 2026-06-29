@@ -61,6 +61,28 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
 
 export const NOTIFICATION_TOOL_KEYS = NOTIFICATION_TOOLS.map((t) => t.key);
 
+// Per-region marketing-order tools are generated dynamically — one per internal
+// (inside-sales) rep, so an admin can name a manager per region in the same
+// settings UI. The key embeds the rep's stable id, so routing reuses the
+// existing outside-rep → inside-rep territory resolution: an order resolves to
+// its inside rep, and that rep's region tool is the recipient list (the manager).
+export const MARKETING_REGION_TOOL_PREFIX = "marketing_order_region:";
+
+export function marketingRegionToolKey(repId: string): string {
+  return `${MARKETING_REGION_TOOL_PREFIX}${repId}`;
+}
+
+export function isMarketingRegionTool(key: string): boolean {
+  return (
+    key.startsWith(MARKETING_REGION_TOOL_PREFIX) &&
+    key.length > MARKETING_REGION_TOOL_PREFIX.length
+  );
+}
+
+export function marketingRegionToolRepId(key: string): string | null {
+  return isMarketingRegionTool(key) ? key.slice(MARKETING_REGION_TOOL_PREFIX.length) : null;
+}
+
 export function isNotificationTool(key: string): boolean {
-  return NOTIFICATION_TOOL_KEYS.includes(key);
+  return NOTIFICATION_TOOL_KEYS.includes(key) || isMarketingRegionTool(key);
 }
