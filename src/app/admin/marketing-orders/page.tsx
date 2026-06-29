@@ -103,6 +103,14 @@ export default function AdminMarketingOrdersPage() {
   // status stages it here and reveals a required note; saving applies both.
   const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
   const [phaseNoteDraft, setPhaseNoteDraft] = useState<Record<string, string>>({});
+  // Inventory items for the "what stock did this order consume?" picker shown
+  // when fulfilling an order, plus the per-order draft rows {item_id, quantity}.
+  const [inventory, setInventory] = useState<
+    { id: string; name: string; quantity_available: number }[]
+  >([]);
+  const [consumeDrafts, setConsumeDrafts] = useState<
+    Record<string, Array<{ item_id: string; quantity: string }>>
+  >({});
   const { counts: unread, markRead } = useOrderUnread();
 
   function toggleActivity(orderId: string) {
@@ -143,6 +151,45 @@ export default function AdminMarketingOrdersPage() {
     setItems(json?.items || []);
   }
 
+  // Inventory items for the fulfillment consumption picker. Best-effort: if it
+  // fails (e.g. tool not set up), the picker just shows no options.
+  async function loadInventory() {
+    try {
+      const res = await fetch("/api/inventory", { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (res.ok) {
+        setInventory(
+          (json?.items || []).map((it: any) => ({
+            id: it.id,
+            name: it.name,
+            quantity_available: it.quantity_available,
+          }))
+        );
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  // Consumption-draft row helpers for an order's fulfillment picker.
+  function addConsumeRow(id: string) {
+    setConsumeDrafts((d) => ({ ...d, [id]: [...(d[id] || []), { item_id: "", quantity: "1" }] }));
+  }
+  function setConsumeRow(id: string, idx: number, patch: Partial<{ item_id: string; quantity: string }>) {
+    setConsumeDrafts((d) => {
+      const rows = [...(d[id] || [])];
+      rows[idx] = { ...rows[idx], ...patch };
+      return { ...d, [id]: rows };
+    });
+  }
+  function removeConsumeRow(id: string, idx: number) {
+    setConsumeDrafts((d) => {
+      const rows = [...(d[id] || [])];
+      rows.splice(idx, 1);
+      return { ...d, [id]: rows };
+    });
+  }
+
   // Stage a phase change: the admin picks a new status, but nothing is saved until
   // they describe what they did. Re-selecting the current status cancels.
   function stageStatus(o: MarketingOrder, status: string) {
@@ -164,6 +211,10 @@ export default function AdminMarketingOrdersPage() {
       const { [id]: _omit, ...rest } = d;
       return rest;
     });
+    setConsumeDrafts((d) => {
+      const { [id]: _omit, ...rest } = d;
+      return rest;
+    });
   }
 
   // Commit the staged phase change with the required note. The API rejects the
@@ -176,21 +227,38 @@ export default function AdminMarketingOrdersPage() {
       setUpdateErr("Add a note describing what you did before moving this order.");
       return;
     }
+    // When fulfilling, attach any inventory the order consumed so stock is
+    // decremented. Only valid rows (item picked + positive qty) are sent.
+    const consumed =
+      status === "fulfilled"
+        ? (consumeDrafts[id] || [])
+            .map((r) => ({ item_id: r.item_id, quantity: Math.floor(Number(r.quantity)) }))
+            .filter((r) => r.item_id && Number.isFinite(r.quantity) && r.quantity > 0)
+        : [];
+
     setSavingId(id);
     setUpdateErr(null);
     try {
       const res = await fetch("/api/marketing-orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, note }),
+        body: JSON.stringify({ id, status, note, ...(consumed.length ? { consumed } : {}) }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         setUpdateErr(json?.error || "Failed to update status.");
       } else {
+        // The status moved, but some stock decrements may have failed (e.g. not
+        // enough on hand). Surface that without blocking the fulfillment.
+        const failed = (json?.consumption || []).filter((c: any) => !c.ok);
         cancelPhaseChange(id);
         // Refresh so the attribution + latest-activity line reflect this change.
-        await loadOrders();
+        await Promise.all([loadOrders(), loadInventory()]);
+        if (failed.length) {
+          setUpdateErr(
+            `Order fulfilled, but ${failed.length} inventory item(s) couldn't be decremented (insufficient stock or removed). Check inventory.`
+          );
+        }
       }
     } catch (e: any) {
       setUpdateErr(e?.message || "Failed to update status.");
@@ -283,7 +351,7 @@ export default function AdminMarketingOrdersPage() {
       }
       setRole(userRole);
 
-      await loadOrders();
+      await Promise.all([loadOrders(), loadInventory()]);
       if (!alive) return;
       setReady(true);
     })();
@@ -440,6 +508,64 @@ export default function AdminMarketingOrdersPage() {
                           <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
                             Required. This is logged against your name so the team can see this order is handled.
                           </p>
+
+                          {/* Inventory consumption: only when fulfilling. Optional —
+                              record which stock this order used so it's decremented. */}
+                          {pendingStatus[o.id] === "fulfilled" && (
+                            <div className="mt-3 rounded-lg border border-[var(--border-default)] bg-white p-2.5">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                Inventory used (optional)
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
+                                Pick the stock item(s) this order consumed to decrement inventory.
+                              </p>
+                              {(consumeDrafts[o.id] || []).map((row, idx) => {
+                                const picked = inventory.find((it) => it.id === row.item_id);
+                                return (
+                                  <div key={idx} className="mt-2 flex items-center gap-2">
+                                    <Select
+                                      value={row.item_id}
+                                      onChange={(e) => setConsumeRow(o.id, idx, { item_id: e.target.value })}
+                                      className="h-9 flex-1 text-sm"
+                                    >
+                                      <option value="">Select item…</option>
+                                      {inventory.map((it) => (
+                                        <option key={it.id} value={it.id}>
+                                          {it.name} ({it.quantity_available} in stock)
+                                        </option>
+                                      ))}
+                                    </Select>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      max={picked ? picked.quantity_available : undefined}
+                                      value={row.quantity}
+                                      onChange={(e) => setConsumeRow(o.id, idx, { quantity: e.target.value })}
+                                      className="h-9 w-20 text-sm"
+                                      aria-label="Quantity used"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeConsumeRow(o.id, idx)}
+                                      aria-label="Remove"
+                                      className="text-[var(--anchor-deep)]/60 hover:text-red-600"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                onClick={() => addConsumeRow(o.id)}
+                                className="mt-2 text-xs font-semibold text-[var(--anchor-green)] hover:underline"
+                              >
+                                + Add item
+                              </button>
+                            </div>
+                          )}
+
                           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                             <button
                               type="button"
