@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { NOTIFICATION_TOOLS, isNotificationTool } from "@/lib/push/topics";
+import {
+  NOTIFICATION_TOOLS,
+  isNotificationTool,
+  isMarketingRegionTool,
+  marketingRegionToolKey,
+  marketingRegionToolRepId,
+} from "@/lib/push/topics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,14 +33,40 @@ export async function GET() {
     const gate = await requireAdmin();
     if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-    const [{ data: users }, { data: rows }, { data: emailRows }] = await Promise.all([
-      supabaseAdmin
-        .from("profiles")
-        .select("id,full_name,email,role")
-        .order("full_name", { ascending: true }),
-      supabaseAdmin.from("notification_tool_assignments").select("tool_key,user_id"),
-      supabaseAdmin.from("notification_tool_emails").select("tool_key,email"),
-    ]);
+    const [{ data: users }, { data: rows }, { data: emailRows }, { data: insideReps }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("profiles")
+          .select("id,full_name,email,role")
+          .order("full_name", { ascending: true }),
+        supabaseAdmin.from("notification_tool_assignments").select("tool_key,user_id"),
+        supabaseAdmin.from("notification_tool_emails").select("tool_key,email"),
+        supabaseAdmin
+          .from("sales_reps")
+          .select("id,name,states,zip_prefixes")
+          .eq("kind", "internal")
+          .order("name", { ascending: true }),
+      ]);
+
+    // One marketing-order region tool per inside-sales rep — the regional manager
+    // who should receive that territory's orders. Generated here so the settings
+    // UI always reflects the current roster of regions.
+    const regionTools = ((insideReps || []) as {
+      id: string;
+      name: string | null;
+      zip_prefixes: string[] | null;
+    }[]).map((r) => {
+      const who = (r.name || "").trim() || "this region";
+      const zipNote =
+        Array.isArray(r.zip_prefixes) && r.zip_prefixes.length
+          ? ` (ZIP ${r.zip_prefixes.join(", ")})`
+          : "";
+      return {
+        key: marketingRegionToolKey(r.id),
+        label: `Marketing order — ${who}'s region${zipNote}`,
+        description: `A rep in ${who}'s territory submits a marketing order. Assign the regional manager here — they get it instead of the inside rep.`,
+      };
+    });
 
     const assignments: Record<string, string[]> = {};
     for (const r of (rows || []) as { tool_key: string; user_id: string }[]) {
@@ -54,7 +86,7 @@ export async function GET() {
     );
 
     return NextResponse.json({
-      tools: NOTIFICATION_TOOLS,
+      tools: [...NOTIFICATION_TOOLS, ...regionTools],
       users: users || [],
       assignments,
       toolEmails,
@@ -82,6 +114,20 @@ export async function PUT(req: Request) {
     const toolKey = String(body?.tool_key || "");
     if (!isNotificationTool(toolKey)) {
       return NextResponse.json({ error: "Unknown tool." }, { status: 400 });
+    }
+    // A region tool key must point at a real inside-sales rep, so a stale/forged
+    // key can't write orphan recipient rows that never route to anything.
+    if (isMarketingRegionTool(toolKey)) {
+      const repId = marketingRegionToolRepId(toolKey);
+      const { data: rep } = await supabaseAdmin
+        .from("sales_reps")
+        .select("id")
+        .eq("id", repId)
+        .eq("kind", "internal")
+        .maybeSingle();
+      if (!rep) {
+        return NextResponse.json({ error: "Unknown region." }, { status: 400 });
+      }
     }
 
     if ("user_ids" in (body || {})) {
