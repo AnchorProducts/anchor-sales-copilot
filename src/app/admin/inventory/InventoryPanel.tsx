@@ -658,70 +658,110 @@ function ItemsList({
   onRemoveImage: (it: InventoryItem) => void;
   busy: boolean;
 }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
   if (items.length === 0) {
     return <Card className="p-6 text-sm text-[var(--anchor-gray)]">No inventory items yet. Add your first one.</Card>;
   }
   return (
-    <div className="grid gap-3">
-      {items.map((it) => (
-        <Card key={it.id} className="p-4">
-          <div className="flex gap-4">
-            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
-              {it.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-[var(--anchor-gray)]">
-                  No photo
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+      {items.map((it) => {
+        const open = openId === it.id;
+        return (
+          <Card
+            key={it.id}
+            className={`overflow-hidden p-0 ${open ? "col-span-2 lg:col-span-3 xl:col-span-4" : ""}`}
+          >
+            {/* Compact tile — click to open the item's details + actions. */}
+            <button
+              type="button"
+              onClick={() => setOpenId(open ? null : it.id)}
+              aria-expanded={open}
+              className="flex w-full items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
+            >
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                {it.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--anchor-gray)]">
+                    No photo
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-1.5">
+                  <h3 className="truncate text-sm font-bold text-[var(--anchor-deep)]">{it.name}</h3>
+                  <span
+                    className={`shrink-0 text-[var(--anchor-gray)] transition-transform ${open ? "rotate-180" : ""}`}
+                    aria-hidden
+                  >
+                    ▾
+                  </span>
                 </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base font-bold text-[var(--anchor-deep)]">{it.name}</h3>
-                {it.category && (
-                  <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-xs text-[var(--anchor-gray)]">
-                    {inventoryCategoryLabel(it.category)}
-                  </span>
-                )}
-                {it.low_stock && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                    Low stock
-                  </span>
-                )}
-              </div>
-              {it.description && <p className="mt-0.5 text-sm text-[var(--anchor-gray)]">{it.description}</p>}
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-                <span>
-                  <strong className="text-[var(--anchor-deep)]">{it.quantity_available}</strong> available
-                </span>
-                <span>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {it.category && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
+                      {inventoryCategoryLabel(it.category)}
+                    </span>
+                  )}
+                  {it.low_stock && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      Low stock
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-[var(--anchor-gray)]">
+                  <strong className="text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail ·{" "}
                   <strong className="text-[var(--anchor-deep)]">{it.quantity_out}</strong> out
-                </span>
-                {it.sku && <span className="text-[var(--anchor-gray)]">SKU {it.sku}</span>}
-                {it.location && <span className="text-[var(--anchor-gray)]">{it.location}</span>}
-                <span className="text-[var(--anchor-gray)]">{formatUnitCost(it.unit_cost)}</span>
+                </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
-                  Check out
-                </Button>
-                <Button variant="ghost" onClick={() => onEdit(it)} disabled={busy}>
-                  Edit
-                </Button>
-                {it.image_url && (
-                  <Button variant="ghost" onClick={() => onRemoveImage(it)} disabled={busy}>
-                    Remove photo
-                  </Button>
+            </button>
+
+            {open && (
+              <div className="border-t border-[var(--border-default)] px-3 py-3">
+                {it.description && (
+                  <p className="text-sm text-[var(--anchor-gray)]">{it.description}</p>
                 )}
-                <Button variant="destructive" onClick={() => onDelete(it)} disabled={busy}>
-                  Delete
-                </Button>
+                <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                  {it.sku && (
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">SKU</dt>
+                      <dd>{it.sku}</dd>
+                    </div>
+                  )}
+                  {it.location && (
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Location</dt>
+                      <dd>{it.location}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Unit cost</dt>
+                    <dd>{formatUnitCost(it.unit_cost)}</dd>
+                  </div>
+                </dl>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
+                    Check out
+                  </Button>
+                  <Button variant="ghost" onClick={() => onEdit(it)} disabled={busy}>
+                    Edit
+                  </Button>
+                  {it.image_url && (
+                    <Button variant="ghost" onClick={() => onRemoveImage(it)} disabled={busy}>
+                      Remove photo
+                    </Button>
+                  )}
+                  <Button variant="destructive" onClick={() => onDelete(it)} disabled={busy}>
+                    Delete
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
-        </Card>
-      ))}
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }
