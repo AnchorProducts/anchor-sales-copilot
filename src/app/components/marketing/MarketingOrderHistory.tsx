@@ -167,7 +167,7 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                 </div>
               )}
 
-              <div className="mt-4 text-sm text-black">{o.items}</div>
+              <div className="mt-4 whitespace-pre-line text-sm text-black">{o.items}</div>
 
               <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs text-[var(--anchor-gray)] sm:grid-cols-2">
                 <div>

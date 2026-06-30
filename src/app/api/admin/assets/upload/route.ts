@@ -102,52 +102,80 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const formData = await req.formData();
-    const prefix = normalizePrefix(String(formData.get("prefix") || ""));
-    const category = String(formData.get("category") || "other").trim();
-    const visibility = String(formData.get("visibility") || "public").trim();
-    const productId = String(formData.get("productId") || "").trim() || null;
-    const userTitle = String(formData.get("title") || "").trim();
-    const assetType = String(formData.get("type") || "document").trim();
-    const file = formData.get("file") as File | null;
+    // Two-phase JSON flow. The browser uploads the file bytes straight to
+    // Supabase Storage via a signed upload URL ("sign" phase), then calls back
+    // so we can record the assets row and kick off ingestion ("commit" phase).
+    // Keeping bytes off this serverless function dodges Vercel's ~4.5MB
+    // request-body cap that large docs/photos exceed.
+    const body = await req.json().catch(() => null);
+    const phase = String(body?.phase || "").trim();
+    const prefix = normalizePrefix(String(body?.prefix || ""));
+    const category = String(body?.category || "other").trim();
+    const visibility = String(body?.visibility || "public").trim();
 
     if (!prefix) {
       return NextResponse.json({ error: "Missing prefix" }, { status: 400 });
     }
-    if (!file) {
-      return NextResponse.json({ error: "Missing file" }, { status: 400 });
-    }
 
-    const baseName = sanitizeFilename(file.name);
+    // ── Phase 1: mint a signed upload URL ─────────────────────────────────
+    if (phase === "sign") {
+      const fileName = String(body?.fileName || "").trim();
+      if (!fileName) {
+        return NextResponse.json({ error: "Missing file" }, { status: 400 });
+      }
 
-    let finalName: string;
-    const fixedBase = CATEGORY_FIXED_BASENAME[category];
-    if (fixedBase) {
-      const dot = baseName.lastIndexOf(".");
-      const ext = dot > 0 ? baseName.slice(dot) : "";
-      finalName = `${fixedBase}${ext}`;
-    } else {
-      const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
-      const alreadyTagged =
-        categoryPrefix &&
-        baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
-      finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
-    }
+      const baseName = sanitizeFilename(fileName);
 
-    const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
-    const path = `${folder}/${finalName}`;
+      let finalName: string;
+      const fixedBase = CATEGORY_FIXED_BASENAME[category];
+      if (fixedBase) {
+        const dot = baseName.lastIndexOf(".");
+        const ext = dot > 0 ? baseName.slice(dot) : "";
+        finalName = `${fixedBase}${ext}`;
+      } else {
+        const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
+        const alreadyTagged =
+          categoryPrefix &&
+          baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
+        finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
+      }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+      const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
+      const path = `${folder}/${finalName}`;
 
-    const { error: uploadErr } = await supabaseAdmin.storage
-      .from("knowledge")
-      .upload(path, buffer, {
-        contentType: file.type || "application/octet-stream",
-        upsert: true,
+      const { data, error } = await supabaseAdmin.storage
+        .from("knowledge")
+        .createSignedUploadUrl(path, { upsert: true });
+
+      if (error || !data) {
+        return NextResponse.json(
+          { error: error?.message || "Could not create upload URL" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        path,
+        name: finalName,
+        token: data.token,
+        signedUrl: data.signedUrl,
       });
+    }
 
-    if (uploadErr) {
-      return NextResponse.json({ error: uploadErr.message }, { status: 500 });
+    // ── Phase 2: record the assets row + ingest the uploaded file ─────────
+    const productId = String(body?.productId || "").trim() || null;
+    const userTitle = String(body?.title || "").trim();
+    const assetType = String(body?.type || "document").trim();
+    const path = String(body?.path || "").trim();
+    const finalName = String(body?.name || "").trim() || (path.split("/").pop() || "");
+
+    if (!path) {
+      return NextResponse.json({ error: "Missing path" }, { status: 400 });
+    }
+    // Guard: the committed path must live under the prefix we'd sign for.
+    const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
+    if (!path.startsWith(`${folder}/`)) {
+      return NextResponse.json({ error: "Invalid storage path" }, { status: 400 });
     }
 
     // Insert the assets-table row server-side so the FK to asset_categories
