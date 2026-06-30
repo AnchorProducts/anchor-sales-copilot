@@ -194,15 +194,38 @@ export default function AdminInventoryPage({
       }
       const savedId: string | undefined = json?.item?.id || itemModal.id;
       if (itemFile && savedId) {
-        const fd = new FormData();
-        fd.append("file", itemFile);
-        const up = await fetch(`/api/inventory/${encodeURIComponent(savedId)}/image`, {
+        const imgUrl = `/api/inventory/${encodeURIComponent(savedId)}/image`;
+        const contentType = itemFile.type || "application/octet-stream";
+        // Phase 1: ask the server for a signed upload URL.
+        const signRes = await fetch(imgUrl, {
           method: "POST",
-          body: fd,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase: "sign", fileName: itemFile.name, contentType }),
         });
-        if (!up.ok) {
-          const upJson = await up.json().catch(() => null);
-          setModalErr(upJson?.error || "Item saved, but the photo failed to upload.");
+        const sign = await signRes.json().catch(() => null);
+        if (!signRes.ok || !sign?.token || !sign?.path) {
+          setModalErr(sign?.error || "Item saved, but the photo failed to upload.");
+          await loadAll();
+          return;
+        }
+        // Phase 2: upload the bytes straight to Supabase Storage (no Vercel cap).
+        const { error: upErr } = await supabase.storage
+          .from(sign.bucket)
+          .uploadToSignedUrl(sign.path, sign.token, itemFile, { contentType });
+        if (upErr) {
+          setModalErr(`Item saved, but the photo failed to upload: ${upErr.message}`);
+          await loadAll();
+          return;
+        }
+        // Phase 3: point the item at the uploaded photo.
+        const commit = await fetch(imgUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase: "commit", path: sign.path }),
+        });
+        if (!commit.ok) {
+          const cJson = await commit.json().catch(() => null);
+          setModalErr(cJson?.error || "Item saved, but the photo failed to upload.");
           await loadAll();
           return;
         }
