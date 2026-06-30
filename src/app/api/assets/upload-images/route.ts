@@ -32,37 +32,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const formData = await req.formData();
-    const prefix = normalizePrefix(String(formData.get("prefix") || ""));
+    // The browser uploads image bytes straight to Supabase Storage via signed
+    // upload URLs, so they never pass through this serverless function (Vercel
+    // caps request bodies at ~4.5MB, which a batch of phone photos blows past
+    // — see "Failed to parse body as FormData"). We only mint the signed URLs.
+    const body = await req.json().catch(() => null);
+    const prefix = normalizePrefix(String(body?.prefix || ""));
 
     if (!prefix) {
       return NextResponse.json({ error: "Missing prefix" }, { status: 400 });
     }
 
-    const files = formData.getAll("files") as File[];
+    const files = Array.isArray(body?.files) ? body.files : [];
     if (!files.length) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
 
-    const results: { name: string; ok: boolean; error?: string }[] = [];
+    const uploads: { name: string; path: string; token?: string; signedUrl?: string; error?: string }[] = [];
 
-    for (const file of files) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    for (const f of files) {
+      const name = String(f?.name || "").trim();
+      if (!name) {
+        uploads.push({ name: "", path: "", error: "Missing filename" });
+        continue;
+      }
+      const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "-");
       const path = `${prefix}/pics/${safeName}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
 
-      const { error } = await supabaseAdmin.storage
+      const { data, error } = await supabaseAdmin.storage
         .from("knowledge")
-        .upload(path, buffer, {
-          contentType: file.type || "application/octet-stream",
-          upsert: true,
-        });
+        .createSignedUploadUrl(path, { upsert: true });
 
-      results.push({ name: file.name, ok: !error, error: error?.message });
+      if (error || !data) {
+        uploads.push({ name, path, error: error?.message || "Could not create upload URL" });
+        continue;
+      }
+      uploads.push({ name, path, token: data.token, signedUrl: data.signedUrl });
     }
 
-    const failed = results.filter((r) => !r.ok);
-    return NextResponse.json({ results, failed: failed.length });
+    return NextResponse.json({ uploads });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Upload failed" }, { status: 500 });
   }

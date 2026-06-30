@@ -483,7 +483,7 @@ export default function AdminMarketingOrdersPage({
                     {openOrderId === o.id && (
                     <div className="px-4 py-4 sm:px-5">
                       {/* What they ordered — the headline */}
-                      <p className="text-sm font-medium leading-snug text-black">{o.items}</p>
+                      <p className="whitespace-pre-line text-sm font-medium leading-snug text-black">{o.items}</p>
 
                       {/* Status control: a clear, full-width tap target on mobile */}
                       <div className="mt-4">

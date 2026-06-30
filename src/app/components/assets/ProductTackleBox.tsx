@@ -780,44 +780,94 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
   }
 
+  // Upload files straight to Supabase Storage using the signed upload URLs the
+  // server minted. Bytes go browser → Storage, never through our serverless
+  // function, so we sidestep Vercel's ~4.5MB request-body cap that batches of
+  // photos blow past ("Failed to parse body as FormData"). `uploads` is aligned
+  // by index with `files`.
+  async function uploadToStorage(
+    uploads: { name: string; path: string; token?: string; signedUrl?: string; error?: string }[],
+    files: File[]
+  ) {
+    const results: { name: string; path: string; contentType: string; size: number; ok: boolean; error?: string }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const u = uploads[i];
+      const contentType = file.type || "application/octet-stream";
+      if (!u || !u.token || u.error) {
+        results.push({ name: file.name, path: u?.path || "", contentType, size: file.size, ok: false, error: u?.error || "No upload URL" });
+        continue;
+      }
+      const { error } = await supabase.storage
+        .from("knowledge")
+        .uploadToSignedUrl(u.path, u.token, file, { contentType });
+      results.push({ name: file.name, path: u.path, contentType, size: file.size, ok: !error, error: error?.message });
+    }
+    return results;
+  }
+
   async function uploadImages() {
     if (!imageFiles.length || !product) return;
     setUploadingImages(true);
     setImageUploadMsg(null);
 
-    const fd = new FormData();
-    for (const file of imageFiles) fd.append("files", file);
-
-    // Admins upload directly to the live folder. Non-admin internal users
-    // (anchor_rep) submit for admin review instead.
-    let endpoint = "";
-    if (isAdmin) {
-      const prefix = storagePrefix || prefixCandidatesForProduct(product)[0] || `solutions/${slugifyName(product.name)}`;
-      fd.append("prefix", normalizePrefix(prefix));
-      endpoint = "/api/assets/upload-images";
-    } else {
-      fd.append("productId", productId);
-      endpoint = "/api/internal/asset-reviews/upload";
-    }
-
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
-      });
-      const json = await res.json().catch(() => ({}));
+      // Admins publish directly to the live folder. Non-admin internal users
+      // (anchor_rep) submit to a pending folder for admin review instead.
+      let uploaded: { name: string; ok: boolean; error?: string }[];
 
-      if (!res.ok) {
-        setImageUploadMsg(json?.error || "Upload failed.");
-        setUploadingImages(false);
-        return;
+      if (isAdmin) {
+        const prefix = normalizePrefix(
+          storagePrefix || prefixCandidatesForProduct(product)[0] || `solutions/${slugifyName(product.name)}`
+        );
+        const signRes = await fetch("/api/assets/upload-images", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prefix, files: imageFiles.map((f) => ({ name: f.name })) }),
+        });
+        const signJson = await signRes.json().catch(() => ({}));
+        if (!signRes.ok) {
+          setImageUploadMsg(signJson?.error || "Upload failed.");
+          setUploadingImages(false);
+          return;
+        }
+        uploaded = await uploadToStorage(signJson.uploads || [], imageFiles);
+      } else {
+        const signRes = await fetch("/api/internal/asset-reviews/upload", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phase: "sign",
+            productId,
+            files: imageFiles.map((f) => ({ name: f.name })),
+          }),
+        });
+        const signJson = await signRes.json().catch(() => ({}));
+        if (!signRes.ok) {
+          setImageUploadMsg(signJson?.error || "Upload failed.");
+          setUploadingImages(false);
+          return;
+        }
+        const stored = await uploadToStorage(signJson.uploads || [], imageFiles);
+        // Record the pending_uploads rows for the files that landed in storage.
+        const commitRes = await fetch("/api/internal/asset-reviews/upload", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase: "commit", productId, uploaded: stored }),
+        });
+        const commitJson = await commitRes.json().catch(() => ({}));
+        if (!commitRes.ok) {
+          setImageUploadMsg(commitJson?.error || "Upload failed.");
+          setUploadingImages(false);
+          return;
+        }
+        uploaded = (commitJson.results as any[]) || [];
       }
 
-      const failed: { name: string; error?: string }[] = json.failed > 0
-        ? (json.results as any[]).filter((r) => !r.ok)
-        : [];
-
+      const failed = uploaded.filter((r) => !r.ok);
       const successCount = imageFiles.length - failed.length;
       const noun = isAdmin ? "uploaded" : "submitted for admin review";
 
@@ -825,6 +875,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setImageUploadMsg(
           `${successCount} ${noun}. Failed: ${failed.map((f) => `${f.name} (${f.error})`).join("; ")}`
         );
+        if (isAdmin && successCount > 0) await load();
       } else {
         setImageUploadMsg(`${successCount} image${successCount !== 1 ? "s" : ""} ${noun}.`);
         setImageFiles([]);
@@ -870,19 +921,61 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         return;
       }
       const title = form.title.trim();
-      const fd = new FormData();
-      fd.append("file", uploadFile);
-      fd.append("prefix", prefix);
-      fd.append("category", category_key);
-      fd.append("visibility", visibility);
-      fd.append("productId", productId);
-      fd.append("type", type);
-      if (title) fd.append("title", title);
       try {
+        // Phase 1: ask the server to mint a signed upload URL (and resolve the
+        // final storage path/name from category + visibility rules).
+        const signRes = await fetch("/api/admin/assets/upload", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phase: "sign",
+            prefix,
+            category: category_key,
+            visibility,
+            fileName: uploadFile.name,
+          }),
+        });
+        const signText = await signRes.text();
+        let sign: any = {};
+        try { sign = signText ? JSON.parse(signText) : {}; } catch { /* keep text */ }
+        if (!signRes.ok || !sign?.token || !sign?.path) {
+          const detail = sign?.error || (signText && signText.slice(0, 200)) || `HTTP ${signRes.status}`;
+          // eslint-disable-next-line no-console
+          console.error("[Add asset] sign failed", { status: signRes.status, body: signText });
+          setFormMsg(`Upload failed: ${detail}`);
+          setAdding(false);
+          return;
+        }
+
+        // Phase 2: upload the bytes straight to Supabase Storage.
+        const { error: upErr } = await supabase.storage
+          .from("knowledge")
+          .uploadToSignedUrl(sign.path, sign.token, uploadFile, {
+            contentType: uploadFile.type || "application/octet-stream",
+          });
+        if (upErr) {
+          setFormMsg(`Upload failed: ${upErr.message}`);
+          setAdding(false);
+          return;
+        }
+
+        // Phase 3: record the assets row + kick off ingestion.
         const res = await fetch("/api/admin/assets/upload", {
           method: "POST",
           credentials: "include",
-          body: fd,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phase: "commit",
+            prefix,
+            path: sign.path,
+            name: sign.name,
+            category: category_key,
+            visibility,
+            productId,
+            type,
+            title,
+          }),
         });
         const text = await res.text();
         let json: any = {};
@@ -890,7 +983,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         if (!res.ok || !json?.path) {
           const detail = json?.error || (text && text.slice(0, 200)) || `HTTP ${res.status}`;
           // eslint-disable-next-line no-console
-          console.error("[Add asset] upload failed", { status: res.status, body: text });
+          console.error("[Add asset] commit failed", { status: res.status, body: text });
           setFormMsg(`Upload failed: ${detail}`);
           setAdding(false);
           return;
