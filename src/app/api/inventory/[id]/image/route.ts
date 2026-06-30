@@ -13,7 +13,11 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST — upload (or replace) an item's photo. multipart/form-data, field "file".
+// POST — two-phase photo upload via signed URLs. The browser uploads the image
+// bytes straight to Supabase Storage, so they never pass through this function
+// (Vercel caps request bodies at ~4.5MB, which phone photos exceed). JSON body:
+//   { phase: "sign", fileName, contentType }  → mints a signed upload URL
+//   { phase: "commit", path }                 → points the item at the upload
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -36,24 +40,36 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       .maybeSingle();
     if (!item) return NextResponse.json({ error: "Item not found." }, { status: 404 });
 
-    const form = await req.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
-    }
-    if (!clean(file.type).startsWith("image/")) {
-      return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 });
+    const body = await req.json().catch(() => null);
+    const phase = clean(body?.phase);
+
+    // ── Phase 1: mint a signed upload URL ─────────────────────────────────
+    if (phase === "sign") {
+      const contentType = clean(body?.contentType);
+      if (!contentType.startsWith("image/")) {
+        return NextResponse.json({ error: "Only image files are allowed." }, { status: 400 });
+      }
+      const safeName = sanitizeFilename(clean(body?.fileName) || "photo");
+      const path = `inventory/${itemId}/${Date.now()}-${safeName}`;
+      const { data, error } = await supabaseAdmin.storage
+        .from(INVENTORY_BUCKET)
+        .createSignedUploadUrl(path);
+      if (error || !data) {
+        return NextResponse.json(
+          { error: error?.message || "Could not create upload URL." },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({ bucket: INVENTORY_BUCKET, path, token: data.token, signedUrl: data.signedUrl });
     }
 
-    const safeName = sanitizeFilename(file.name || "photo");
-    const path = `inventory/${itemId}/${Date.now()}-${safeName}`;
-    const contentType = file.type || "application/octet-stream";
-    const buf = Buffer.from(await file.arrayBuffer());
-
-    const { error: upErr } = await supabaseAdmin.storage
-      .from(INVENTORY_BUCKET)
-      .upload(path, buf, { contentType, upsert: false });
-    if (upErr) return NextResponse.json({ error: upErr.message || "Upload failed." }, { status: 500 });
+    // ── Phase 2: point the item at the uploaded photo ─────────────────────
+    const path = clean(body?.path);
+    if (!path) return NextResponse.json({ error: "Missing path." }, { status: 400 });
+    // Guard: the committed path must live under this item's folder.
+    if (!path.startsWith(`inventory/${itemId}/`)) {
+      return NextResponse.json({ error: "Invalid storage path." }, { status: 400 });
+    }
 
     const oldPath = clean((item as any).image_path);
 

@@ -40,9 +40,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const formData = await req.formData();
-    const productId = String(formData.get("productId") || "").trim();
-    const note = String(formData.get("note") || "").trim();
+    // Two-phase JSON flow. The browser uploads the photo bytes straight to
+    // Supabase Storage via signed upload URLs ("sign" phase), then reports the
+    // uploaded paths back so we can record the pending_uploads rows ("commit"
+    // phase). Keeping the bytes off this serverless function avoids Vercel's
+    // ~4.5MB request-body cap, which a batch of phone photos exceeds.
+    const body = await req.json().catch(() => null);
+    const phase = String(body?.phase || "").trim();
+    const productId = String(body?.productId || "").trim();
 
     if (!productId) {
       return NextResponse.json({ error: "Missing productId" }, { status: 400 });
@@ -58,30 +63,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unknown product" }, { status: 400 });
     }
 
-    const files = formData.getAll("files") as File[];
-    if (!files.length) {
+    // ── Phase 1: mint signed upload URLs ──────────────────────────────────
+    if (phase === "sign") {
+      const files = Array.isArray(body?.files) ? body.files : [];
+      if (!files.length) {
+        return NextResponse.json({ error: "No files provided" }, { status: 400 });
+      }
+
+      const uploads: { name: string; path: string; token?: string; signedUrl?: string; error?: string }[] = [];
+      for (const f of files) {
+        const name = String(f?.name || "").trim();
+        if (!name) {
+          uploads.push({ name: "", path: "", error: "Missing filename" });
+          continue;
+        }
+        const finalName = `${Date.now()}-${sanitizeFilename(name)}`;
+        const path = `pending/${productId}/${finalName}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from("knowledge")
+          .createSignedUploadUrl(path);
+        if (error || !data) {
+          uploads.push({ name, path, error: error?.message || "Could not create upload URL" });
+          continue;
+        }
+        uploads.push({ name, path, token: data.token, signedUrl: data.signedUrl });
+      }
+
+      return NextResponse.json({ uploads });
+    }
+
+    // ── Phase 2: record pending_uploads rows for uploaded files ───────────
+    const note = String(body?.note || "").trim();
+    const uploaded = Array.isArray(body?.uploaded) ? body.uploaded : [];
+    if (!uploaded.length) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
 
     const results: { name: string; ok: boolean; error?: string; id?: string }[] = [];
 
-    for (const file of files) {
-      const safeName = sanitizeFilename(file.name);
-      const finalName = `${Date.now()}-${safeName}`;
-      const path = `pending/${productId}/${finalName}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
-
-      const { error: uploadErr } = await supabaseAdmin.storage
-        .from("knowledge")
-        .upload(path, buffer, {
-          contentType: file.type || "application/octet-stream",
-          upsert: false,
-        });
-
-      if (uploadErr) {
-        results.push({ name: file.name, ok: false, error: uploadErr.message });
+    for (const u of uploaded) {
+      const name = String(u?.name || "").trim();
+      const path = String(u?.path || "").trim();
+      // Skip files the browser failed to upload to storage.
+      if (u?.ok === false || !path) {
+        results.push({ name, ok: false, error: String(u?.error || "Upload to storage failed") });
         continue;
       }
+      // Guard the storage path so a caller can't write rows pointing outside
+      // this product's pending folder.
+      if (!path.startsWith(`pending/${productId}/`)) {
+        results.push({ name, ok: false, error: "Invalid storage path" });
+        continue;
+      }
+      const contentType = String(u?.contentType || "application/octet-stream");
+      const size = Number(u?.size) || null;
 
       const { data: row, error: rowErr } = await supabaseAdmin
         .from("pending_uploads")
@@ -92,10 +127,10 @@ export async function POST(req: NextRequest) {
           uploaded_by_name: (prof as any)?.full_name || null,
           uploaded_by_company: (prof as any)?.company || null,
           uploaded_by_email: (prof as any)?.email || user.email || null,
-          filename: file.name,
+          filename: name,
           storage_path: path,
-          content_type: file.type || "application/octet-stream",
-          size_bytes: file.size,
+          content_type: contentType,
+          size_bytes: size,
           note: note || null,
         })
         .select("id")
@@ -104,11 +139,11 @@ export async function POST(req: NextRequest) {
       if (rowErr) {
         // Best effort: undo the storage upload so we don't orphan files.
         await supabaseAdmin.storage.from("knowledge").remove([path]);
-        results.push({ name: file.name, ok: false, error: rowErr.message });
+        results.push({ name, ok: false, error: rowErr.message });
         continue;
       }
 
-      results.push({ name: file.name, ok: true, id: row?.id });
+      results.push({ name, ok: true, id: row?.id });
     }
 
     const failed = results.filter((r) => !r.ok);

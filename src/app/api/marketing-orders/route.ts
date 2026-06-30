@@ -265,20 +265,88 @@ export async function POST(req: Request) {
       const key = clean(raw);
       if (key && isMarketingCategory(key) && !categories.includes(key)) categories.push(key);
     }
-    const items = clean(body.items);
-    const quantity = clean(body.quantity) || null;
     const needed_by = clean(body.needed_by) || null;
     const ship_to = clean(body.ship_to) || null;
     const notes = clean(body.notes) || null;
+
+    // Items: new clients send a structured `requested_items` array of inventory
+    // picks (plus an optional `other_request` for things not in the catalog). We
+    // validate each pick against live stock and compose the human-readable
+    // `items`/`quantity` strings the admin + rep views already render. Legacy
+    // callers that still send free-text `items`/`quantity` keep working.
+    let items = "";
+    let quantity: string | null = null;
+
+    if (body.requested_items !== undefined) {
+      const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
+      const otherRequest = clean(body.other_request);
+
+      const picks: { item_id: string; quantity: number }[] = [];
+      for (const raw of rawPicks) {
+        const id = clean((raw as any)?.item_id);
+        const q = Math.floor(Number((raw as any)?.quantity));
+        if (!id || !Number.isFinite(q) || q <= 0) continue;
+        picks.push({ item_id: id, quantity: q });
+      }
+
+      const lines: string[] = [];
+      let total = 0;
+      if (picks.length) {
+        const { data: invRows, error: invErr } = await supabaseAdmin
+          .from("marketing_inventory_items")
+          .select("id,name,quantity_available")
+          .in("id", picks.map((p) => p.item_id));
+        if (invErr) {
+          return NextResponse.json({ error: invErr.message }, { status: 500 });
+        }
+        const byId = new Map((invRows || []).map((r: any) => [r.id, r]));
+        for (const p of picks) {
+          const row: any = byId.get(p.item_id);
+          if (!row) {
+            return NextResponse.json(
+              { error: "One of the selected items is no longer available." },
+              { status: 400 }
+            );
+          }
+          // Enforce the "cap at available stock" rule server-side (the picker
+          // also caps, but stock may have changed since the form loaded).
+          if (p.quantity > row.quantity_available) {
+            return NextResponse.json(
+              {
+                error: `Only ${row.quantity_available} of "${row.name}" ${
+                  row.quantity_available === 1 ? "is" : "are"
+                } in stock.`,
+              },
+              { status: 400 }
+            );
+          }
+          lines.push(`${p.quantity} × ${row.name}`);
+          total += p.quantity;
+        }
+      }
+
+      if (otherRequest) lines.push(`Other / not listed: ${otherRequest}`);
+
+      if (!lines.length) {
+        return NextResponse.json(
+          { error: "Add at least one item, or describe what you need in the Other box." },
+          { status: 400 }
+        );
+      }
+
+      items = lines.join("\n");
+      quantity = total > 0 ? String(total) : null;
+    } else {
+      // Legacy free-text path.
+      items = clean(body.items);
+      quantity = clean(body.quantity) || null;
+    }
 
     if (categories.length === 0) {
       return NextResponse.json({ error: "Pick at least one category." }, { status: 400 });
     }
     if (!items) {
       return NextResponse.json({ error: "Describe the item(s) you need." }, { status: 400 });
-    }
-    if (!quantity) {
-      return NextResponse.json({ error: "Quantity is required." }, { status: 400 });
     }
     if (!ship_to) {
       return NextResponse.json({ error: "A shipping address is required." }, { status: 400 });
