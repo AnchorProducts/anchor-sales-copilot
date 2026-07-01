@@ -1,7 +1,7 @@
 // src/components/assets/ProductTackleBox.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -358,6 +358,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [adding, setAdding] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [replacingPath, setReplacingPath] = useState<string | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceTargetRef = useRef<AssetRow | null>(null);
   const [deletingBox, setDeletingBox] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
   const [editingMeta, setEditingMeta] = useState(false);
@@ -672,6 +675,81 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       setTimeout(() => setFormMsg(null), 3000);
     } finally {
       setDeletingPath(null);
+    }
+  }
+
+  // Replace-in-place: swap the file behind an asset without changing its path,
+  // so every link that points at it (Webflow CMS, share links) keeps working
+  // and the new version shows up everywhere — including the copilot after
+  // re-indexing. Opens the file picker; the chosen file overwrites a.path.
+  function pickReplacement(a: AssetRow) {
+    if (!isAdmin) return;
+    replaceTargetRef.current = a;
+    if (replaceInputRef.current) replaceInputRef.current.value = "";
+    replaceInputRef.current?.click();
+  }
+
+  async function onReplacementChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const a = replaceTargetRef.current;
+    replaceTargetRef.current = null;
+    if (!file || !a) return;
+
+    // Overwriting keeps the ORIGINAL path (incl. its extension), so warn if the
+    // new file's type differs — the link would keep the old extension.
+    const oldExt = extOf(a.path);
+    const newExt = extOf(file.name);
+    if (oldExt && newExt && oldExt !== newExt) {
+      const ok = window.confirm(
+        `The existing file is .${oldExt} but you picked a .${newExt}.\n\n` +
+          `To keep the link working, it will be saved as .${oldExt} (same path). ` +
+          `Continue?`,
+      );
+      if (!ok) return;
+    }
+
+    setReplacingPath(a.path);
+    setFormMsg(null);
+    try {
+      // Phase 1: sign an upload URL bound to the existing path.
+      const signRes = await fetch("/api/admin/assets/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phase: "sign", replacePath: a.path }),
+      });
+      const sign = await signRes.json().catch(() => null);
+      if (!signRes.ok || !sign?.token) {
+        throw new Error(sign?.error || `HTTP ${signRes.status}`);
+      }
+
+      // Phase 2: push the bytes straight to Supabase Storage (overwrite).
+      const { error: upErr } = await supabase.storage
+        .from("knowledge")
+        .uploadToSignedUrl(sign.path, sign.token, file, {
+          contentType: file.type || "application/octet-stream",
+          upsert: true,
+        });
+      if (upErr) throw new Error(upErr.message);
+
+      // Phase 3: re-index so the copilot answers from the new file.
+      const commitRes = await fetch("/api/admin/assets/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phase: "commit", replace: true, path: a.path }),
+      });
+      const commit = await commitRes.json().catch(() => null);
+      if (!commitRes.ok) throw new Error(commit?.error || `HTTP ${commitRes.status}`);
+
+      setFormMsg("File replaced — the link stays the same and now serves the new version everywhere.");
+      setTimeout(() => setFormMsg(null), 3000);
+      await load();
+    } catch (err: any) {
+      setFormMsg(err?.message || "Replace failed.");
+      setTimeout(() => setFormMsg(null), 4000);
+    } finally {
+      setReplacingPath(null);
     }
   }
 
@@ -1250,14 +1328,24 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                               </button>
                             </div>
                             {isAdmin && (
-                              <button
-                                type="button"
-                                onClick={() => deleteAsset(a)}
-                                disabled={deletingPath === a.path}
-                                className="mt-1.5 w-full rounded-lg border border-red-200 bg-red-50 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
-                              >
-                                {deletingPath === a.path ? "Deleting…" : "Delete"}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => pickReplacement(a)}
+                                  disabled={replacingPath === a.path}
+                                  className="mt-1.5 w-full rounded-lg border border-black/10 bg-white py-1 text-[11px] font-semibold text-black hover:bg-black/[0.03] disabled:opacity-60"
+                                >
+                                  {replacingPath === a.path ? "Replacing…" : "Replace"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAsset(a)}
+                                  disabled={deletingPath === a.path}
+                                  className="mt-1.5 w-full rounded-lg border border-red-200 bg-red-50 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                                >
+                                  {deletingPath === a.path ? "Deleting…" : "Delete"}
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>
@@ -1308,6 +1396,17 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                 {isAdmin && (
                                   <button
                                     type="button"
+                                    onClick={() => pickReplacement(a)}
+                                    disabled={replacingPath === a.path}
+                                    className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold text-black whitespace-nowrap hover:bg-black/[0.03] disabled:opacity-60"
+                                    title="Swap this file in place — its link stays the same everywhere"
+                                  >
+                                    {replacingPath === a.path ? "Replacing…" : "Replace"}
+                                  </button>
+                                )}
+                                {isAdmin && (
+                                  <button
+                                    type="button"
                                     onClick={() => deleteAsset(a)}
                                     disabled={deletingPath === a.path}
                                     className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700 whitespace-nowrap hover:bg-red-100 disabled:opacity-60"
@@ -1326,6 +1425,17 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
               );
             })()}
           </div>{/* end tab content */}
+
+          {/* Shared, hidden picker for "Replace" on any asset. The target asset
+              is set on click; the chosen file overwrites its exact path. */}
+          {isAdmin && (
+            <input
+              ref={replaceInputRef}
+              type="file"
+              className="hidden"
+              onChange={onReplacementChosen}
+            />
+          )}
 
           {/* Image upload — visible to all internal users.
               Admin uploads publish directly; anchor_rep uploads go to the
