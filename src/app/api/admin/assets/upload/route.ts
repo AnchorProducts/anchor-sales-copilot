@@ -45,6 +45,34 @@ function sanitizeFilename(name: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function cleanPath(p: string) {
+  return String(p || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\\/g, "/");
+}
+
+function basename(p: string) {
+  const s = String(p || "");
+  const i = s.lastIndexOf("/");
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+// True only if a storage object already exists at exactly this path. Replace
+// may only overwrite an existing library item — never create a new file — so a
+// stale path can't be used to smuggle bytes into an unexpected location.
+async function storageFileExists(path: string): Promise<boolean> {
+  const slash = path.lastIndexOf("/");
+  const dir = slash >= 0 ? path.slice(0, slash) : "";
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  if (!name) return false;
+  const { data, error } = await supabaseAdmin.storage
+    .from("knowledge")
+    .list(dir, { limit: 1000, search: name });
+  if (error || !data) return false;
+  return data.some((e: any) => String(e?.name) === name);
+}
+
 // asset_categories enforces an FK on assets.category_key, and not every
 // long-form key (e.g. "data_sheet") exists in that table. Build a candidate
 // list — preferred → short form → "other" — and pick the first one that's
@@ -112,6 +140,67 @@ export async function POST(req: NextRequest) {
     const prefix = normalizePrefix(String(body?.prefix || ""));
     const category = String(body?.category || "other").trim();
     const visibility = String(body?.visibility || "public").trim();
+
+    // ── Replace-in-place ──────────────────────────────────────────────────
+    // Overwrite the bytes of an EXISTING library file at its exact path. The
+    // path never changes, so every link pointing at it (Webflow CMS, share
+    // links) keeps resolving — the doc just updates everywhere at once. No new
+    // assets row is created; the existing one already points at this path. We
+    // re-ingest so the copilot answers from the new content. Handled before the
+    // prefix guard because a replace targets a full path, not a folder prefix.
+    const replacePath = cleanPath(String(body?.replacePath || (body?.replace ? body?.path : "")));
+    if (phase === "sign" && replacePath) {
+      if (replacePath.includes("..")) {
+        return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+      }
+      if (!(await storageFileExists(replacePath))) {
+        return NextResponse.json(
+          { error: "No existing file at that path to replace." },
+          { status: 404 },
+        );
+      }
+      const { data, error } = await supabaseAdmin.storage
+        .from("knowledge")
+        .createSignedUploadUrl(replacePath, { upsert: true });
+      if (error || !data) {
+        return NextResponse.json(
+          { error: error?.message || "Could not create upload URL" },
+          { status: 500 },
+        );
+      }
+      return NextResponse.json({
+        path: replacePath,
+        name: basename(replacePath),
+        token: data.token,
+        signedUrl: data.signedUrl,
+        replace: true,
+      });
+    }
+    if (phase === "commit" && body?.replace === true) {
+      if (!replacePath) {
+        return NextResponse.json({ error: "Missing path" }, { status: 400 });
+      }
+      // Re-index the freshly overwritten file (idempotent — drops stale chunks,
+      // re-embeds, refreshes updated_at). Reuse the existing row's title/
+      // category when we have one so the doc's identity is preserved.
+      try {
+        const { data: kd } = await supabaseAdmin
+          .from("knowledge_documents")
+          .select("title,category")
+          .eq("source_path", replacePath)
+          .maybeSingle();
+        ingestStorageFile({
+          path: replacePath,
+          title: String((kd as any)?.title || basename(replacePath)),
+          category: (kd as any)?.category ?? (category === "other" ? null : category),
+          productTags: [],
+          createdBy: user.id,
+        }).catch((err) => console.warn("[admin/assets/upload] replace ingestion failed:", err));
+      } catch (err) {
+        console.warn("[admin/assets/upload] replace ingestion threw:", err);
+      }
+      return NextResponse.json({ path: replacePath, name: basename(replacePath), replaced: true });
+    }
 
     if (!prefix) {
       return NextResponse.json({ error: "Missing prefix" }, { status: 400 });

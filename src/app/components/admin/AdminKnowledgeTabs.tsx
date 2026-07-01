@@ -1,7 +1,7 @@
 // src/app/components/admin/AdminKnowledgeTabs.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import Button from "@/app/components/ui/Button";
 import { Alert } from "@/app/components/ui/Alert";
@@ -92,6 +92,12 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
   const [err, setErr] = useState<string | null>(null);
   const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
   const [collapsedSols, setCollapsedSols] = useState<Record<string, boolean>>({});
+  // Per-doc "Replace file" state: which path is uploading + inline status.
+  const [replacingPath, setReplacingPath] = useState<string | null>(null);
+  const [replaceStatus, setReplaceStatus] = useState<Record<string, string>>({});
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceTargetRef = useRef<string | null>(null);
   // Promote-to-doc checkbox state per correction id (avoids reading the DOM).
   const [promote, setPromote] = useState<Record<string, boolean>>({});
 
@@ -268,6 +274,92 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       setErr(e?.message || "Failed to load docs");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // The permanent public link pasted into the Webflow CMS. Overwriting the file
+  // at this path is exactly what updates the doc everywhere it's linked.
+  const EXTERNAL_BASE =
+    (process.env.NEXT_PUBLIC_EXTERNAL_APP_URL || "https://anchor-sales-copilot.vercel.app").replace(
+      /\/+$/,
+      "",
+    );
+  function publicDocUrl(path: string) {
+    return `${EXTERNAL_BASE}/api/public/doc?path=${encodeURIComponent(path)}`;
+  }
+
+  async function copyPublicLink(path: string) {
+    try {
+      await navigator.clipboard.writeText(publicDocUrl(path));
+      setCopiedPath(path);
+      window.setTimeout(() => setCopiedPath((p) => (p === path ? null : p)), 1500);
+    } catch {
+      setErr("Couldn't copy link — copy it manually from the field.");
+    }
+  }
+
+  // Kick off the file picker for a specific doc. The chosen file overwrites the
+  // storage object at `path` (upsert), so the Webflow link keeps working and
+  // now serves the new content.
+  function pickReplacement(path: string) {
+    replaceTargetRef.current = path;
+    // Reset so re-selecting the same filename still fires onChange.
+    if (replaceInputRef.current) replaceInputRef.current.value = "";
+    replaceInputRef.current?.click();
+  }
+
+  async function onReplacementChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const path = replaceTargetRef.current;
+    replaceTargetRef.current = null;
+    if (!file || !path) return;
+
+    setErr(null);
+    setMsg(null);
+    setReplacingPath(path);
+    setReplaceStatus((prev) => ({ ...prev, [path]: "Uploading…" }));
+
+    try {
+      // Phase 1: sign an upload URL bound to the existing path.
+      const signRes = await fetch("/api/admin/knowledge/library-docs", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phase: "sign", path }),
+      });
+      const sign = await signRes.json().catch(() => null);
+      if (!signRes.ok || !sign?.token) {
+        throw new Error(sign?.error || `HTTP ${signRes.status}`);
+      }
+
+      // Phase 2: push the bytes straight to Supabase Storage (overwrite).
+      const { error: upErr } = await supabase.storage
+        .from("knowledge")
+        .uploadToSignedUrl(sign.path, sign.token, file, {
+          contentType: file.type || "application/octet-stream",
+          upsert: true,
+        });
+      if (upErr) throw new Error(upErr.message);
+
+      // Phase 3: re-index so the copilot answers from the new file.
+      setReplaceStatus((prev) => ({ ...prev, [path]: "Re-indexing…" }));
+      const commitRes = await fetch("/api/admin/knowledge/library-docs", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phase: "commit", path }),
+      });
+      const commit = await commitRes.json().catch(() => null);
+      if (!commitRes.ok) throw new Error(commit?.error || `HTTP ${commitRes.status}`);
+
+      setReplaceStatus((prev) => ({ ...prev, [path]: "✓ Replaced" }));
+      setMsg("File replaced — every link pointing at this path now serves the new version.");
+      await loadDocs();
+    } catch (e: any) {
+      setReplaceStatus((prev) => ({ ...prev, [path]: "" }));
+      setErr(e?.message || "Replace failed");
+    } finally {
+      setReplacingPath(null);
     }
   }
 
@@ -674,9 +766,23 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
 
         {tab === "docs" ? (
           <>
-            <div className="mb-3 text-[12px] text-white/60">
+            <div className="mb-2 text-[12px] text-white/60">
               {loading ? "Loading…" : `${docs.length} library docs across ${docGroups.length} categories`}
             </div>
+            <div className="mb-3 rounded-lg border border-white/10 bg-black/20 p-2 text-[11px] text-white/60">
+              Use <span className="font-semibold text-white/80">Replace file</span> to swap a doc in place —
+              its permanent link stays the same, so every spot it's linked (Webflow, chat) serves the new
+              version. <span className="font-semibold text-white/80">Copy link</span> gives you the exact URL to
+              paste into the CMS.
+            </div>
+
+            {/* One shared picker for all rows; the target path is set on click. */}
+            <input
+              ref={replaceInputRef}
+              type="file"
+              className="hidden"
+              onChange={onReplacementChosen}
+            />
 
             <div className="space-y-2">
               {docGroups.map((catGroup) => {
@@ -721,21 +827,49 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
 
                               {!isSolCollapsed && (
                                 <div className="border-t border-white/10 px-2 py-2 space-y-1.5">
-                                  {solGroup.docs.map((d) => (
+                                  {solGroup.docs.map((d) => {
+                                    const status = replaceStatus[d.path];
+                                    const isReplacing = replacingPath === d.path;
+                                    return (
                                     <div key={d.path} className="rounded-md border border-white/10 bg-black/40 p-3">
-                                      <div className="min-w-0">
-                                        <div className="break-words text-sm font-semibold text-white/90">
-                                          {d.title}
+                                      <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <div className="break-words text-sm font-semibold text-white/90">
+                                            {d.title}
+                                          </div>
+                                          {d.updated_at && (
+                                            <div className="text-[11px] text-white/55">updated {fmt(d.updated_at)}</div>
+                                          )}
+                                          <div className="mt-0.5 truncate text-[10px] text-white/40">
+                                            {d.path}
+                                          </div>
                                         </div>
-                                        {d.updated_at && (
-                                          <div className="text-[11px] text-white/55">updated {fmt(d.updated_at)}</div>
-                                        )}
-                                        <div className="mt-0.5 truncate text-[10px] text-white/40">
-                                          {d.path}
+
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          {status ? (
+                                            <span className="text-[11px] text-white/70">{status}</span>
+                                          ) : null}
+                                          <button
+                                            type="button"
+                                            onClick={() => copyPublicLink(d.path)}
+                                            className="rounded-md border border-white/15 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
+                                            title="Copy the permanent link to paste into Webflow"
+                                          >
+                                            {copiedPath === d.path ? "Copied" : "Copy link"}
+                                          </button>
+                                          <Button
+                                            className="px-3 py-1 text-[12px]"
+                                            variant="secondary"
+                                            disabled={isReplacing}
+                                            onClick={() => pickReplacement(d.path)}
+                                          >
+                                            {isReplacing ? "Replacing…" : "Replace file"}
+                                          </Button>
                                         </div>
                                       </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
