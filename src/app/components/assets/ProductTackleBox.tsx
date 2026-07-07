@@ -28,8 +28,6 @@ function catalogDisplayName(rawName: string | undefined | null): string {
   return rawName;
 }
 
-const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
-
 /* ---------------------------------------------
    Types
 --------------------------------------------- */
@@ -217,10 +215,9 @@ function tabFromPath(path: string): TabKey {
   const p = String(path || "").toLowerCase();
   const file = basename(p);
 
-  // Global spec
-  if (file === basename(GLOBAL_SPEC_PATH).toLowerCase()) return "spec";
-
-  // Spec
+  // Spec — each solution's own admin-uploaded spec lands here. Spec docs are
+  // uploaded with a "spec-" filename prefix (see admin/assets/upload), so the
+  // filename check below catches them; the /spec/ folder check is a fallback.
   if (p.includes("/spec/") || file.includes("spec")) return "spec";
 
   // Data sheet
@@ -489,17 +486,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         created_at: new Date().toISOString(),
       }));
 
-      // Always include global spec
-      derived.unshift({
-        id: `storage:${GLOBAL_SPEC_PATH}`,
-        product_id: (p as ProductRow).id,
-        title: "Anchor Products Spec (v1)",
-        type: "document",
-        category_key: "spec",
-        path: GLOBAL_SPEC_PATH,
-        visibility: "public",
-        created_at: new Date().toISOString(),
-      });
+      // Each solution surfaces only its own spec — an admin uploads it via
+      // "Add Asset → Spec Document", which lands under this product's folder
+      // (prefixed "spec-") and is picked up as a derived asset above. No shared
+      // global spec is injected, so a solution with no uploaded spec shows none.
 
       // De-dupe by path
       const seen = new Set<string>();

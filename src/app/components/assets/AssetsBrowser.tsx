@@ -18,7 +18,6 @@ import {
 import {
   prefixCandidatesForProduct,
   isFolderLike,
-  GLOBAL_SPEC_PATH,
 } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
 
@@ -89,9 +88,9 @@ function slugify(input: string) {
 
 // Count the public files inside a product's tackle box, using the SAME resolver
 // the tackle box itself uses (prefixCandidatesForProduct + first non-empty
-// prefix + the always-included global spec). This keeps the per-card badge in
-// lock-step with the "N Public" chip shown once the tackle box is opened.
-// (/api/knowledge-list returns public paths only, so this is the public count.)
+// prefix). This keeps the per-card badge in lock-step with the "N Public" chip
+// shown once the tackle box is opened. (/api/knowledge-list returns public
+// paths only, so this is the public count.)
 async function fetchTackleBoxFileCount(product: ProductRow, accessToken: string): Promise<number> {
   const candidates = prefixCandidatesForProduct(product);
 
@@ -116,9 +115,7 @@ async function fetchTackleBoxFileCount(product: ProductRow, accessToken: string)
     }
   }
 
-  // The global spec is always shown inside every tackle box.
   const unique = new Set<string>(paths);
-  unique.add(GLOBAL_SPEC_PATH);
   return unique.size;
 }
 
@@ -153,7 +150,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [error, setError] = useState<string | null>(null);
 
   const [products, setProducts] = useState<ProductRow[]>([]);
-  // product.id -> number of files inside its tackle box (public files + global spec)
+  // product.id -> number of public files inside its tackle box
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   const [q, setQ] = useState("");
@@ -411,15 +408,15 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
 
   // A catalog item is "live" (renders as a clickable card, not a coming-soon
   // placeholder) when it has an active DB row AND either the catalog already
-  // launched it OR its tacklebox actually contains files. counts[id] includes
-  // the always-present global spec, so > 1 means it has real content.
+  // launched it OR its tacklebox actually contains files. counts[id] is now the
+  // real public file count (no global spec padding), so > 0 means it has content.
   // (Inactive products are filtered out of `products`, so an admin can hide a
   // tacklebox with the Active switch and it reverts to a placeholder here.)
   function isItemLive(item: CatalogSolution): boolean {
     const product = findProductForCatalog(item);
     if (!product) return false;
     if (!item.comingSoon) return true;
-    return (counts[product.id] ?? 0) > 1;
+    return (counts[product.id] ?? 0) > 0;
   }
 
   const nonSolutionProducts = useMemo(

@@ -93,22 +93,8 @@ export async function POST(req: Request) {
     const BUCKET = "knowledge";
     const counts: CountRes = {};
 
-    // ✅ global spec file that should count everywhere (if you want it included in list counts)
-    const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
-
-    // best-effort: see if global spec exists (won’t throw if it doesn’t)
-    let globalSpecExists = false;
-    try {
-      const { data } = await supabaseAdmin.storage.from(BUCKET).list("spec", {
-        limit: 200,
-        offset: 0,
-      });
-      globalSpecExists = (data || []).some((x: any) => x?.name === "anchor-products-spec-v1.docx");
-    } catch {
-      globalSpecExists = false;
-    }
-
-    // count each product prefix
+    // count each product prefix. Each solution's spec (if any) lives under its
+    // own folder and is counted here — there is no shared global spec padding.
     for (const it of items) {
       const folder = folderForSection(it.section);
       const slug = slugify(it.name);
@@ -117,9 +103,8 @@ export async function POST(req: Request) {
       const paths = await listRecursive(BUCKET, prefix);
       const c = classifyCounts(paths);
 
-      // ✅ add 1 “public” doc everywhere for the spec (optional but matches your “spec everywhere” rule)
       counts[it.id] = {
-        public: c.public + (globalSpecExists ? 1 : 0),
+        public: c.public,
         internal: c.internal,
       };
     }
