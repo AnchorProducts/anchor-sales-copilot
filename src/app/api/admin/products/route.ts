@@ -167,6 +167,8 @@ export async function PATCH(req: Request) {
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
   if ("series" in body) patch.series = clean(body.series) || null;
   if ("sku" in body) patch.sku = clean(body.sku) || null;
+  // Move a solution to a different group (or back to its default when cleared).
+  if ("solutionGroup" in body) patch.solution_group = clean(body.solutionGroup) || null;
   if ("section" in body) {
     const section = clean(body.section);
     const allowed = ["solution", "anchor", "internal_assets"];
