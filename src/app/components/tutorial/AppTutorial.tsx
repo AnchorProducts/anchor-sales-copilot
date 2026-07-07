@@ -177,7 +177,7 @@ const STEPS_INTERNAL: Step[] = [
   },
   {
     target: '[data-tutorial="stat-assets"]',
-    title: "Asset Library shortcut",
+    title: "Resource Library shortcut",
     body: "One-tap jump into the full Resource Library — spec sheets, photos, sales tools.",
   },
   {

@@ -121,8 +121,8 @@ export const translations = {
     chatActions: "Actions",
 
     // ── Assets browser ───────────────────────────────────────────────────────
-    assetLibrary: "Asset Library",
-    tackleBoxSubtitle: "Tackle boxes · Asset Library",
+    assetLibrary: "Resource Library",
+    tackleBoxSubtitle: "Tackle boxes · Resource Library",
     productTackleBoxTitle: "Product Tackle Box",
     productTackleBoxSubtitle: "Sales sheets · installs · pictures · pricebook · test reports",
     assets: "Assets",

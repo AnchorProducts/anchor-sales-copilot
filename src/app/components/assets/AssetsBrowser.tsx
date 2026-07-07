@@ -13,7 +13,6 @@ import {
   SOLUTION_CATALOG,
   SOLUTION_CATEGORIES,
   type CatalogSolution,
-  type SolutionCategory,
 } from "@/lib/solutions/solutionCatalog";
 import {
   prefixCandidatesForProduct,
@@ -31,6 +30,10 @@ type ProductRow = {
   section: ProductSection;
   internal_kind: "tacklebox" | "docs_list" | "contacts_list" | null;
   active: boolean;
+  hidden?: boolean;
+  // Group a hand-created (non-catalog) solution box is filed under. Null for
+  // catalog-matched products, which the catalog groups instead.
+  solution_group?: string | null;
 };
 
 type ProfileRow = { role: string };
@@ -152,6 +155,9 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [products, setProducts] = useState<ProductRow[]>([]);
   // product.id -> number of public files inside its tackle box
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // Normalized names/slugs of deleted (hidden) solution tackle boxes, so their
+  // catalog card is suppressed entirely instead of reverting to a placeholder.
+  const [hiddenSolutionKeys, setHiddenSolutionKeys] = useState<Set<string>>(new Set());
 
   const [q, setQ] = useState("");
   const [activeOnly] = useState(true);
@@ -166,11 +172,22 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [showNewBox, setShowNewBox] = useState(false);
   const [creatingBox, setCreatingBox] = useState(false);
   const [newBoxMsg, setNewBoxMsg] = useState<string | null>(null);
-  const [newBox, setNewBox] = useState<{ name: string; section: ProductSection; series: string; sku: string }>({
+  const [newBox, setNewBox] = useState<{
+    name: string;
+    section: ProductSection;
+    series: string;
+    sku: string;
+    // Solution group: an existing group label, or the "__new__" sentinel while
+    // the admin types a brand-new group name into `newGroup`.
+    group: string;
+    newGroup: string;
+  }>({
     name: "",
     section: "solution",
     series: "",
     sku: "",
+    group: "",
+    newGroup: "",
   });
 
   const router = useRouter();
@@ -217,6 +234,18 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
       setNewBoxMsg("Name is required.");
       return;
     }
+    // Resolve the chosen solution group: a new admin-typed name, or an existing
+    // group label. Only sent for solution boxes.
+    const solutionGroup =
+      newBox.section === "solution"
+        ? newBox.group === "__new__"
+          ? newBox.newGroup.trim()
+          : newBox.group.trim()
+        : "";
+    if (newBox.section === "solution" && newBox.group === "__new__" && !solutionGroup) {
+      setNewBoxMsg("New group name is required.");
+      return;
+    }
     setCreatingBox(true);
     setNewBoxMsg(null);
     try {
@@ -229,6 +258,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
           section: newBox.section,
           series: newBox.series.trim() || null,
           sku: newBox.sku.trim() || null,
+          solutionGroup: solutionGroup || null,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -304,7 +334,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
 
         const prodQuery = supabase
           .from("products")
-          .select("id,name,sku,series,section,internal_kind,active")
+          .select("id,name,sku,series,section,internal_kind,active,solution_group")
           .order("name", { ascending: true });
 
         if (activeOnly) prodQuery.eq("active", true);
@@ -332,6 +362,25 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         const list = (prodRows || []) as ProductRow[];
         setProducts(list);
 
+        // Deleted solution tackle boxes leave a hidden=true tombstone (the
+        // active-only query above excludes them). Fetch those names so the
+        // catalog card they map to is dropped entirely — a plain active=false
+        // would only revert the card to a "Coming soon" placeholder.
+        const { data: hiddenRows } = await supabase
+          .from("products")
+          .select("name")
+          .eq("section", "solution")
+          .eq("hidden", true);
+        if (alive) {
+          const hset = new Set<string>();
+          for (const r of (hiddenRows || []) as { name: string }[]) {
+            if (!r?.name) continue;
+            hset.add(norm(r.name));
+            hset.add(slugify(r.name));
+          }
+          setHiddenSolutionKeys(hset);
+        }
+
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData?.session?.access_token || "";
 
@@ -358,7 +407,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         setLoading(false);
       } catch (e: any) {
         if (!alive) return;
-        setError(e?.message || "Failed to load asset library.");
+        setError(e?.message || "Failed to load resource library.");
         setProducts([]);
         setCounts({});
         setIsInternalUser(false);
@@ -406,6 +455,17 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     );
   }
 
+  // A catalog item whose tackle box an admin deleted (hidden tombstone). Matched
+  // the same way as findProductForCatalog so label / legacyName / slug variants
+  // all resolve. Such items are dropped from the library entirely — no card, no
+  // placeholder.
+  function isItemHidden(item: CatalogSolution): boolean {
+    if (hiddenSolutionKeys.size === 0) return false;
+    const keys = [norm(item.label), slugify(item.label)];
+    if (item.legacyName) keys.push(norm(item.legacyName), slugify(item.legacyName));
+    return keys.some((k) => hiddenSolutionKeys.has(k));
+  }
+
   // A catalog item is "live" (renders as a clickable card, not a coming-soon
   // placeholder) when it has an active DB row AND either the catalog already
   // launched it OR its tacklebox actually contains files. counts[id] is now the
@@ -428,12 +488,69 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const showAnchors = !solutionsOnly && (filter === "all" || filter === "anchor");
   const showInternal = !solutionsOnly && isInternalUser && (filter === "all" || filter === "internal_assets");
 
-  const catalogGroups: Array<{ category: SolutionCategory; items: CatalogSolution[] }> = useMemo(() => {
-    return SOLUTION_CATEGORIES.map((category) => ({
-      category,
-      items: SOLUTION_CATALOG.filter((s) => s.category === category.key && catalogMatchesSearch(s, q)),
-    })).filter((g) => g.items.length > 0);
-  }, [q]);
+  // Solution products with no catalog entry — boxes an admin created by hand.
+  // The catalog can't group these, so we group them by their `solution_group`.
+  const extraSolutionProducts = useMemo(() => {
+    const matched = new Set<string>();
+    for (const item of SOLUTION_CATALOG) {
+      const p = findProductForCatalog(item);
+      if (p) matched.add(p.id);
+    }
+    return products.filter(
+      (p) => p.section === "solution" && !matched.has(p.id) && matchesSearch(p, q)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, q]);
+
+  // norm(group label) -> { label, items }. Ungrouped boxes fall under "Other".
+  const extraGroups = useMemo(() => {
+    const m = new Map<string, { label: string; items: ProductRow[] }>();
+    for (const p of extraSolutionProducts) {
+      const label = (p.solution_group || "").trim() || "Other";
+      const key = norm(label);
+      if (!m.has(key)) m.set(key, { label, items: [] });
+      m.get(key)!.items.push(p);
+    }
+    return m;
+  }, [extraSolutionProducts]);
+
+  // Group labels already offered by the New-tacklebox picker (catalog + custom).
+  const groupOptions = useMemo(() => {
+    const labels: string[] = SOLUTION_CATEGORIES.map((c) => c.label);
+    const seen = new Set(labels.map(norm));
+    for (const { label } of extraGroups.values()) {
+      if (label && label !== "Other" && !seen.has(norm(label))) {
+        seen.add(norm(label));
+        labels.push(label);
+      }
+    }
+    return labels;
+  }, [extraGroups]);
+
+  // Merge catalog categories with the custom (extra) groups into one ordered
+  // list of sections. A catalog category also absorbs extras whose group label
+  // matches it; custom groups with no catalog category become new sections.
+  const solutionSections = useMemo(() => {
+    const categoryKeys = new Set(SOLUTION_CATEGORIES.map((c) => norm(c.label)));
+    const sections: Array<{
+      key: string;
+      label: string;
+      catalogItems: CatalogSolution[];
+      extraProducts: ProductRow[];
+    }> = SOLUTION_CATEGORIES.map((category) => ({
+      key: category.key,
+      label: category.label,
+      catalogItems: SOLUTION_CATALOG.filter(
+        (s) => s.category === category.key && catalogMatchesSearch(s, q)
+      ),
+      extraProducts: extraGroups.get(norm(category.label))?.items ?? [],
+    }));
+    for (const [key, g] of extraGroups) {
+      if (categoryKeys.has(key)) continue; // already merged into a catalog section
+      sections.push({ key: `custom:${key}`, label: g.label, catalogItems: [], extraProducts: g.items });
+    }
+    return sections;
+  }, [q, extraGroups]);
 
   const anchorRows = useMemo(
     () => nonSolutionProducts.filter((p) => p.section === "anchor"),
@@ -477,12 +594,19 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     [nonSolutionProducts]
   );
 
+  // Sections with something to show: catalog items left after hiding deleted
+  // ones, or admin-created extra products. Drives both the empty-state check and
+  // the render below so they never disagree.
+  const visibleSolutionSections = solutionSections
+    .map((s) => ({ ...s, catalogItems: s.catalogItems.filter((it) => !isItemHidden(it)) }))
+    .filter((s) => s.catalogItems.length > 0 || s.extraProducts.length > 0);
+
   // When the anchors filter is active we always want to render the
   // category placeholders (so the "U-Anchor 5000 Series — coming soon"
   // category remains visible). Treat the anchors block as "having results"
   // whenever the user explicitly asks for anchors, even if no rows exist.
   const hasAnyResult =
-    (showSolutions && catalogGroups.length > 0) ||
+    (showSolutions && visibleSolutionSections.length > 0) ||
     (showAnchors && (anchorRows.length > 0 || (filter === "anchor" && !q.trim()))) ||
     (showInternal && internalRows.length > 0);
 
@@ -563,6 +687,39 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
               />
             </label>
           </div>
+
+          {newBox.section === "solution" && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-[12px] font-semibold text-black/70">Solution group</span>
+                <select
+                  value={newBox.group}
+                  onChange={(e) => setNewBox((s) => ({ ...s, group: e.target.value }))}
+                  className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                >
+                  <option value="">Ungrouped (Other)</option>
+                  {groupOptions.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                  <option value="__new__">+ New group…</option>
+                </select>
+              </label>
+              {newBox.group === "__new__" && (
+                <label className="grid gap-1">
+                  <span className="text-[12px] font-semibold text-black/70">New group name</span>
+                  <input
+                    value={newBox.newGroup}
+                    onChange={(e) => setNewBox((s) => ({ ...s, newGroup: e.target.value }))}
+                    placeholder="e.g. Accessories"
+                    className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
           <div className="mt-3 flex items-center gap-3">
             <button
               type="button"
@@ -607,24 +764,28 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         ) : (
           <div className="grid gap-6">
             {showSolutions &&
-              catalogGroups.map(({ category, items }) => {
+              visibleSolutionSections.map((section) => {
+                const { catalogItems, extraProducts } = section;
+                const totalCount = catalogItems.length + extraProducts.length;
                 // Auto-expand when searching so matches aren't hidden behind collapsed sections.
-                const isCollapsed = q.trim() ? false : collapsed[category.key] ?? true;
-                // "Coming soon" badge applies only when nothing in the category
-                // is live (launched in the catalog, or content-bearing).
-                const activeCount = items.filter((it) => isItemLive(it)).length;
+                const isCollapsed = q.trim() ? false : collapsed[section.key] ?? true;
+                // "Coming soon" badge applies only when nothing in the group is
+                // live: no launched/content-bearing catalog item AND no admin-
+                // created box (those are always live cards).
+                const activeCount =
+                  catalogItems.filter((it) => isItemLive(it)).length + extraProducts.length;
                 return (
-                  <section key={category.key} className="grid gap-2">
+                  <section key={section.key} className="grid gap-2">
                     <button
                       type="button"
-                      onClick={() => toggleCategory(category.key)}
+                      onClick={() => toggleCategory(section.key)}
                       className="flex w-full items-center justify-between gap-3 rounded-[12px] border border-black/10 bg-[var(--surface-soft)] px-4 py-3 text-left hover:bg-[var(--surface-soft)]/80"
                       aria-expanded={!isCollapsed}
                     >
                       <span className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
-                        {category.label}
+                        {section.label}
                         <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-black/60">
-                          {items.length}
+                          {totalCount}
                         </span>
                         {activeCount === 0 && (
                           <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-black/50">
@@ -636,7 +797,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                     </button>
                     {!isCollapsed && (
                       <div className="grid gap-2">
-                        {items.map((item) => {
+                        {catalogItems.map((item) => {
                           // Prefer a direct DB row with the new label; fall back to
                           // the legacy DB row so existing tackle box / docs surface.
                           // Slug-based matching tolerates hyphen / spacing variants
@@ -666,6 +827,16 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                             />
                           );
                         })}
+                        {/* Admin-created boxes with no catalog entry, filed here by group. */}
+                        {extraProducts.map((p) => (
+                          <SolutionCard
+                            key={p.id}
+                            product={p}
+                            openLabel={t("open")}
+                            title={t("openTackleBox")}
+                            fileCount={counts[p.id]}
+                          />
+                        ))}
                       </div>
                     )}
                   </section>
