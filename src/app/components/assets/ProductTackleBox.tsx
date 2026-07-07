@@ -1217,7 +1217,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                           onChange={(e) => setMetaForm((s) => ({ ...s, group: e.target.value }))}
                           className="h-9 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
                         >
-                          <option value="">Ungrouped (Other)</option>
+                          <option value="">Other — hidden from library</option>
                           {groupSelectLabels.map((label) => (
                             <option key={label} value={label}>
                               {label}

@@ -604,8 +604,11 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
 
   // Sections with something to show (a live card or a coming-soon placeholder).
   // Drives both the empty-state check and the render below so they never disagree.
+  // The "Other" group is deactivated: it's still selectable in the create/move
+  // pickers (a place to park a box) but never rendered in the library — for any
+  // role — so ungrouped boxes stay hidden until an admin files them somewhere.
   const visibleSolutionSections = solutionSections.filter(
-    (s) => s.cards.length > 0 || s.placeholders.length > 0
+    (s) => (s.cards.length > 0 || s.placeholders.length > 0) && norm(s.label) !== "other"
   );
 
   // When the anchors filter is active we always want to render the
@@ -704,7 +707,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                   onChange={(e) => setNewBox((s) => ({ ...s, group: e.target.value }))}
                   className="h-10 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
                 >
-                  <option value="">Ungrouped (Other)</option>
+                  <option value="">Other — hidden from library</option>
                   {groupOptions.map((label) => (
                     <option key={label} value={label}>
                       {label}
