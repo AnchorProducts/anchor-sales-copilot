@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { SOLUTION_CATALOG } from "@/lib/solutions/solutionCatalog";
+import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
 
@@ -40,6 +40,7 @@ type ProductRow = {
   section: string | null; // solution | anchor | internal_assets
   internal_kind: "tacklebox" | "docs_list" | "contacts_list" | null;
   active: boolean;
+  solution_group: string | null;
 };
 
 type AssetRow = {
@@ -362,7 +363,28 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [togglingActive, setTogglingActive] = useState(false);
   const [editingMeta, setEditingMeta] = useState(false);
   const [savingMeta, setSavingMeta] = useState(false);
-  const [metaForm, setMetaForm] = useState<{ name: string; sku: string; section: string }>({ name: "", sku: "", section: "solution" });
+  // `group` holds an existing group label or the "__new__" sentinel while the
+  // admin types a brand-new group name into `newGroup`. "" = ungrouped (Other).
+  const [metaForm, setMetaForm] = useState<{ name: string; sku: string; section: string; group: string; newGroup: string }>({ name: "", sku: "", section: "solution", group: "", newGroup: "" });
+  // Custom solution-group labels already in use (for the move picker).
+  const [customGroups, setCustomGroups] = useState<string[]>([]);
+
+  // Options for the "move to group" picker: catalog categories + existing custom
+  // groups + the product's current group (in case it isn't in either list yet).
+  const groupSelectLabels = useMemo(() => {
+    const labels: string[] = SOLUTION_CATEGORIES.map((c) => c.label);
+    const seen = new Set(labels.map((l) => l.toLowerCase()));
+    const add = (g: string | null | undefined) => {
+      const v = (g || "").trim();
+      if (v && v.toLowerCase() !== "other" && !seen.has(v.toLowerCase())) {
+        seen.add(v.toLowerCase());
+        labels.push(v);
+      }
+    };
+    for (const g of customGroups) add(g);
+    add(metaForm.group === "__new__" ? "" : metaForm.group);
+    return labels;
+  }, [customGroups, metaForm.group]);
   const [form, setForm] = useState({
     title: "",
     category_key: "data_sheet",
@@ -412,7 +434,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       // Product
       const { data: p, error: pErr } = await supabase
         .from("products")
-        .select("id,name,sku,series,section,internal_kind,active")
+        .select("id,name,sku,series,section,internal_kind,active,solution_group")
         .eq("id", productId)
         .maybeSingle();
 
@@ -451,6 +473,27 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
       setProduct(p as ProductRow);
       setDbAssets((a as AssetRow[]) ?? []);
+
+      // Existing custom group labels (for the "move to group" picker). Best-effort.
+      try {
+        const { data: groupRows } = await supabase
+          .from("products")
+          .select("solution_group")
+          .eq("section", "solution")
+          .not("solution_group", "is", null);
+        const seen = new Set<string>();
+        const labels: string[] = [];
+        for (const r of (groupRows || []) as Array<{ solution_group: string | null }>) {
+          const g = (r.solution_group || "").trim();
+          if (g && g.toLowerCase() !== "other" && !seen.has(g.toLowerCase())) {
+            seen.add(g.toLowerCase());
+            labels.push(g);
+          }
+        }
+        setCustomGroups(labels);
+      } catch {
+        setCustomGroups([]);
+      }
 
       // Probe storage prefixes
       const candidates = prefixCandidatesForProduct(p as ProductRow);
@@ -775,7 +818,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
   function startEditMeta() {
     if (!isAdmin || !product) return;
-    setMetaForm({ name: product.name ?? "", sku: product.sku ?? "", section: product.section ?? "solution" });
+    setMetaForm({
+      name: product.name ?? "",
+      sku: product.sku ?? "",
+      section: product.section ?? "solution",
+      group: (product.solution_group ?? "").trim(),
+      newGroup: "",
+    });
     setEditingMeta(true);
   }
 
@@ -789,6 +838,19 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
     const nextSku = metaForm.sku.trim() || null;
     const nextSection = metaForm.section;
+    // Resolve the target group (only meaningful for solutions). "" clears it
+    // back to the default (catalog category, or "Other" for hand-created boxes).
+    const nextGroup =
+      nextSection === "solution"
+        ? metaForm.group === "__new__"
+          ? metaForm.newGroup.trim()
+          : metaForm.group.trim()
+        : "";
+    if (nextSection === "solution" && metaForm.group === "__new__" && !nextGroup) {
+      setFormMsg("New group name is required.");
+      setTimeout(() => setFormMsg(null), 3000);
+      return;
+    }
     setSavingMeta(true);
     setFormMsg(null);
     try {
@@ -796,7 +858,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: productId, name: nextName, sku: nextSku, section: nextSection }),
+        body: JSON.stringify({ id: productId, name: nextName, sku: nextSku, section: nextSection, solutionGroup: nextGroup || null }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -805,7 +867,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setSavingMeta(false);
         return;
       }
-      setProduct((p) => (p ? { ...p, name: nextName, sku: nextSku, section: nextSection } : p));
+      setProduct((p) => (p ? { ...p, name: nextName, sku: nextSku, section: nextSection, solution_group: nextGroup || null } : p));
       setEditingMeta(false);
       setFormMsg("Saved.");
       setTimeout(() => setFormMsg(null), 1500);
@@ -1147,6 +1209,35 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                         <option value="internal_assets">Internal assets</option>
                       </select>
                     </label>
+                    {metaForm.section === "solution" && (
+                      <label className="grid gap-1">
+                        <span className="text-[12px] font-semibold text-black/70">Group</span>
+                        <select
+                          value={metaForm.group}
+                          onChange={(e) => setMetaForm((s) => ({ ...s, group: e.target.value }))}
+                          className="h-9 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                        >
+                          <option value="">Ungrouped (Other)</option>
+                          {groupSelectLabels.map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                          <option value="__new__">+ New group…</option>
+                        </select>
+                      </label>
+                    )}
+                    {metaForm.section === "solution" && metaForm.group === "__new__" && (
+                      <label className="grid gap-1">
+                        <span className="text-[12px] font-semibold text-black/70">New group name</span>
+                        <input
+                          value={metaForm.newGroup}
+                          onChange={(e) => setMetaForm((s) => ({ ...s, newGroup: e.target.value }))}
+                          placeholder="e.g. Accessories"
+                          className="h-9 w-48 rounded-[10px] border border-black/10 bg-white px-3 text-sm"
+                        />
+                      </label>
+                    )}
                     <button
                       type="button"
                       onClick={saveMeta}
@@ -1170,12 +1261,13 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                       {product?.sku ? `SKU: ${product.sku}` : t("noSku")}
                       {product?.series ? ` • Series: ${product.series}` : ""}
                       {product?.section ? ` • ${product.section}` : ""}
+                      {product?.section === "solution" && product?.solution_group ? ` • Group: ${product.solution_group}` : ""}
                     </span>
                     {isAdmin && (
                       <button
                         type="button"
                         onClick={startEditMeta}
-                        title="Edit SKU and solution"
+                        title="Edit SKU, group, and solution"
                         className="inline-flex items-center rounded-full bg-black/5 px-2.5 py-0.5 text-[11px] font-semibold text-black/55 transition hover:bg-black/10"
                       >
                         Edit

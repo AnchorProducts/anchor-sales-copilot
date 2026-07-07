@@ -488,69 +488,77 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const showAnchors = !solutionsOnly && (filter === "all" || filter === "anchor");
   const showInternal = !solutionsOnly && isInternalUser && (filter === "all" || filter === "internal_assets");
 
-  // Solution products with no catalog entry — boxes an admin created by hand.
-  // The catalog can't group these, so we group them by their `solution_group`.
-  const extraSolutionProducts = useMemo(() => {
-    const matched = new Set<string>();
-    for (const item of SOLUTION_CATALOG) {
-      const p = findProductForCatalog(item);
-      if (p) matched.add(p.id);
-    }
-    return products.filter(
-      (p) => p.section === "solution" && !matched.has(p.id) && matchesSearch(p, q)
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, q]);
-
-  // norm(group label) -> { label, items }. Ungrouped boxes fall under "Other".
-  const extraGroups = useMemo(() => {
-    const m = new Map<string, { label: string; items: ProductRow[] }>();
-    for (const p of extraSolutionProducts) {
-      const label = (p.solution_group || "").trim() || "Other";
-      const key = norm(label);
-      if (!m.has(key)) m.set(key, { label, items: [] });
-      m.get(key)!.items.push(p);
-    }
-    return m;
-  }, [extraSolutionProducts]);
-
-  // Group labels already offered by the New-tacklebox picker (catalog + custom).
+  // Group labels the pickers offer: catalog category labels + any custom group
+  // an admin has already assigned to a product. "Other" is the ungrouped bucket
+  // and is never offered as an explicit choice.
   const groupOptions = useMemo(() => {
     const labels: string[] = SOLUTION_CATEGORIES.map((c) => c.label);
     const seen = new Set(labels.map(norm));
-    for (const { label } of extraGroups.values()) {
-      if (label && label !== "Other" && !seen.has(norm(label))) {
-        seen.add(norm(label));
-        labels.push(label);
+    for (const p of products) {
+      const g = (p.solution_group || "").trim();
+      if (g && norm(g) !== norm("Other") && !seen.has(norm(g))) {
+        seen.add(norm(g));
+        labels.push(g);
       }
     }
     return labels;
-  }, [extraGroups]);
+  }, [products]);
 
-  // Merge catalog categories with the custom (extra) groups into one ordered
-  // list of sections. A catalog category also absorbs extras whose group label
-  // matches it; custom groups with no catalog category become new sections.
+  // The group a solution product actually renders under. `solution_group` is an
+  // OVERRIDE: set it and the box moves there (this is how an admin relocates a
+  // solution). Unset → a catalog box falls back to its catalog category, a
+  // hand-created box to "Other".
+  function effectiveGroupLabel(product: ProductRow, catalogLabel?: string): string {
+    const override = (product.solution_group || "").trim();
+    if (override) return override;
+    if (catalogLabel) return catalogLabel;
+    return "Other";
+  }
+
+  // Build the Solutions sections. Live product cards are placed by their
+  // effective group (so overrides move them anywhere); coming-soon placeholders
+  // stay in their catalog category. Catalog categories render first and in
+  // order; custom groups follow in first-seen order.
   const solutionSections = useMemo(() => {
-    const categoryKeys = new Set(SOLUTION_CATEGORIES.map((c) => norm(c.label)));
-    const sections: Array<{
-      key: string;
-      label: string;
-      catalogItems: CatalogSolution[];
-      extraProducts: ProductRow[];
-    }> = SOLUTION_CATEGORIES.map((category) => ({
-      key: category.key,
-      label: category.label,
-      catalogItems: SOLUTION_CATALOG.filter(
-        (s) => s.category === category.key && catalogMatchesSearch(s, q)
-      ),
-      extraProducts: extraGroups.get(norm(category.label))?.items ?? [],
-    }));
-    for (const [key, g] of extraGroups) {
-      if (categoryKeys.has(key)) continue; // already merged into a catalog section
-      sections.push({ key: `custom:${key}`, label: g.label, catalogItems: [], extraProducts: g.items });
+    const catLabelByKey = new Map(SOLUTION_CATEGORIES.map((c) => [c.key, c.label]));
+    type Card = { key: string; product: ProductRow; displayName: string };
+    type Group = { key: string; label: string; cards: Card[]; placeholders: CatalogSolution[] };
+    const groups = new Map<string, Group>();
+    const ensure = (label: string): Group => {
+      const key = norm(label);
+      let g = groups.get(key);
+      if (!g) {
+        g = { key, label, cards: [], placeholders: [] };
+        groups.set(key, g);
+      }
+      return g;
+    };
+    // Seed catalog categories first so they keep their defined order.
+    for (const c of SOLUTION_CATEGORIES) ensure(c.label);
+
+    const matchedIds = new Set<string>();
+    for (const item of SOLUTION_CATALOG) {
+      if (!catalogMatchesSearch(item, q) || isItemHidden(item)) continue;
+      const product = findProductForCatalog(item);
+      if (product) matchedIds.add(product.id);
+      if (product && isItemLive(item)) {
+        const label = effectiveGroupLabel(product, catLabelByKey.get(item.category));
+        ensure(label).cards.push({ key: `cat:${item.key}`, product, displayName: item.label });
+      } else {
+        // Coming-soon placeholder lives in the catalog category, not any override.
+        ensure(catLabelByKey.get(item.category) ?? "Other").placeholders.push(item);
+      }
     }
-    return sections;
-  }, [q, extraGroups]);
+
+    // Hand-created (non-catalog) solution products, placed by their group.
+    for (const p of products) {
+      if (p.section !== "solution" || matchedIds.has(p.id) || !matchesSearch(p, q)) continue;
+      ensure(effectiveGroupLabel(p)).cards.push({ key: `prod:${p.id}`, product: p, displayName: p.name });
+    }
+
+    return Array.from(groups.values());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, products, counts, hiddenSolutionKeys]);
 
   const anchorRows = useMemo(
     () => nonSolutionProducts.filter((p) => p.section === "anchor"),
@@ -594,12 +602,11 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     [nonSolutionProducts]
   );
 
-  // Sections with something to show: catalog items left after hiding deleted
-  // ones, or admin-created extra products. Drives both the empty-state check and
-  // the render below so they never disagree.
-  const visibleSolutionSections = solutionSections
-    .map((s) => ({ ...s, catalogItems: s.catalogItems.filter((it) => !isItemHidden(it)) }))
-    .filter((s) => s.catalogItems.length > 0 || s.extraProducts.length > 0);
+  // Sections with something to show (a live card or a coming-soon placeholder).
+  // Drives both the empty-state check and the render below so they never disagree.
+  const visibleSolutionSections = solutionSections.filter(
+    (s) => s.cards.length > 0 || s.placeholders.length > 0
+  );
 
   // When the anchors filter is active we always want to render the
   // category placeholders (so the "U-Anchor 5000 Series — coming soon"
@@ -765,15 +772,11 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
           <div className="grid gap-6">
             {showSolutions &&
               visibleSolutionSections.map((section) => {
-                const { catalogItems, extraProducts } = section;
-                const totalCount = catalogItems.length + extraProducts.length;
+                const totalCount = section.cards.length + section.placeholders.length;
                 // Auto-expand when searching so matches aren't hidden behind collapsed sections.
                 const isCollapsed = q.trim() ? false : collapsed[section.key] ?? true;
-                // "Coming soon" badge applies only when nothing in the group is
-                // live: no launched/content-bearing catalog item AND no admin-
-                // created box (those are always live cards).
-                const activeCount =
-                  catalogItems.filter((it) => isItemLive(it)).length + extraProducts.length;
+                // "Coming soon" badge shows only when the group has no live card.
+                const activeCount = section.cards.length;
                 return (
                   <section key={section.key} className="grid gap-2">
                     <button
@@ -797,44 +800,23 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                     </button>
                     {!isCollapsed && (
                       <div className="grid gap-2">
-                        {catalogItems.map((item) => {
-                          // Prefer a direct DB row with the new label; fall back to
-                          // the legacy DB row so existing tackle box / docs surface.
-                          // Slug-based matching tolerates hyphen / spacing variants
-                          // between catalog names and stored DB names.
-                          const product = findProductForCatalog(item);
-                          // Render as a live card when the catalog launched it OR it
-                          // actually contains files — even if still flagged comingSoon.
-                          if (product && isItemLive(item)) {
-                            return (
-                              <SolutionCard
-                                key={item.key}
-                                product={product}
-                                displayName={item.label}
-                                openLabel={t("open")}
-                                title={t("openTackleBox")}
-                                fileCount={counts[product.id]}
-                              />
-                            );
-                          }
-                          return (
-                            <ComingSoonCard
-                              key={item.key}
-                              label={item.label}
-                              isAdmin={isAdmin}
-                              pending={creatingKey === item.key}
-                              onAdminOpen={() => adminOpenComingSoon(item)}
-                            />
-                          );
-                        })}
-                        {/* Admin-created boxes with no catalog entry, filed here by group. */}
-                        {extraProducts.map((p) => (
+                        {section.cards.map((card) => (
                           <SolutionCard
-                            key={p.id}
-                            product={p}
+                            key={card.key}
+                            product={card.product}
+                            displayName={card.displayName}
                             openLabel={t("open")}
                             title={t("openTackleBox")}
-                            fileCount={counts[p.id]}
+                            fileCount={counts[card.product.id]}
+                          />
+                        ))}
+                        {section.placeholders.map((item) => (
+                          <ComingSoonCard
+                            key={item.key}
+                            label={item.label}
+                            isAdmin={isAdmin}
+                            pending={creatingKey === item.key}
+                            onAdminOpen={() => adminOpenComingSoon(item)}
                           />
                         ))}
                       </div>
