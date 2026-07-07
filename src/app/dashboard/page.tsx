@@ -554,7 +554,7 @@ export default function DashboardPage() {
   const stat1 = isAdmin
     ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "user" as IconName, tutorialKey: "stat-reps" }
     : isInternal
-    ? { label: "Asset Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
+    ? { label: "Resource Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
     : { label: serviceStates.length > 1 ? "Service States" : "Service State", value: serviceStates.length ? serviceStates.join(", ") : "—", trend: serviceStates.length ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceStates.length ? serviceStates.join(", ") : "Set", tutorialKey: "stat-service-state" };
 
   const stat2 = isAdmin

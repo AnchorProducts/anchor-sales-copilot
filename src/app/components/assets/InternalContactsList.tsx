@@ -201,7 +201,7 @@ export default function InternalContactsList({ productId }: { productId: string 
             <Link
               href="/assets"
               className="inline-flex shrink-0 items-center"
-              title="Back to Asset Library"
+              title="Back to Resource Library"
             >
               <img src="/anchorp.svg" alt="Anchor Products" className="ds-logo" />
             </Link>
@@ -216,7 +216,7 @@ export default function InternalContactsList({ productId }: { productId: string 
             href="/assets"
             className="shrink-0 inline-flex items-center rounded-xl bg-white/10 px-3 py-2 text-[12px] font-semibold text-white border border-white/15 hover:bg-white/15 transition"
           >
-            Asset Library
+            Resource Library
           </Link>
         </div>
       </header>

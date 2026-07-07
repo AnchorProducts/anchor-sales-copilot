@@ -89,6 +89,9 @@ export async function POST(req: Request) {
   const section = clean(body.section) || "solution";
   const series = clean(body.series) || null;
   const sku = clean(body.sku) || null;
+  // The group a hand-created solution box is filed under (catalog category label
+  // or a new admin-named one). Only meaningful for section=solution.
+  const solutionGroup = section === "solution" ? (clean(body.solutionGroup) || null) : null;
 
   if (!name) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -98,19 +101,32 @@ export async function POST(req: Request) {
   }
 
   // If a row with this name already exists, return its id (case-insensitive).
+  // If it was previously deleted (hidden tombstone), un-hide + reactivate it so
+  // recreating a box with the same name restores it.
   const { data: existing } = await supabaseAdmin
     .from("products")
-    .select("id")
+    .select("id,hidden,active")
     .ilike("name", name)
     .maybeSingle();
 
   if (existing?.id) {
+    // Restore a deleted box, and (re)apply the chosen group if one was passed.
+    const ex = existing as { id: string; hidden?: boolean | null; active?: boolean | null };
+    const restore: Record<string, unknown> = {};
+    if (ex.hidden || ex.active === false) {
+      restore.hidden = false;
+      restore.active = true;
+    }
+    if (solutionGroup) restore.solution_group = solutionGroup;
+    if (Object.keys(restore).length > 0) {
+      await supabaseAdmin.from("products").update(restore).eq("id", existing.id);
+    }
     return NextResponse.json({ id: existing.id, created: false });
   }
 
   const { data, error: insertErr } = await supabaseAdmin
     .from("products")
-    .insert({ name, section, series, sku, active: true })
+    .insert({ name, section, series, sku, active: true, solution_group: solutionGroup })
     .select("id")
     .single();
 
@@ -247,11 +263,20 @@ export async function DELETE(req: Request) {
     }
   }
 
-  // Remove child rows first (explicit, regardless of FK cascade), then product.
+  // Remove child rows (explicit, regardless of FK cascade).
   await supabaseAdmin.from("assets").delete().eq("product_id", id);
   await supabaseAdmin.from("pending_uploads").delete().eq("product_id", id);
 
-  const { error: delErr } = await supabaseAdmin.from("products").delete().eq("id", id);
+  // Soft-delete the product itself: keep a hidden=true tombstone instead of
+  // dropping the row. For a catalog-driven solution, a dropped row only reverts
+  // the card to its "Coming soon" placeholder; the hidden flag lets AssetsBrowser
+  // suppress the card entirely so the button actually disappears. Re-creating a
+  // box with the same name un-hides it (POST above). active=false keeps it out of
+  // every active-only query in the meantime.
+  const { error: delErr } = await supabaseAdmin
+    .from("products")
+    .update({ hidden: true, active: false })
+    .eq("id", id);
   if (delErr) {
     return NextResponse.json({ error: delErr.message }, { status: 500 });
   }
