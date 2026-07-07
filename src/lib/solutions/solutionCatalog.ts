@@ -123,7 +123,7 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   // Security, Monitoring, & Communication (all coming soon)
   { key: "camera-mounting-plate", label: "Camera w/ Mounting Plate", category: "security-monitoring-communication", legacyFolder: "solutions/camera-mount" },
   { key: "roof-wall-mount-light-no-plate", label: "Roof Mount & Wall Mount Light w/o Mounting Plate", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/light-mount" },
-  { key: "satellite-dish-mount-roof-wall", label: "Satellite Dish Mount - Roof or Wall", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/satellite-dish" },
+  { key: "satellite-dish-mount-roof-wall", label: "Satellite Dish Mount - Roof or Wall", category: "security-monitoring-communication", comingSoon: true, legacyName: "Satellite Dish", legacyFolder: "solutions/satellite-dish" },
   { key: "radio-tower-securement", label: "Radio Tower Securement", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
   { key: "weather-station", label: "Weather Station", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/weather-station" },
   { key: "antenna-securement-w-base", label: "Antenna Securement w/ Base", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
