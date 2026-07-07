@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { prefixCandidatesForProduct, GLOBAL_SPEC_PATH } from "@/lib/assets/storagePrefixes";
+import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -217,8 +217,8 @@ export async function DELETE(req: Request) {
   }
 
   // Optionally purge the underlying storage files. We resolve the folder the
-  // same way the tacklebox does (first non-empty candidate prefix) and never
-  // delete the shared global spec.
+  // same way the tacklebox does (first non-empty candidate prefix). This only
+  // ever lists files under the product's own folder, including its spec.
   let removedFiles = 0;
   if (purgeStorage) {
     const candidates = prefixCandidatesForProduct(product as { name: string; series?: string | null; section?: string | null });
@@ -230,7 +230,7 @@ export async function DELETE(req: Request) {
         break;
       }
     }
-    const toRemove = files.filter((p) => p !== GLOBAL_SPEC_PATH);
+    const toRemove = files;
     if (toRemove.length > 0) {
       // Supabase storage caps removes per call; chunk to be safe.
       for (let i = 0; i < toRemove.length; i += 100) {

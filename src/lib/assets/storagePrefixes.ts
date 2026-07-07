@@ -9,8 +9,6 @@
 // When you connect a product to a new folder, edit SPECIAL_PREFIXES_BY_NAME
 // here and both places update together.
 
-export const GLOBAL_SPEC_PATH = "spec/anchor-products-spec-v1.docx";
-
 export const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
 
 export type ProductLike = {
