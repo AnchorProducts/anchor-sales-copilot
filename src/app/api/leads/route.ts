@@ -269,8 +269,11 @@ export async function POST(req: Request) {
 
     const user = auth.user;
     const role = await getRole(user.id);
-    // Admins can use every user option, so they may submit consults too.
-    if (!isExternalRole(role) && role !== "admin") {
+    // Who may submit a REC must match who may OPEN the form (useFormAccess
+    // "sales"): internal (anchor_rep) AND external sales, plus admins. Outside
+    // reps are configured as anchor_rep, so restricting to external_rep here 403'd
+    // them even though the form let them fill it out.
+    if (!isExternalRole(role) && !isInternalRole(role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

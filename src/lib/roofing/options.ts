@@ -22,5 +22,6 @@ export const ROOF_BRANDS: string[] = [
   "Polyglass",
   "Siplast",
   "IKO",
+  "Duralast",
   "Other",
 ];

@@ -110,6 +110,46 @@ function clean(v: string) {
   return v.trim();
 }
 
+// Auto-save: the consult draft is kept in localStorage so a rep who navigates
+// away (or whose phone locks) can pick up where they left off. Photos are File
+// objects and can't be serialized, so only the typed fields are saved — the rep
+// re-attaches media on resume.
+const REC_DRAFT_KEY = "rec-consult-draft-v1";
+
+function draftHasContent(d: any): boolean {
+  if (!d) return false;
+  const f = d.form || {};
+  const solHasContent =
+    Array.isArray(d.solutions) &&
+    d.solutions.some(
+      (s: any) => s?.solution_key || s?.solution_label || s?.other_label || s?.comment || s?.savedFileCount
+    );
+  const contractorHasContent =
+    Array.isArray(d.contractors) && d.contractors.some((c: any) => c?.name || c?.company || c?.phone || c?.email);
+  return Boolean(
+    (f.project_name || "").trim() ||
+      (f.project_address || "").trim() ||
+      (f.city || "").trim() ||
+      (f.zip || "").trim() ||
+      (Array.isArray(f.roof_type) && f.roof_type.length) ||
+      (Array.isArray(f.roof_brand) && f.roof_brand.length) ||
+      solHasContent ||
+      contractorHasContent ||
+      (d.followUp || "").trim()
+  );
+}
+
+function timeAgo(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
+
 function newSolutionEntry(): SolutionEntry {
   return {
     id: (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -195,6 +235,116 @@ export default function LeadForm() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // ── Auto-save / resume ────────────────────────────────────────────────────
+  // A draft found on this device, awaiting the rep's resume/discard choice.
+  const [pendingDraft, setPendingDraft] = useState<{ savedAt: number; photoCount: number; data: any } | null>(null);
+  // Gate: don't start overwriting storage until we've checked for an existing
+  // draft (and, if found, the rep has decided) — otherwise the blank initial
+  // form would clobber the saved draft before they can resume it.
+  const [autosaveReady, setAutosaveReady] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  // On mount, look for a saved draft. Deferred to a microtask (like the profile
+  // effect) so we don't call setState synchronously inside the effect body.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      await Promise.resolve();
+      if (!alive) return;
+      let found: { savedAt: number; photoCount: number; data: any } | null = null;
+      try {
+        const raw = localStorage.getItem(REC_DRAFT_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && draftHasContent(parsed.data)) found = parsed;
+        }
+      } catch {
+        /* ignore corrupt/unavailable storage */
+      }
+      if (!alive) return;
+      if (found) setPendingDraft(found);
+      else setAutosaveReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Persist the draft (debounced) whenever the form changes.
+  useEffect(() => {
+    if (!autosaveReady) return;
+    const snapshot = {
+      savedAt: Date.now(),
+      photoCount: solutions.reduce((n, s) => n + s.files.length, 0),
+      data: {
+        form,
+        solutions: solutions.map(({ files, ...rest }) => ({ ...rest, savedFileCount: files.length })),
+        contractors,
+        followUp,
+        timelinePos,
+        fileCommission,
+        claim,
+      },
+    };
+    const id = setTimeout(() => {
+      try {
+        if (draftHasContent(snapshot.data)) {
+          localStorage.setItem(REC_DRAFT_KEY, JSON.stringify(snapshot));
+          setDraftSaved(true);
+        } else {
+          localStorage.removeItem(REC_DRAFT_KEY);
+          setDraftSaved(false);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 600);
+    return () => clearTimeout(id);
+  }, [autosaveReady, form, solutions, contractors, followUp, timelinePos, fileCommission, claim]);
+
+  function resumeDraft() {
+    const d = pendingDraft?.data;
+    if (d) {
+      if (d.form) setForm((prev) => ({ ...prev, ...d.form }));
+      if (Array.isArray(d.solutions)) {
+        setSolutions(
+          d.solutions.map((s: any) => {
+            const { savedFileCount, files, ...rest } = s || {};
+            void savedFileCount;
+            void files;
+            return { ...newSolutionEntry(), ...rest, files: [] };
+          })
+        );
+      }
+      if (Array.isArray(d.contractors)) setContractors(d.contractors);
+      if (typeof d.followUp === "string") setFollowUp(d.followUp);
+      if (typeof d.timelinePos === "number") setTimelinePos(d.timelinePos);
+      setFileCommission(Boolean(d.fileCommission));
+      if (d.claim) setClaim({ ...INITIAL_CLAIM, ...d.claim });
+    }
+    setPendingDraft(null);
+    setAutosaveReady(true);
+  }
+
+  function discardDraft() {
+    try {
+      localStorage.removeItem(REC_DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    setPendingDraft(null);
+    setAutosaveReady(true);
+  }
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(REC_DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    setDraftSaved(false);
   }
 
   function updateSolution(id: string, patch: Partial<SolutionEntry>) {
@@ -427,6 +577,7 @@ export default function LeadForm() {
       setTimelinePos(50);
       setFileCommission(false);
       setClaim(INITIAL_CLAIM);
+      clearDraft();
       setSubmitting(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to submit consult.");
@@ -436,6 +587,39 @@ export default function LeadForm() {
 
   return (
     <form onSubmit={submit}>
+      {pendingDraft && (
+        <div className="mb-4 rounded-2xl border border-[var(--anchor-green)]/40 bg-[var(--anchor-green)]/[0.06] p-4">
+          <div className="text-sm font-semibold text-black">Pick up where you left off?</div>
+          <div className="mt-1 text-[13px] text-[var(--anchor-gray)]">
+            We saved your consult on this device{pendingDraft.savedAt ? ` — last edited ${timeAgo(pendingDraft.savedAt)}` : ""}.
+            {pendingDraft.photoCount
+              ? ` Photos aren’t saved, so you’ll need to re-attach ${pendingDraft.photoCount} photo${pendingDraft.photoCount === 1 ? "" : "s"}.`
+              : " Photos aren’t saved on this device and will need re-attaching."}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={resumeDraft}
+              className="rounded-full bg-[var(--anchor-green)] px-4 py-2 text-[12px] font-semibold text-white transition hover:opacity-90"
+            >
+              Resume draft
+            </button>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="rounded-full border border-black/15 bg-white px-4 py-2 text-[12px] font-semibold text-black transition hover:bg-black/5"
+            >
+              Start fresh
+            </button>
+          </div>
+        </div>
+      )}
+      {!pendingDraft && draftSaved && (
+        <div className="mb-3 flex items-center gap-2 text-[12px] text-[var(--anchor-gray)]">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--anchor-green)]" />
+          <span>Draft saved on this device — you can leave and come back to finish.</span>
+        </div>
+      )}
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
         {profile && (
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
