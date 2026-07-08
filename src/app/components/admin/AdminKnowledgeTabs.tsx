@@ -171,7 +171,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       "pipe-conduit-supports": "Pipe & Conduit Supports",
       "snow-retention": "Snow Retention",
       "elevated-structure-securement": "Elevated Structure Securement",
-      "h-frame-supports": "H-Frame Supports",
+      "h-frame-supports": "Pipe & Duct Frame Supports",
       "rooftop-solar": "Rooftop Solar",
       "equipment-screen": "Equipment Screen",
       "safety-access": "Safety & Access",
