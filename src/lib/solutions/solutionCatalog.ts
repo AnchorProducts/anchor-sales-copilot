@@ -40,7 +40,7 @@ export const SOLUTION_CATEGORIES: SolutionCategory[] = [
   { key: "pipe-conduit-supports", label: "Pipe & Conduit Supports" },
   { key: "snow-retention", label: "Snow Retention" },
   { key: "elevated-structure-securement", label: "Elevated Structure Securement" },
-  { key: "h-frame-supports", label: "H-Frame Supports" },
+  { key: "h-frame-supports", label: "Pipe & Duct Frame Supports" },
   { key: "rooftop-solar", label: "Rooftop Solar" },
   { key: "equipment-screen", label: "Equipment Screen" },
   { key: "safety-access", label: "Safety & Access" },
@@ -80,12 +80,12 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "weather-stand-equipment-2000", label: "Weather/Stand Equipment - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/weather-station" },
   { key: "tower-securement-non-penetrating-base-2000", label: "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/elevated-stack/roof-stack" },
 
-  // H-Frame Supports — collapsed to the 3 products shown on the website
+  // Pipe & Duct Frame Supports — collapsed to the 3 products shown on the website
   // Resource Library tab. Each maps to its knowledge-bucket folder via the
   // matching active `products` row (resolved by legacyName → SPECIAL_PREFIXES).
   { key: "duct-securement", label: "Duct Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
-  { key: "existing-h-frame", label: "Existing H-Frame", category: "h-frame-supports", legacyName: "Existing Pipe Frame", legacyFolder: "solutions/pipe-frame/exisiting" },
-  { key: "attached-h-frame", label: "Attached H-Frame", category: "h-frame-supports", legacyName: "Attached Pipe Frame", legacyFolder: "solutions/pipe-frame/attached" },
+  { key: "existing-h-frame", label: "Existing Pipe Frame", category: "h-frame-supports", legacyName: "Existing Pipe Frame", legacyFolder: "solutions/pipe-frame/exisiting" },
+  { key: "attached-h-frame", label: "Attached Pipe Frame", category: "h-frame-supports", legacyName: "Attached Pipe Frame", legacyFolder: "solutions/pipe-frame/attached" },
 
   // Rooftop Solar (all coming soon — legacyFolder points at existing solar docs for chatbot context)
   { key: "solar-panel-claw-hibred", label: "Solar Mount Panel Claw HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
