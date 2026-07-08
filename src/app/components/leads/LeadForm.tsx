@@ -840,11 +840,12 @@ export default function LeadForm() {
                         </div>
                       </label>
                       {/* In-app camera: snap several photos in a row without
-                          leaving the form (native camera returns after one). */}
+                          leaving the form. Mobile only — on desktop, reps add
+                          photos from files via the upload area above. */}
                       <button
                         type="button"
                         onClick={() => setCameraEntryId(entry.id)}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-black/15 bg-white px-4 py-3 text-sm font-semibold text-black active:bg-black/5"
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-black/15 bg-white px-4 py-3 text-sm font-semibold text-black active:bg-black/5 md:hidden"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                         Take photos
