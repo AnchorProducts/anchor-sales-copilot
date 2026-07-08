@@ -18,6 +18,7 @@ import {
 import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
 import { trackEvent } from "@/lib/analytics/track";
 import { compressImages } from "@/lib/media/compressImage";
+import CameraCapture from "@/app/components/media/CameraCapture";
 
 type FormState = {
   project_name: string;
@@ -220,6 +221,8 @@ export default function LeadForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Which solution entry (if any) has the in-app multi-shot camera open.
+  const [cameraEntryId, setCameraEntryId] = useState<string | null>(null);
 
   const [timelinePos, setTimelinePos] = useState(50);
   const timelineIdx = Math.min(TIMELINE_OPTIONS.length - 1, Math.floor(timelinePos / 100));
@@ -836,6 +839,16 @@ export default function LeadForm() {
                           <div className="text-[11px] text-black/35">{t("photosVideosAccepted")}</div>
                         </div>
                       </label>
+                      {/* In-app camera: snap several photos in a row without
+                          leaving the form (native camera returns after one). */}
+                      <button
+                        type="button"
+                        onClick={() => setCameraEntryId(entry.id)}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-black/15 bg-white px-4 py-3 text-sm font-semibold text-black active:bg-black/5"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                        Take photos
+                      </button>
                       {entry.files.length > 0 && (
                         <div className="text-[12px] text-black/60">{entry.files.length} file(s) selected</div>
                       )}
@@ -875,6 +888,18 @@ export default function LeadForm() {
               {solutions.length === 0 ? "+ Add a Solution" : "+ Add Another Solution"}
             </Button>
           </div>
+
+          {/* Multi-shot camera overlay — shared by every solution row. Captured
+              photos flow through addSolutionFiles (compression + upload). */}
+          <CameraCapture
+            open={cameraEntryId !== null}
+            onClose={() => setCameraEntryId(null)}
+            onDone={(files) => {
+              const id = cameraEntryId;
+              setCameraEntryId(null);
+              if (id && files.length) void addSolutionFiles(id, files);
+            }}
+          />
 
           {/* ── Contractors ─────────────────────────────────────────────────── */}
           <div data-tutorial="rec-contractors" className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
