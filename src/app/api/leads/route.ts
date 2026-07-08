@@ -6,6 +6,7 @@ import { resolveRepsByKind, resolveStatesForUser } from "@/lib/sales/regions";
 import { sendPushToTool, sendPushToEmails } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
 import { appUrl } from "@/lib/appUrl";
+import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,14 +63,6 @@ function sanitizeFilename(name: string) {
   return base.replace(/[^a-zA-Z0-9._-]/g, "");
 }
 
-function sanitizePathSegment(input: string) {
-  return clean(input)
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
-
 function buildLocation(projectAddress: string, city: string, state: string, zip: string, country: string) {
   const parts = [clean(projectAddress), clean(city), upper(state), clean(zip), upper(country)].filter(Boolean);
   return parts.join(", ");
@@ -87,52 +80,52 @@ function deriveRegionCode(country: string, state: string) {
   return [c, s || "NA"].filter(Boolean).join(":");
 }
 
-function isMediaFile(file: File) {
-  const type = clean(file.type).toLowerCase();
+function isMediaContentType(contentType: string) {
+  const type = clean(contentType).toLowerCase();
   return type.startsWith("image/") || type.startsWith("video/");
 }
 
+// A file the browser has already uploaded straight to Storage via a signed
+// upload URL. We only receive its metadata here — never the bytes.
+type UploadedFile = {
+  path: string;
+  filename: string;
+  contentType: string;
+  size: number;
+};
 
 type ParsedSolution = {
   solution_key: string;
   solution_label: string;
   comment: string;
-  files: File[];
+  files: UploadedFile[];
 };
 
-function parseSolutionSubmissions(form: FormData): ParsedSolution[] {
-  const meta = new Map<number, { solution_key: string; solution_label: string; comment: string }>();
-
-  for (const [key, value] of form.entries()) {
-    if (typeof value !== "string") continue;
-    const match = /^solution_(\d+)_(key|label|comment)$/.exec(key);
-    if (!match) continue;
-
-    const idx = Number.parseInt(match[1], 10);
-    if (!Number.isFinite(idx)) continue;
-
-    const field = match[2];
-    const existing = meta.get(idx) || { solution_key: "", solution_label: "", comment: "" };
-
-    if (field === "key") existing.solution_key = clean(value);
-    if (field === "label") existing.solution_label = clean(value);
-    if (field === "comment") existing.comment = clean(value);
-
-    meta.set(idx, existing);
-  }
-
-  return Array.from(meta.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([idx, m]) => {
-      const files = form.getAll(`solution_${idx}_files`).filter((f) => f instanceof File) as File[];
-      return {
-        solution_key: m.solution_key,
-        solution_label: m.solution_label,
-        comment: m.comment,
-        files,
-      };
-    })
+function parseSolutionsJson(input: unknown): ParsedSolution[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((s: any) => ({
+      solution_key: clean(s?.key ?? s?.solution_key),
+      solution_label: clean(s?.label ?? s?.solution_label),
+      comment: clean(s?.comment),
+      files: Array.isArray(s?.files)
+        ? (s.files as any[])
+            .map((f) => ({
+              path: clean(f?.path),
+              filename: clean(f?.filename) || clean(f?.name) || "upload",
+              contentType: clean(f?.contentType) || "application/octet-stream",
+              size: Number(f?.size) || 0,
+            }))
+            .filter((f) => f.path)
+        : [],
+    }))
     .filter((s) => s.solution_key && s.solution_label);
+}
+
+// Guard a client-supplied storage path so a caller can only attach files that
+// live in the leads upload space (and can't traverse out of it).
+function isSafeLeadPath(path: string) {
+  return path.startsWith("leads/") && !path.includes("..");
 }
 
 async function getRole(userId: string) {
@@ -277,39 +270,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const form = await req.formData();
-
-    const customer_company = clean(form.get("customer_company"));
-    const details = clean(form.get("details"));
-    const project_address = clean(form.get("project_address"));
-    const city = clean(form.get("city"));
-    const state = clean(form.get("state"));
-    const zip = clean(form.get("zip"));
-    const country = upper(form.get("country"));
-    const roof_type = clean(form.get("roof_type"));
-    const roof_brand = clean(form.get("roof_brand"));
-    const project_timeline = clean(form.get("project_timeline"));
-
-    const preferred_contact_method = clean(form.get("preferred_contact_method"));
-
-    const submitter_name = clean(form.get("submitter_name")) || null;
-    const submitter_company = clean(form.get("submitter_company")) || null;
-    const submitter_phone = clean(form.get("submitter_phone")) || null;
-
-    const parsedSolutions = parseSolutionSubmissions(form);
-
-    // Backward compatibility with existing single "photos" form submissions.
-    if (parsedSolutions.length === 0) {
-      const legacyFiles = form.getAll("photos").filter((f) => f instanceof File) as File[];
-      if (legacyFiles.length > 0) {
-        parsedSolutions.push({
-          solution_key: "general",
-          solution_label: "General",
-          comment: "",
-          files: legacyFiles,
-        });
-      }
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
     }
+
+    // ── Phase 1: mint signed upload URLs ──────────────────────────────────
+    // The browser uploads photo/video bytes straight to Supabase Storage using
+    // these URLs, then reports the resulting paths back in the create phase.
+    // Keeping the bytes off this serverless function sidesteps Vercel's ~4.5MB
+    // request-body cap, which a batch of phone photos (or any video) blows past.
+    if (clean((body as any).phase) === "sign") {
+      const files = Array.isArray((body as any).files) ? (body as any).files : [];
+      if (!files.length) {
+        return NextResponse.json({ error: "No files provided." }, { status: 400 });
+      }
+      if (files.length > 60) {
+        return NextResponse.json({ error: "Too many files in one submission." }, { status: 400 });
+      }
+      const uploadId = randomUUID();
+      const uploads: Array<{ solutionIndex: number; path: string; token?: string; signedUrl?: string; error?: string }> = [];
+      for (const f of files as any[]) {
+        const name = clean(f?.name);
+        const si = Number.isFinite(Number(f?.solutionIndex)) ? Number(f.solutionIndex) : 0;
+        if (!name) {
+          uploads.push({ solutionIndex: si, path: "", error: "Missing filename" });
+          continue;
+        }
+        const safe = sanitizeFilename(name) || "upload";
+        const path = `leads/${uploadId}/${si}/${Date.now()}-${safe}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from("lead-uploads")
+          .createSignedUploadUrl(path);
+        if (error || !data) {
+          uploads.push({ solutionIndex: si, path, error: error?.message || "Could not create upload URL" });
+          continue;
+        }
+        uploads.push({ solutionIndex: si, path, token: data.token, signedUrl: data.signedUrl });
+      }
+      return NextResponse.json({ uploads });
+    }
+
+    // ── Phase 2: create the lead from already-uploaded file metadata ──────
+    const customer_company = clean((body as any).customer_company);
+    const details = clean((body as any).details);
+    const project_address = clean((body as any).project_address);
+    const city = clean((body as any).city);
+    const state = clean((body as any).state);
+    const zip = clean((body as any).zip);
+    const country = upper((body as any).country);
+    const roof_type = clean((body as any).roof_type);
+    const roof_brand = clean((body as any).roof_brand);
+    const project_timeline = clean((body as any).project_timeline);
+
+    const preferred_contact_method = clean((body as any).preferred_contact_method);
+
+    const submitter_name = clean((body as any).submitter_name) || null;
+    const submitter_company = clean((body as any).submitter_company) || null;
+    const submitter_phone = clean((body as any).submitter_phone) || null;
+
+    const parsedSolutions = parseSolutionsJson((body as any).solutions);
 
     if (!customer_company) return NextResponse.json({ error: "Project name is required." }, { status: 400 });
     // details now holds the optional Project Follow Up note; no longer required.
@@ -332,9 +352,15 @@ export async function POST(req: Request) {
         );
       }
       for (const file of solution.files) {
-        if (!isMediaFile(file)) {
+        if (!isMediaContentType(file.contentType)) {
           return NextResponse.json(
             { error: `Only image/video files are allowed for ${solution.solution_label}.` },
+            { status: 400 }
+          );
+        }
+        if (!isSafeLeadPath(file.path)) {
+          return NextResponse.json(
+            { error: `Invalid file reference for ${solution.solution_label}.` },
             { status: 400 }
           );
         }
@@ -485,7 +511,6 @@ export async function POST(req: Request) {
     }> = [];
 
     for (const solution of parsedSolutions) {
-      const solutionSlug = sanitizePathSegment(solution.solution_key) || "solution";
       const solutionAttachments: Array<{
         path: string;
         filename: string;
@@ -494,27 +519,15 @@ export async function POST(req: Request) {
         uploadedAt: string;
       }> = [];
 
+      // Bytes were already uploaded to Storage by the browser (signed-URL flow);
+      // here we just record the metadata the client reported back.
       for (const file of solution.files) {
-        const timestamp = Date.now();
-        const safeName = sanitizeFilename(file.name || "upload");
-        const path = `leads/${leadId}/${solutionSlug}/${timestamp}-${safeName}`;
-        const contentType = file.type || "application/octet-stream";
-        const buf = Buffer.from(await file.arrayBuffer());
-
-        const { error: upErr } = await supabaseAdmin.storage
-          .from("lead-uploads")
-          .upload(path, buf, { contentType, upsert: false });
-
-        if (upErr) {
-          return NextResponse.json({ error: upErr.message || "Failed to upload file." }, { status: 500 });
-        }
-
         const uploadedAt = new Date().toISOString();
         const attachment = {
-          path,
-          filename: file.name || safeName,
-          contentType,
-          size: file.size || buf.length,
+          path: file.path,
+          filename: file.filename || "upload",
+          contentType: file.contentType || "application/octet-stream",
+          size: file.size || 0,
           uploadedAt,
         };
 

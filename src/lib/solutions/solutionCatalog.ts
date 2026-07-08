@@ -36,11 +36,11 @@ export type SolutionCategory = {
 
 export const SOLUTION_CATEGORIES: SolutionCategory[] = [
   { key: "mechanical", label: "Mechanical" },
-  { key: "box-frames", label: "Box Frames" },
-  { key: "pipe-conduit-supports", label: "Pipe & Conduit Supports" },
+  { key: "box-frames", label: "Electrical Box Frames" },
+  { key: "pipe-conduit-supports", label: "Small Pipe & Conduit Supports" },
   { key: "snow-retention", label: "Snow Retention" },
   { key: "elevated-structure-securement", label: "Elevated Structure Securement" },
-  { key: "h-frame-supports", label: "Pipe & Duct Frame Supports" },
+  { key: "h-frame-supports", label: "Large Pipe & Duct Securements" },
   { key: "rooftop-solar", label: "Rooftop Solar" },
   { key: "equipment-screen", label: "Equipment Screen" },
   { key: "safety-access", label: "Safety & Access" },
@@ -53,7 +53,7 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "existing-mechanical-tie-down-2000", label: "Existing Mechanical Tie Down - 2000 Series U-Anchor", category: "mechanical", legacyName: "Existing Mechanical Tie Down", legacyFolder: "solutions/hvac" },
   { key: "mechanical-support-u-anchor", label: "Mechanical Support - U-Anchor", category: "mechanical", comingSoon: true },
 
-  // Box Frames
+  // Electrical Box Frames
   { key: "small-electrical-box-frame-3000", label: "Small Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
   // Medium ← old "Electrical Disconnect" tackle box (assets live there)
   { key: "medium-electrical-box-frame-3000", label: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Electrical Disconnect", legacyFolder: "solutions/electrical-disconnect" },
@@ -63,7 +63,7 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   // folder was deleted after content moved to the large-box folder.)
   { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
 
-  // Pipe & Conduit Supports (legacy: Roof Pipe Support family)
+  // Small Pipe & Conduit Supports (legacy: Roof Pipe Support family)
   { key: "pss-0320-roller-assembly", label: "PSS 0320 - Pipe Support Securement - Roller Assembly", category: "pipe-conduit-supports", legacyName: "Roller Pipe Support", legacyFolder: "solutions/roof-pipe/roller" },
   { key: "pss-0310-strut-assembly", label: "PSS 0310 - Pipe Support Securement - Strut Assembly", category: "pipe-conduit-supports", legacyName: "Roof Pipe Support", legacyFolder: "solutions/roof-pipe" },
   { key: "pss-0305-6in-base", label: "PSS 0305 - Pipe Securement - 6\" Base", category: "pipe-conduit-supports", legacyName: "Single Pipe Support", legacyFolder: "solutions/roof-pipe/single" },
@@ -80,7 +80,7 @@ export const SOLUTION_CATALOG: CatalogSolution[] = [
   { key: "weather-stand-equipment-2000", label: "Weather/Stand Equipment - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/weather-station" },
   { key: "tower-securement-non-penetrating-base-2000", label: "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/elevated-stack/roof-stack" },
 
-  // Pipe & Duct Frame Supports — collapsed to the 3 products shown on the website
+  // Large Pipe & Duct Securements — collapsed to the 3 products shown on the website
   // Resource Library tab. Each maps to its knowledge-bucket folder via the
   // matching active `products` row (resolved by legacyName → SPECIAL_PREFIXES).
   { key: "duct-securement", label: "Duct Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
