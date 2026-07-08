@@ -167,11 +167,11 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
 
     const titles: Record<string, string> = {
       "mechanical": "Mechanical",
-      "box-frames": "Box Frames",
-      "pipe-conduit-supports": "Pipe & Conduit Supports",
+      "box-frames": "Electrical Box Frames",
+      "pipe-conduit-supports": "Small Pipe & Conduit Supports",
       "snow-retention": "Snow Retention",
       "elevated-structure-securement": "Elevated Structure Securement",
-      "h-frame-supports": "Pipe & Duct Frame Supports",
+      "h-frame-supports": "Large Pipe & Duct Securements",
       "rooftop-solar": "Rooftop Solar",
       "equipment-screen": "Equipment Screen",
       "safety-access": "Safety & Access",

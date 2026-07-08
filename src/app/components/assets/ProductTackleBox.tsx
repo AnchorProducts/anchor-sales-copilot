@@ -8,6 +8,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
+import { compressImages } from "@/lib/media/compressImage";
 
 function catalogDisplayName(rawName: string | undefined | null): string {
   if (!rawName) return "";
@@ -936,6 +937,19 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return results;
   }
 
+  // Compress photos in the browser before they're held in state / uploaded.
+  // Phone photos are frequently 5-25MB (48MP HEIC); shrinking them keeps the
+  // signed-URL upload fast and well under Supabase's per-file cap. Non-images
+  // and undecodable files pass through untouched.
+  async function addImageFiles(incoming: File[]) {
+    if (!incoming.length) return;
+    const processed = await compressImages(incoming);
+    setImageFiles((prev) => {
+      const existing = new Set(prev.map((f) => f.name + f.size));
+      return [...prev, ...processed.filter((f) => !existing.has(f.name + f.size))];
+    });
+  }
+
   async function uploadImages() {
     if (!imageFiles.length || !product) return;
     setUploadingImages(true);
@@ -1540,11 +1554,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   accept="image/*"
                   onChange={(e) => {
                     const incoming = Array.from(e.target.files || []);
-                    setImageFiles((prev) => {
-                      const existing = new Set(prev.map((f) => f.name + f.size));
-                      return [...prev, ...incoming.filter((f) => !existing.has(f.name + f.size))];
-                    });
                     e.target.value = "";
+                    void addImageFiles(incoming);
                   }}
                   className="sr-only"
                 />

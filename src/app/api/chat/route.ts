@@ -315,8 +315,8 @@ function humanizeSolutionLabel(folderHint?: string | null, solution?: CanonicalS
   const map: Record<string, string> = {
     "hvac": "mechanical tie-down / HVAC securement",
     "guy-wire-kit": "guy wire tie-down",
-    "pipe-frame/attached": "attached pipe-frame (roof-mounted H-frame)",
-    "pipe-frame/existing": "existing pipe-frame tie-down",
+    "pipe-frame/attached": "attached pipe & duct frame (new pipe/duct install)",
+    "pipe-frame/existing": "existing pipe & duct frame (re-secure pipe/duct already in place)",
     "duct-securement": "duct securement",
     "roof-box": "roof box",
     "wall-box": "wall box",
@@ -545,16 +545,18 @@ Horizontal Roof Pipe Support (PIPES — runs across the roof laterally)
 - 3000-series pipe support anchors (adjustable, single, double, or roller cradle variants)
 - Securing: roof-pipe
 
-Roof-Mounted H-Frame
-- Also called: attached pipe frame, roof-mounted H-frame
+Large Pipe & Duct Securements — Attached (for NEW pipe & duct)
+- This family was formerly called "H-Frame" / "roof-mounted H-frame". It is the SAME product, but we NO LONGER call it an H-frame. In replies say "attached pipe & duct frame" or "Large Pipe & Duct Securement". Still RECOGNIZE "H-frame" if the user says it.
+- ATTACHED means a NEW pipe or duct frame being installed.
+- Legacy synonyms to recognize (not to use): attached pipe frame, roof-mounted H-frame
 - 3000-series anchors with strut framing
 - Securing: pipe-frame/attached
 
-Existing Horizontal Pipe Frame or Duct (re-secure)
-- Also called: existing frame, re-secure, retrofit
-- HORIZONTAL pipe frames or duct runs being re-secured
-- Guy wire kit with 2000-series anchors
-- Tie-down solution
+Large Pipe & Duct Securements — Existing (for pipe & duct ALREADY in place)
+- Same family as above; formerly "existing H-frame". Do NOT call it an H-frame in replies — say "existing pipe & duct frame". Recognize "H-frame" as a legacy synonym.
+- EXISTING means pipe or duct that is ALREADY there and needs to be (re)secured — a retrofit. Example: a deteriorated pitch pocket that is currently supporting a pipe would need an EXISTING pipe frame.
+- Legacy synonyms to recognize (not to use): existing frame, re-secure, retrofit, existing H-frame
+- Guy wire kit with 2000-series anchors; tie-down solution
 - Securing: pipe-frame/existing or duct-securement
 
 Existing Mechanical Equipment (HVAC) Tie-Down
@@ -661,11 +663,11 @@ ${(() => {
   }
   const titles: Record<string, string> = {
     "mechanical": "Mechanical",
-    "box-frames": "Box Frames",
-    "pipe-conduit-supports": "Pipe & Conduit Supports",
+    "box-frames": "Electrical Box Frames",
+    "pipe-conduit-supports": "Small Pipe & Conduit Supports",
     "snow-retention": "Snow Retention",
     "elevated-structure-securement": "Elevated Structure Securement",
-    "h-frame-supports": "Pipe & Duct Frame Supports",
+    "h-frame-supports": "Large Pipe & Duct Securements",
     "rooftop-solar": "Rooftop Solar",
     "equipment-screen": "Equipment Screen",
     "safety-access": "Safety & Access",
@@ -681,14 +683,19 @@ NOTES ON CATALOG NAMING:
 - "PSS 0300 / 0305 / 0310 / 0320" are the new product codes for the horizontal Pipe Support family (single base, double base, strut assembly, roller assembly).
 - "Existing Mechanical Tie Down - 2000 Series U-Anchor" is the new name for what reps may still call the HVAC / RTU tie-down.
 - "Tower/Stack Securement - 2000 Series U-Anchor" is the new name for the previous roof-mounted elevated stack offering.
-- "Existing H-Frame Securement - Exterior/Interior Bracing" is the new naming for the existing pipe-frame re-secure category.
-- "Pipe Hanger Frame", "Strut Frame Securement", and the "24"/36"/36x48 Standard H-Frame" entries are all variants of the attached pipe-frame (roof-mounted H-frame) family.
+- NAMING — "Large Pipe & Duct Securements": this whole family (attached + existing) was formerly called "H-Frame" / "roof-mounted H-frame". It is the SAME product line, but we NO LONGER call it an H-frame. In replies use "Large Pipe & Duct Securement", "attached pipe & duct frame", or "existing pipe & duct frame". Still recognize "H-frame" as a legacy synonym when a user types it. ATTACHED = a NEW pipe/duct frame install; EXISTING = pipe/duct already in place being (re)secured (e.g. a deteriorated pitch pocket that is supporting a pipe needs an EXISTING pipe frame).
+- "Existing H-Frame Securement - Exterior/Interior Bracing" is a legacy label for the existing pipe & duct re-secure category (do not call it an H-frame in replies).
+- "Pipe Hanger Frame", "Strut Frame Securement", and the "24"/36"/36x48 Standard H-Frame" entries are all variants of the attached pipe & duct frame family (legacy names — recognize but don't use "H-frame").
 - "Duct Frame", "Existing Duct Frame Securement", and "Existing Duct Securement" are the duct-securement variants.
 - "Medium Electrical Box Frame" is the new name for the previous Roof Mounted Box; "Small" and "Large" Electrical Box Frames are new offerings being built out.
 - "Wall Mounted Guardrail" is the previous Wall Guardrail.
 - All Rooftop Solar entries (Solar Mount + brand: Panel Claw, Unirac, KB Racking, AeroCompact, Pegasus, Sollega, Iron Ridge, SkyRack, Slip Sheets) are currently coming soon — handle them with the high-level rule above.
 - All Security/Monitoring/Communication entries (Camera w/ Mounting Plate, Roof/Wall Mount Light, Satellite Dish Mount, Radio Tower, Weather Station, Antenna w/ Base, Antenna Guy Wire) are coming soon.
 - All Lightning Protection entries (Lightning Arrester Securement, Lightning Cable Securement) are coming soon.
+
+MATERIAL OPTIONS (applies to EVERY solution):
+- Anchor products are galvanized steel by default. STAINLESS STEEL is available as an option for ANY solution / product family.
+- Recommend stainless steel in coastal / high-salt-air regions, where the high salt content in the air corrodes (deteriorates) galvanized steel. If the user mentions coastal, near the ocean, salt air, or galvanized rust/corrosion, proactively offer the stainless steel option and note it can be applied to whichever solution they need.
 
 --------------------------------------------------
 FINAL BEHAVIOR

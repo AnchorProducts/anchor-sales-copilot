@@ -439,71 +439,108 @@ export default function LeadForm() {
         return;
       }
 
-      const fd = new FormData();
-      // Reuse the existing leads-table column for the project name so the
-      // server schema stays unchanged. The label changed from "Customer
-      // Company" to "Project Name" only at the UI layer.
-      fd.append("customer_company", form.project_name);
-      fd.append("project_name", form.project_name);
-      fd.append("details", followUp);
-      fd.append("project_address", form.project_address);
-      fd.append("city", form.city);
-      fd.append("state", form.state);
-      fd.append("zip", form.zip);
-      fd.append("country", form.country);
-      fd.append("roof_type", form.roof_type.join(", "));
-      fd.append("roof_brand", form.roof_brand.join(", "));
-      fd.append("project_timeline", timelineSlug);
-      // Default to "email" — the form no longer collects this. Server still
-      // requires a valid contact method to email the assigned rep.
-      fd.append("preferred_contact_method", "email");
-      fd.append("project_follow_up", followUp);
-
-      fd.append("submitter_name", profile?.full_name || "");
-      fd.append("submitter_company", profile?.company || "");
-      fd.append("submitter_phone", profile?.phone || "");
-      fd.append("contractors", JSON.stringify(contractors));
-
+      // Photos/videos go browser → Supabase Storage via signed upload URLs, so
+      // their bytes never pass through /api/leads (which is bound by Vercel's
+      // ~4.5MB request-body cap). Only small JSON — form fields + the resulting
+      // storage paths — is POSTed to create the lead. Files were already
+      // compressed at add time (addSolutionFiles).
+      const filesFlat: { solutionIndex: number; file: File }[] = [];
       solutions.forEach((entry, idx) => {
-        const labelOut =
-          entry.solution_key === "other"
-            ? (clean(entry.other_label) || "Other")
-            : entry.solution_label;
-        fd.append(`solution_${idx}_key`, entry.solution_key);
-        fd.append(`solution_${idx}_label`, labelOut);
-        fd.append(`solution_${idx}_comment`, entry.comment);
-        for (const file of entry.files) {
-          fd.append(`solution_${idx}_files`, file);
+        for (const file of entry.files) filesFlat.push({ solutionIndex: idx, file });
+      });
+
+      const uploadedBySolution = new Map<
+        number,
+        Array<{ path: string; filename: string; contentType: string; size: number }>
+      >();
+
+      if (filesFlat.length) {
+        // Phase 1 — mint signed upload URLs (aligned by index with filesFlat).
+        const signRes = await fetch("/api/leads", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phase: "sign",
+            files: filesFlat.map((f) => ({ solutionIndex: f.solutionIndex, name: f.file.name })),
+          }),
+        });
+        const signJson = await signRes.json().catch(() => ({} as any));
+        if (!signRes.ok) {
+          setError(signJson?.error || "Couldn't start the photo upload. Please try again.");
+          setSubmitting(false);
+          return;
         }
-      });
+        const uploads: Array<{ path?: string; token?: string; error?: string }> = Array.isArray(signJson?.uploads)
+          ? signJson.uploads
+          : [];
 
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        body: fd,
-      });
-
-      const text = await res.text();
-      let json: { id?: string; error?: string } = {};
-      let parseFailed = false;
-      try {
-        json = text ? JSON.parse(text) : {};
-      } catch {
-        // The server returned a non-JSON body (e.g. a plain-text
-        // "Request Entity Too Large" page when the uploaded photos exceed the
-        // request size limit, or an HTML error page). Surface a clear message
-        // instead of a raw "JSON Parse error" from JSON.parse.
-        parseFailed = true;
-        json = {
-          error:
-            res.status === 413
-              ? "The photos attached are too large to upload. Please remove or compress some and try again."
-              : "The server returned an unexpected response. Please try again.",
-        };
+        // Phase 2 — upload each file's bytes straight to Storage.
+        for (let i = 0; i < filesFlat.length; i++) {
+          const { file, solutionIndex } = filesFlat[i];
+          const u = uploads[i];
+          const contentType = file.type || "application/octet-stream";
+          if (!u || !u.token || !u.path || u.error) {
+            setError(`Couldn't upload ${file.name}${u?.error ? ` (${u.error})` : ""}. Please try again.`);
+            setSubmitting(false);
+            return;
+          }
+          const { error: upErr } = await supabase.storage
+            .from("lead-uploads")
+            .uploadToSignedUrl(u.path, u.token, file, { contentType });
+          if (upErr) {
+            setError(`Couldn't upload ${file.name} (${upErr.message}). Please try again.`);
+            setSubmitting(false);
+            return;
+          }
+          const list = uploadedBySolution.get(solutionIndex) ?? [];
+          list.push({ path: u.path, filename: file.name, contentType, size: file.size });
+          uploadedBySolution.set(solutionIndex, list);
+        }
       }
 
-      // A 2xx with an unparseable body is still a failure — never fall through to
-      // the success path (and a bogus tracking event) on a malformed response.
-      if (!res.ok || parseFailed) {
+      // Phase 3 — create the lead from JSON (fields + uploaded file metadata).
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Reuse the existing leads-table column for the project name so the
+          // server schema stays unchanged. The label changed from "Customer
+          // Company" to "Project Name" only at the UI layer.
+          customer_company: form.project_name,
+          project_name: form.project_name,
+          details: followUp,
+          project_address: form.project_address,
+          city: form.city,
+          state: form.state,
+          zip: form.zip,
+          country: form.country,
+          roof_type: form.roof_type.join(", "),
+          roof_brand: form.roof_brand.join(", "),
+          project_timeline: timelineSlug,
+          // Default to "email" — the form no longer collects this. Server still
+          // requires a valid contact method to email the assigned rep.
+          preferred_contact_method: "email",
+          project_follow_up: followUp,
+          submitter_name: profile?.full_name || "",
+          submitter_company: profile?.company || "",
+          submitter_phone: profile?.phone || "",
+          contractors,
+          solutions: solutions.map((entry, idx) => ({
+            key: entry.solution_key,
+            label:
+              entry.solution_key === "other"
+                ? (clean(entry.other_label) || "Other")
+                : entry.solution_label,
+            comment: entry.comment,
+            files: uploadedBySolution.get(idx) ?? [],
+          })),
+        }),
+      });
+
+      const json: { id?: string; error?: string } = await res.json().catch(() => ({}));
+      if (!res.ok) {
         setError(json?.error || "Failed to submit consult.");
         setSubmitting(false);
         return;

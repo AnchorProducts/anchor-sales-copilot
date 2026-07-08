@@ -331,7 +331,8 @@ export const CANONICAL_SOLUTIONS: CanonicalSolution[] = [
   // ----------------------------
   {
     key: "pipe-frame-attached",
-    // ✅ attached pipe-frame is also called roof-mounted H-frame
+    // "h-frame" / "roof-mounted h-frame" are LEGACY synonyms — still matched so
+    // the bot recognizes them, but no longer used in copy (see summary).
     match: /\b(attached\s*pipe[-\s]*frame|pipe[-\s]*frame\s*attached|roof[-\s]*mounted\s*h[-\s]*frame|roof\s*mounted\s*hframe|h[-\s]*frame)\b/i,
     securing: "pipe-frame/attached",
     storageFolder: "solutions/pipe-frame/attached",
@@ -340,7 +341,7 @@ export const CANONICAL_SOLUTIONS: CanonicalSolution[] = [
     recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet", "cad_dwg", "cad_step", "product_drawing"],
     ask: [ASK_MEMBRANE, ASK_WANTS],
     summary:
-      "Attached pipe-frame securement (aka roof-mounted H-frame) typically uses rigid framing tied into membrane-compatible rooftop attachments for long-term stability.",
+      "Attached pipe & duct frame securement (a Large Pipe & Duct Securement, for a NEW pipe or duct being installed) uses rigid framing tied into membrane-compatible rooftop attachments for long-term stability. Formerly called an H-frame — same product, but no longer referred to that way.",
   },
   {
     key: "pipe-frame-existing",
@@ -352,7 +353,7 @@ export const CANONICAL_SOLUTIONS: CanonicalSolution[] = [
     recommendedDocKinds: ["sales_sheet", "data_sheet", "install_sheet"],
     ask: [ASK_MEMBRANE, ASK_WANTS],
     summary:
-      "Existing pipe-frame securement is typically handled as a re-secure approach (often tie-down style) depending on what’s already installed.",
+      "Existing pipe & duct frame securement (a Large Pipe & Duct Securement, for pipe or duct that is ALREADY in place) re-secures what's already installed — a retrofit, often tie-down style. Example: a deteriorated pitch pocket that is supporting a pipe would need an existing pipe frame.",
   },
 
   // ----------------------------
