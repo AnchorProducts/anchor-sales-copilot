@@ -226,8 +226,8 @@ export default function AdminFMIntakePage() {
   return (
     <main className="ds-page">
       <AppNavbar
-        title="Rooftop Equipment Intake"
-        subtitle="FM intake — submissions & review"
+        title="Project Intake"
+        subtitle="Quote requests — submissions & review"
         menuItems={[
           { label: t("dashboard"), href: "/dashboard" },
           { label: "Admin Console", href: "/admin" },
@@ -379,6 +379,7 @@ function Detail({
   const attachments: Attachment[] = detail?.attachments || [];
   // Payload sections to show, minus the customer block (shown above from columns).
   const payload: Record<string, unknown> = detail?.payload || {};
+  const cust = (payload.customer || {}) as Record<string, unknown>;
   const sectionEntries = Object.entries(payload).filter(
     ([k, v]) => k !== "customer" && !isEmpty(v)
   );
@@ -421,6 +422,11 @@ function Detail({
                 <Field label="Project" value={detail.project_name} />
                 <Field label="Address" value={detail.project_address} full />
                 <Field label="Equipment scope" value={(detail.equipment || []).join(", ")} full />
+                <Field label="FM project?" value={cust.fmProject} />
+                <Field label="FM insured?" value={cust.fmInsured} />
+                {!isEmpty(cust.fmIndexRecord) && (
+                  <Field label="FM Index-Record #" value={cust.fmIndexRecord} />
+                )}
                 <Field label="Submitted" value={fmtDateTime(detail.created_at)} />
               </dl>
             </Card>

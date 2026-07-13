@@ -123,8 +123,8 @@ export const CARDS: AdminCard[] = [
   },
   {
     key: "fm-intake",
-    title: "Rooftop Equipment Intake (FM)",
-    description: "Submitted rooftop equipment intakes — review each submission and its attachments, then set a status and recommendation. Plus a New intake form.",
+    title: "Project Intake",
+    description: "Submitted project intakes / quote requests — review each submission and its attachments (incl. any FM details), then set a status and recommendation. Plus a New intake form.",
     badge: "Config",
     href: "/admin/fm-intake",
     icon: "clipboard",

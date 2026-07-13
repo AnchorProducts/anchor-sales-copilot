@@ -39,7 +39,14 @@ export const SALES_TOOLS: SalesTool[] = [
   {
     key: "project",
     label: "Rooftop Equipment Consult",
-    description: "Submit a project / rooftop equipment consult.",
+    description: "New request from someone new to Anchor who needs a rep's help (not a quote).",
+    icon: "clipboard",
+    audiences: ["internal", "external"],
+  },
+  {
+    key: "project-intake",
+    label: "Project Intake (Quote)",
+    description: "Quote request from an existing customer — project specs, optional FM details.",
     icon: "clipboard",
     audiences: ["internal", "external"],
   },

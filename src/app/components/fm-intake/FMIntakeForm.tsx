@@ -76,6 +76,123 @@ function Section({
   );
 }
 
+function CheckRow({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-5 w-5 shrink-0 rounded border-[var(--border-default)] text-[var(--anchor-green)] focus:ring-[var(--anchor-green)]"
+      />
+      <span>
+        <span className="text-sm font-semibold text-[var(--anchor-deep)]">{label}</span>
+        {hint && <span className="mt-0.5 block text-[12px] text-[var(--anchor-gray)]">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+// FM (Factory Mutual) is optional on a Project Intake: the user flags whether
+// it's an FM project and, if the project is FM insured, supplies the index #.
+function FMBlock({
+  values,
+  onChange,
+}: {
+  values: Values;
+  onChange: (key: string, value: string) => void;
+}) {
+  const fmProject = values.fmProject === "Yes";
+  const fmInsured = values.fmInsured === "Yes";
+  return (
+    <div className="mt-4 space-y-3 rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-4">
+      <CheckRow
+        checked={fmProject}
+        onChange={(v) => {
+          onChange("fmProject", v ? "Yes" : "No");
+          // Clear the nested FM details when this is no longer an FM project.
+          if (!v) {
+            onChange("fmInsured", "");
+            onChange("fmIndexRecord", "");
+          }
+        }}
+        label="This is an FM (Factory Mutual) project"
+        hint="Check if the building/insurer follows FM Global requirements."
+      />
+      {fmProject && (
+        <div className="space-y-3 border-l-2 border-[var(--anchor-green)]/40 pl-4">
+          <CheckRow
+            checked={fmInsured}
+            onChange={(v) => {
+              onChange("fmInsured", v ? "Yes" : "No");
+              if (!v) onChange("fmIndexRecord", "");
+            }}
+            label="This project is FM insured"
+          />
+          {fmInsured && (
+            <label className="block sm:max-w-sm">
+              <span className={labelCls}>FM Index-Record #</span>
+              <Input
+                type="text"
+                value={values.fmIndexRecord ?? ""}
+                onChange={(e) => onChange("fmIndexRecord", e.target.value)}
+                className="mt-1 h-11 w-full text-sm"
+                placeholder="e.g. RJ-1234567"
+              />
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A section that stays collapsed until the user checks its box — keeps the
+// long intake from showing every field at once.
+function ToggleSection({
+  title,
+  description,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  description?: string;
+  open: boolean;
+  onToggle: (v: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="p-4 sm:p-5">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={open}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-1 h-5 w-5 shrink-0 rounded border-[var(--border-default)] text-[var(--anchor-green)] focus:ring-[var(--anchor-green)]"
+        />
+        <span>
+          <span className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">{title}</span>
+          {description && (
+            <span className="mt-0.5 block text-sm text-[var(--anchor-gray)]">{description}</span>
+          )}
+        </span>
+      </label>
+      {open && <div className="mt-4">{children}</div>}
+    </Card>
+  );
+}
+
 function LinkButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -191,6 +308,16 @@ export default function FMIntakeForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [comments, setComments] = useState("");
 
+  // Optional sections stay collapsed until the user opts in via their checkbox.
+  const [showRoof, setShowRoof] = useState(false);
+  const [showEngineering, setShowEngineering] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
+
+  // Address -> lat/long lookup (keyless, via /api/geocode).
+  const [geo, setGeo] = useState<{ loading: boolean; error?: string; matched?: string }>({
+    loading: false,
+  });
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -222,11 +349,35 @@ export default function FMIntakeForm() {
     { key: "latLong", label: "Project Latitude and Longitude", full: true },
     { key: "requestedDeliveryDate", label: "Requested Delivery Date", kind: "date" },
     { key: "engineeringStampNeeded", label: "Engineering Stamp Needed?", kind: "yesno" },
-    { key: "fmInsured", label: "FM Insured?", kind: "yesno" },
-    ...(customer.fmInsured === "Yes"
-      ? [{ key: "fmIndexRecord", label: "FM Index-Record #" } as FieldDef]
-      : []),
   ];
+
+  // FM fields render as real checkboxes below the grid (see FMBlock). The index
+  // record only applies when the project is FM insured.
+  const setCustomerField = (key: string, value: string) =>
+    setCustomer((c) => ({ ...c, [key]: value }));
+
+  async function lookupLatLong() {
+    const address = (customer.projectAddress || "").trim();
+    if (!address) {
+      setGeo({ loading: false, error: "Enter the project address first." });
+      return;
+    }
+    setGeo({ loading: true });
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`, {
+        cache: "no-store",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setGeo({ loading: false, error: json?.error || "Lookup failed." });
+        return;
+      }
+      setCustomerField("latLong", `${json.lat}, ${json.lon}`);
+      setGeo({ loading: false, matched: json.matched || undefined });
+    } catch (e: any) {
+      setGeo({ loading: false, error: e?.message || "Lookup failed." });
+    }
+  }
 
   function repeatBlock(
     title: string,
@@ -325,26 +476,47 @@ export default function FMIntakeForm() {
       )}
 
       <Section
-        title="Section 1: Customer Information"
+        title="Section 1: Customer & Project"
         description="Complete all required fields. First and last name plus an email or phone are required."
       >
         <FieldGrid
           fields={customerFields}
           values={customer}
-          onChange={(k, v) => setCustomer((c) => ({ ...c, [k]: v }))}
+          onChange={setCustomerField}
         />
+        <div className="mt-2">
+          <Button
+            variant="secondary"
+            onClick={lookupLatLong}
+            disabled={geo.loading}
+            className="text-sm"
+          >
+            {geo.loading ? "Looking up…" : "Fill lat/long from address"}
+          </Button>
+          {geo.error && <p className="mt-1 text-[11px] text-red-600">{geo.error}</p>}
+          {geo.matched && (
+            <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+              Matched: {geo.matched} — verify it&rsquo;s correct.
+            </p>
+          )}
+        </div>
+        <FMBlock values={customer} onChange={setCustomerField} />
       </Section>
 
-      <Section
+      <ToggleSection
         title="Section 2: Existing Roof Details"
-        description="Enter the roof details for each building. Add up to 3 buildings."
+        description="Check to add roof details for each building (up to 3)."
+        open={showRoof}
+        onToggle={setShowRoof}
       >
         {repeatBlock("buildings", "Building", buildings, setBuildings, BUILDING_FIELDS)}
-      </Section>
+      </ToggleSection>
 
-      <Section
+      <ToggleSection
         title="Section 3: Engineering Criteria"
-        description="If known — AP Engineering will also review."
+        description="Check to add design criteria if known — RTE Engineering will also review."
+        open={showEngineering}
+        onToggle={setShowEngineering}
       >
         <FieldGrid
           fields={ENGINEERING_FIELDS}
@@ -355,7 +527,7 @@ export default function FMIntakeForm() {
           <LinkButton href="https://ascehazardtool.org/">ASCE Hazard Tool</LinkButton>
           <LinkButton href="https://www.fm.com/resources/fm-data-sheets">FM Data Sheets</LinkButton>
         </div>
-      </Section>
+      </ToggleSection>
 
       <Section
         title="Section 4: Roof-Mounted Equipment Scope"
@@ -441,12 +613,27 @@ export default function FMIntakeForm() {
         </Section>
       )}
 
-      <Section
+      <ToggleSection
         title="Customer Images – Site and Equipment Photos"
-        description="Please include a site satellite/aerial image with marked areas, plus equipment photos. You can attach images and product data sheets (PDF)."
+        description="Check to attach a site satellite/aerial image with marked areas, equipment photos, and product data sheets (PDF)."
+        open={showPhotos}
+        onToggle={setShowPhotos}
       >
         <div className="mb-3">
-          <LinkButton href="https://www.google.com/maps">Open Google Maps</LinkButton>
+          <LinkButton
+            href={
+              customer.projectAddress?.trim()
+                ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.projectAddress.trim())}`
+                : "https://www.google.com/maps"
+            }
+          >
+            {customer.projectAddress?.trim() ? "Open this address in Google Maps" : "Open Google Maps"}
+          </LinkButton>
+          {customer.projectAddress?.trim() && (
+            <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+              Opens your project address — switch to satellite, screenshot the rooftop, and attach it below.
+            </p>
+          )}
         </div>
         <label className={labelCls}>Site and equipment photos / data sheets</label>
         <input
@@ -475,11 +662,11 @@ export default function FMIntakeForm() {
             placeholder="Anything else the Anchor team should know…"
           />
         </label>
-      </Section>
+      </ToggleSection>
 
       <div className="flex items-center gap-3 pb-4">
         <Button onClick={submit} disabled={saving} className="text-sm">
-          {saving ? "Submitting…" : "Submit intake form"}
+          {saving ? "Submitting…" : "Submit quote request"}
         </Button>
         <span className="text-xs text-[var(--anchor-gray)]">
           Required: name + email or phone. Everything else is optional.
@@ -498,10 +685,10 @@ function SubmittedScreen() {
   ];
   return (
     <Card className="p-6 sm:p-8">
-      <h1 className="text-2xl font-bold text-[var(--anchor-deep)] sm:text-3xl">Form submitted!</h1>
+      <h1 className="text-2xl font-bold text-[var(--anchor-deep)] sm:text-3xl">Quote request submitted!</h1>
       <p className="mt-2 text-sm text-[var(--anchor-gray)]">
-        Thank you. Anchor Products will review your submission, confirm receipt within 1–2 business
-        days, and contact you regarding design or product recommendations.
+        Thank you. Anchor Products will review your project, confirm receipt within 1–2 business
+        days, and follow up with a quote and design or product recommendations.
       </p>
 
       <div className="mt-4 text-sm">
