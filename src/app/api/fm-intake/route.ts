@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 
 const clean = (v: unknown) => String(v ?? "").trim();
 
+// Who may SUBMIT a project intake / quote request: internal + external sales,
+// plus admins (who can also submit from the back-office "New intake" tab).
+// Reviewing (GET list + PATCH decision) stays admin-only below.
+const SUBMIT_ROLES = new Set(["admin", "anchor_rep", "external_rep"]);
+
 // Photos + product data sheets for an intake. Bytes live in the private
 // "knowledge" bucket under fm-intake/<id>/; metadata is stored on the row.
 const BUCKET = "knowledge";
@@ -108,14 +113,15 @@ async function sendIntakeEmail(opts: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
-// Admin-only: submit a Universal Rooftop Equipment Intake. Multipart body with a
-// JSON `payload` field (the full nested form) plus `files` (photos / data sheets).
+// Submit a Project Intake / quote request. Open to internal + external sales
+// (and admins). Multipart body with a JSON `payload` field (the full nested
+// form) plus `files` (photos / data sheets).
 export async function POST(req: Request) {
   try {
     const supabase = await supabaseRoute();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((await getRole(auth.user.id)) !== "admin") {
+    if (!SUBMIT_ROLES.has(await getRole(auth.user.id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

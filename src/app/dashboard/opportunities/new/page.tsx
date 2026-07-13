@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import LeadForm from "@/app/components/leads/LeadForm";
 import { Card } from "@/app/components/ui/Card";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
@@ -28,7 +29,16 @@ export default function NewLeadPage() {
           <div className="ds-caption">{t("leadIntake")}</div>
           <h1 className="mt-2 text-2xl">{t("projectIdentifier")}</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-            Share project opportunities, contacts to follow up with, notes and photos and an Anchor Products representative will handle the rest. Next steps, sit back while a team of rooftop equipment experts increase your commissions, customer satisfaction and ensures your customers are secure during the storms ahead.
+            Use this for a new request — share the project, contacts to follow up with, notes and photos, and an Anchor Products representative will reach out and handle the rest. No quote or full specs needed yet; sit back while a team of rooftop equipment experts increases your commissions, customer satisfaction, and ensures your customers are secure during the storms ahead.
+          </p>
+          <p className="mt-3 text-sm text-[var(--anchor-gray)]">
+            Already working with Anchor and ready for a quote?{" "}
+            <Link
+              href="/dashboard/project-intake/new"
+              className="font-semibold text-[var(--anchor-green)] underline"
+            >
+              Use Project Intake instead →
+            </Link>
           </p>
         </Card>
         {!ready ? (

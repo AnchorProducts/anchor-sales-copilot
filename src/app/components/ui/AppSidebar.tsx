@@ -139,6 +139,7 @@ export function AppSidebar() {
         {(role === "external_rep" || role === "anchor_rep") && (
           <>
             <NavLink href="/dashboard/opportunities/new" kind="clipboard" label="Rooftop Equipment Consult" active={isExternal && isPath("/dashboard/opportunities")} />
+            <NavLink href="/dashboard/project-intake/new" kind="clipboard" label="Project Intake" active={isPath("/dashboard/project-intake")} />
             <NavLink href="/dashboard/notable-projects/new" kind="camera" label="Notable Project" active={isPath("/dashboard/notable-projects")} />
             <NavLink href="/marketing-orders" kind="package" label="Marketing Orders" active={isPath("/marketing-orders")} />
             <NavLink href="/dashboard/commission/new" kind="wallet" label="Commission Claim Form" active={isPath("/dashboard/commission")} />
