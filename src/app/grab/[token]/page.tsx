@@ -23,8 +23,12 @@ type GrabItem = {
   description: string | null;
   category: string | null;
   quantity_available: number;
+  pizza_box: boolean;
+  plastic_overlay: boolean;
   image_url: string | null;
 };
+
+type LineOpts = { pizza_box: boolean; plastic_overlay: boolean };
 
 const ID_KEY = "anchor-grab-identity";
 
@@ -49,6 +53,7 @@ export default function GrabPage({
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
   const [qty, setQty] = useState<Record<string, number>>({}); // item id -> units
+  const [opts, setOpts] = useState<Record<string, LineOpts>>({}); // item id -> packaging
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
   const [done, setDone] = useState<{ count: number; units: number; failed: string[] } | null>(null);
@@ -105,6 +110,13 @@ export default function GrabPage({
     });
   }
 
+  function toggleOpt(itemId: string, key: keyof LineOpts) {
+    setOpts((prev) => {
+      const cur = prev[itemId] || { pizza_box: false, plastic_overlay: false };
+      return { ...prev, [itemId]: { ...cur, [key]: !cur[key] } };
+    });
+  }
+
   const selected = useMemo(
     () => items.filter((it) => (qty[it.id] || 0) > 0),
     [items, qty]
@@ -130,7 +142,12 @@ export default function GrabPage({
           name: name.trim(),
           email: email.trim(),
           website,
-          items: selected.map((it) => ({ item_id: it.id, quantity: qty[it.id] })),
+          items: selected.map((it) => ({
+            item_id: it.id,
+            quantity: qty[it.id],
+            pizza_box: it.pizza_box && !!opts[it.id]?.pizza_box,
+            plastic_overlay: it.plastic_overlay && !!opts[it.id]?.plastic_overlay,
+          })),
         }),
       });
       const json = await res.json().catch(() => null);
@@ -152,6 +169,7 @@ export default function GrabPage({
         failed: failed.map((f) => `${f.item_name}: ${f.error}`),
       });
       setQty({});
+      setOpts({});
       await load(); // refresh remaining counts
     } catch {
       setFormErr("Couldn't reach the server. Try again.");
@@ -232,60 +250,90 @@ export default function GrabPage({
               const n = qty[it.id] || 0;
               const out = it.quantity_available <= 0;
               return (
-                <Card key={it.id} className={`flex items-center gap-3 p-3 ${n > 0 ? "ring-2 ring-[var(--anchor-green,#1f8a4c)]" : ""}`}>
-                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-black/5">
-                    {it.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] text-black/40">
-                        No photo
+                <Card key={it.id} className={`flex flex-col gap-2 p-3 ${n > 0 ? "ring-2 ring-[var(--anchor-green,#1f8a4c)]" : ""}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-black/5">
+                      {it.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-black/40">
+                          No photo
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold leading-snug text-[var(--anchor-deep,#0f2e2a)] break-words">
+                        {it.name}
+                      </h3>
+                      {it.description && (
+                        <p className="truncate text-xs text-[var(--anchor-gray,#5b6b66)]">{it.description}</p>
+                      )}
+                      {out ? (
+                        <p className="mt-0.5 text-xs font-semibold text-[var(--anchor-gray,#5b6b66)]">Out of stock</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs font-semibold text-green-700">{it.quantity_available} in stock</p>
+                      )}
+                    </div>
+
+                    {/* Quantity stepper */}
+                    {!out && (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-label={`Remove one ${it.name}`}
+                          onClick={() => setItemQty(it, n - 1)}
+                          disabled={n <= 0}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={it.quantity_available}
+                          value={n === 0 ? "" : n}
+                          placeholder="0"
+                          onChange={(e) => setItemQty(it, Math.floor(Number(e.target.value) || 0))}
+                          className="h-9 w-11 rounded-lg border border-black/15 text-center text-sm"
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Add one ${it.name}`}
+                          onClick={() => setItemQty(it, n + 1)}
+                          disabled={n >= it.quantity_available}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                        >
+                          +
+                        </button>
                       </div>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{it.name}</h3>
-                    {it.description && (
-                      <p className="truncate text-xs text-[var(--anchor-gray,#5b6b66)]">{it.description}</p>
-                    )}
-                    {out ? (
-                      <p className="mt-0.5 text-xs font-semibold text-[var(--anchor-gray,#5b6b66)]">Out of stock</p>
-                    ) : (
-                      <p className="mt-0.5 text-xs font-semibold text-green-700">{it.quantity_available} in stock</p>
-                    )}
-                  </div>
 
-                  {/* Quantity stepper */}
-                  {!out && (
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <button
-                        type="button"
-                        aria-label={`Remove one ${it.name}`}
-                        onClick={() => setItemQty(it, n - 1)}
-                        disabled={n <= 0}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={it.quantity_available}
-                        value={n === 0 ? "" : n}
-                        placeholder="0"
-                        onChange={(e) => setItemQty(it, Math.floor(Number(e.target.value) || 0))}
-                        className="h-9 w-11 rounded-lg border border-black/15 text-center text-sm"
-                      />
-                      <button
-                        type="button"
-                        aria-label={`Add one ${it.name}`}
-                        onClick={() => setItemQty(it, n + 1)}
-                        disabled={n >= it.quantity_available}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
-                      >
-                        +
-                      </button>
+                  {/* Packaging options — shown when taking an item that offers them. */}
+                  {!out && n > 0 && (it.pizza_box || it.plastic_overlay) && (
+                    <div className="flex flex-wrap gap-4 border-t border-black/10 pt-2 text-xs">
+                      {it.pizza_box && (
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={!!opts[it.id]?.pizza_box}
+                            onChange={() => toggleOpt(it.id, "pizza_box")}
+                          />
+                          <span>Pizza box</span>
+                        </label>
+                      )}
+                      {it.plastic_overlay && (
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={!!opts[it.id]?.plastic_overlay}
+                            onChange={() => toggleOpt(it.id, "plastic_overlay")}
+                          />
+                          <span>Plastic overlay</span>
+                        </label>
+                      )}
                     </div>
                   )}
                 </Card>

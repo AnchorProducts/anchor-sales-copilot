@@ -13,6 +13,9 @@ export const INVENTORY_CATEGORIES = MARKETING_CATEGORIES;
 export const isInventoryCategory = isMarketingCategory;
 export const inventoryCategoryLabel = marketingCategoryLabel;
 
+// Which inventory item, if any, is a packaging stock pool.
+export type PackagingRole = "pizza_box" | "overlay";
+
 export type InventoryItem = {
   id: string;
   name: string;
@@ -27,6 +30,13 @@ export type InventoryItem = {
   quantity_available: number;
   quantity_out: number;
   low_stock_threshold: number;
+  // Whether this item can be checked out for a tradeshow (admin opt-in).
+  checkout_enabled: boolean;
+  // Whether the item is offered with a pizza box / plastic overlay at pickup.
+  pizza_box: boolean;
+  plastic_overlay: boolean;
+  // Tags the two items that ARE the packaging stock pools (else null).
+  packaging_role: PackagingRole | null;
   created_at: string;
   updated_at: string;
   // Convenience flag computed by the API.

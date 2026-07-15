@@ -24,7 +24,7 @@ export async function GET() {
 
     const { data, error } = await supabaseAdmin
       .from("marketing_item_grabs")
-      .select("id,item_id,item_name,grabbed_by_name,grabbed_by_email,quantity,created_at")
+      .select("id,item_id,item_name,grabbed_by_name,grabbed_by_email,quantity,pizza_box,plastic_overlay,created_at")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

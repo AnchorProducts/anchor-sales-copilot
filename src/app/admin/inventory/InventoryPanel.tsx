@@ -54,6 +54,10 @@ type ItemDraft = {
   location: string;
   quantity_available: string;
   low_stock_threshold: string;
+  checkout_enabled: boolean;
+  pizza_box: boolean;
+  plastic_overlay: boolean;
+  packaging_role: string; // "" | "pizza_box" | "overlay"
 };
 
 const EMPTY_DRAFT: ItemDraft = {
@@ -65,6 +69,10 @@ const EMPTY_DRAFT: ItemDraft = {
   location: "",
   quantity_available: "0",
   low_stock_threshold: "0",
+  checkout_enabled: false,
+  pizza_box: false,
+  plastic_overlay: false,
+  packaging_role: "",
 };
 
 export default function AdminInventoryPage({
@@ -185,6 +193,10 @@ export default function AdminInventoryPage({
       location: it.location || "",
       quantity_available: String(it.quantity_available),
       low_stock_threshold: String(it.low_stock_threshold),
+      checkout_enabled: !!it.checkout_enabled,
+      pizza_box: !!it.pizza_box,
+      plastic_overlay: !!it.plastic_overlay,
+      packaging_role: it.packaging_role || "",
     });
   }
 
@@ -207,6 +219,10 @@ export default function AdminInventoryPage({
         location: itemModal.location,
         quantity_available: itemModal.quantity_available || "0",
         low_stock_threshold: itemModal.low_stock_threshold || "0",
+        checkout_enabled: itemModal.checkout_enabled,
+        pizza_box: itemModal.pizza_box,
+        plastic_overlay: itemModal.plastic_overlay,
+        packaging_role: itemModal.packaging_role || null,
       };
       const res = await fetch("/api/inventory", {
         method: itemModal.id ? "PATCH" : "POST",
@@ -632,6 +648,51 @@ export default function AdminInventoryPage({
                   />
                 </label>
               </div>
+              {/* Options: checkout eligibility + packaging choices */}
+              <div className="rounded-xl border border-[var(--border-default)] p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                  Options
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={itemModal.checkout_enabled}
+                    onChange={(e) => setItemModal({ ...itemModal, checkout_enabled: e.target.checked })}
+                  />
+                  <span>Can be checked out (tradeshow loan)</span>
+                </label>
+                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={itemModal.pizza_box}
+                    onChange={(e) => setItemModal({ ...itemModal, pizza_box: e.target.checked })}
+                  />
+                  <span>Offer a pizza box at pickup</span>
+                </label>
+                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={itemModal.plastic_overlay}
+                    onChange={(e) => setItemModal({ ...itemModal, plastic_overlay: e.target.checked })}
+                  />
+                  <span>Offer a plastic overlay at pickup</span>
+                </label>
+                <label className="mt-2 block text-sm">
+                  <span className="font-medium">Packaging stock role</span>
+                  <Select
+                    value={itemModal.packaging_role}
+                    onChange={(e) => setItemModal({ ...itemModal, packaging_role: e.target.value })}
+                  >
+                    <option value="">Not a packaging pool</option>
+                    <option value="pizza_box">This item IS the pizza-box stock</option>
+                    <option value="overlay">This item IS the plastic-overlay stock</option>
+                  </Select>
+                  <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
+                    Set one item as each pool; choosing that packaging at pickup subtracts from it.
+                  </span>
+                </label>
+              </div>
+
               <label className="block text-sm">
                 <span className="font-medium">Photo</span>
                 <input
@@ -906,6 +967,26 @@ function ItemsList({
                       Low stock
                     </span>
                   )}
+                  {it.checkout_enabled && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                      Checkout
+                    </span>
+                  )}
+                  {it.pizza_box && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
+                      🍕 Box
+                    </span>
+                  )}
+                  {it.plastic_overlay && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
+                      Overlay
+                    </span>
+                  )}
+                  {it.packaging_role && (
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
+                      {it.packaging_role === "pizza_box" ? "Pizza-box pool" : "Overlay pool"}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-xs text-[var(--anchor-gray)]">
                   <strong className="text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail ·{" "}
@@ -941,9 +1022,11 @@ function ItemsList({
                   <Button variant="secondary" onClick={() => onRestock(it)} disabled={busy}>
                     + Add stock
                   </Button>
-                  <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
-                    Check out
-                  </Button>
+                  {it.checkout_enabled && (
+                    <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
+                      Check out
+                    </Button>
+                  )}
                   <Button variant="ghost" onClick={() => onEdit(it)} disabled={busy}>
                     Edit
                   </Button>
@@ -972,6 +1055,8 @@ type GrabRow = {
   grabbed_by_name: string;
   grabbed_by_email: string;
   quantity: number;
+  pizza_box?: boolean;
+  plastic_overlay?: boolean;
   created_at: string;
 };
 
@@ -1460,6 +1545,11 @@ function PickupsList({ grabs }: { grabs: GrabRow[] }) {
           <div className="min-w-0">
             <p className="text-sm">
               <strong>{g.quantity}</strong> × <strong>{g.item_name}</strong>
+              {(g.pizza_box || g.plastic_overlay) && (
+                <span className="ml-2 text-xs text-[var(--anchor-gray)]">
+                  + {[g.pizza_box ? "pizza box" : "", g.plastic_overlay ? "overlay" : ""].filter(Boolean).join(" + ")}
+                </span>
+              )}
             </p>
             <p className="text-xs text-[var(--anchor-gray)]">
               {g.grabbed_by_name} · {g.grabbed_by_email}

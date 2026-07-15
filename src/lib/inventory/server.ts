@@ -112,12 +112,18 @@ export async function getGrabConfig(): Promise<GrabConfig | null> {
 export async function notifyGrab(args: {
   by: string;
   email: string;
-  items: { name: string; quantity: number; remaining: number }[];
+  items: { name: string; quantity: number; remaining: number; pizza_box?: boolean; plastic_overlay?: boolean }[];
 }): Promise<void> {
   if (!args.items.length) return;
   const url = "/admin/inventory";
 
-  const parts = args.items.map((i) => `${i.quantity} × ${i.name} (${i.remaining} left)`);
+  // A short "+ pizza box"/"+ overlay" suffix when the person chose packaging.
+  const pkg = (i: { pizza_box?: boolean; plastic_overlay?: boolean }) => {
+    const extras = [i.pizza_box ? "pizza box" : "", i.plastic_overlay ? "overlay" : ""].filter(Boolean);
+    return extras.length ? ` + ${extras.join(" + ")}` : "";
+  };
+
+  const parts = args.items.map((i) => `${i.quantity} × ${i.name}${pkg(i)} (${i.remaining} left)`);
   const totalUnits = args.items.reduce((n, i) => n + i.quantity, 0);
 
   // Push: a compact one-liner. Email: an itemized list.
@@ -131,7 +137,7 @@ export async function notifyGrab(args: {
       : `Aisle pickup — ${args.items.length} items`;
   const emailText =
     `${args.by} <${args.email}> grabbed:\n` +
-    args.items.map((i) => `  • ${i.quantity} × ${i.name} (${i.remaining} left)`).join("\n") +
+    args.items.map((i) => `  • ${i.quantity} × ${i.name}${pkg(i)} (${i.remaining} left)`).join("\n") +
     `\n\nInventory: ${internalAppUrl(url)}`;
 
   try {

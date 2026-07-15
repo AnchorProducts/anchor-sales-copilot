@@ -72,7 +72,7 @@ export async function GET(req: Request) {
 
     let query = supabaseAdmin
       .from("marketing_inventory_items")
-      .select("id,name,description,category,image_path,quantity_available");
+      .select("id,name,description,category,image_path,quantity_available,pizza_box,plastic_overlay");
     if (itemId) {
       query = query.eq("id", itemId);
     } else {
@@ -90,6 +90,8 @@ export async function GET(req: Request) {
         description: row.description,
         category: row.category,
         quantity_available: row.quantity_available,
+        pizza_box: !!row.pizza_box,
+        plastic_overlay: !!row.plastic_overlay,
         image_url: await signItemImage(row.image_path),
       }))
     );
@@ -102,33 +104,69 @@ export async function GET(req: Request) {
 
 // Normalize the requested lines into [{ item_id, quantity }]. Accepts a cart
 // (`items: [...]`) or the legacy single-item shape (`item_id` + `quantity`).
-function parseLines(body: Record<string, unknown>): { item_id: string; quantity: number }[] {
+type Line = { item_id: string; quantity: number; pizza_box: boolean; plastic_overlay: boolean };
+
+function parseLines(body: Record<string, unknown>): Line[] {
   const raw = Array.isArray(body.items)
     ? (body.items as unknown[])
-    : [{ item_id: body.item_id, quantity: body.quantity }];
-  const lines: { item_id: string; quantity: number }[] = [];
+    : [{ item_id: body.item_id, quantity: body.quantity, pizza_box: body.pizza_box, plastic_overlay: body.plastic_overlay }];
+  const lines: Line[] = [];
   for (const r of raw) {
     const o = (r || {}) as Record<string, unknown>;
     const id = clean(o.item_id);
     const qty = Math.floor(Number(o.quantity));
     if (!id) continue;
     if (!Number.isFinite(qty) || qty <= 0) continue;
-    // Collapse duplicate lines for the same item.
+    const pizza = o.pizza_box === true || o.pizza_box === "true";
+    const overlay = o.plastic_overlay === true || o.plastic_overlay === "true";
+    // Collapse duplicate lines for the same item (a chosen option stays chosen).
     const existing = lines.find((l) => l.item_id === id);
-    if (existing) existing.quantity += qty;
-    else lines.push({ item_id: id, quantity: qty });
+    if (existing) {
+      existing.quantity += qty;
+      existing.pizza_box = existing.pizza_box || pizza;
+      existing.plastic_overlay = existing.plastic_overlay || overlay;
+    } else {
+      lines.push({ item_id: id, quantity: qty, pizza_box: pizza, plastic_overlay: overlay });
+    }
   }
   return lines;
 }
 
-// Decrement one item with optimistic-concurrency retries; log the pickup.
-async function grabOne(
-  line: { item_id: string; quantity: number },
-  who: { name: string; email: string; ip: string }
-): Promise<
-  | { ok: true; item_id: string; item_name: string; quantity: number; remaining: number }
-  | { ok: false; item_id: string; item_name: string; quantity: number; error: string }
-> {
+// Best-effort decrement of a packaging stock pool. Clamps to what's available
+// (never negative) and never blocks the underlying sample pickup.
+async function decrementPool(poolId: string | null, qty: number): Promise<void> {
+  if (!poolId || qty <= 0) return;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .select("quantity_available")
+      .eq("id", poolId)
+      .maybeSingle();
+    if (!data) return;
+    const avail = (data as any).quantity_available as number;
+    const take = Math.min(qty, avail);
+    if (take <= 0) return;
+    const { data: moved } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .update({ quantity_available: avail - take, updated_at: new Date().toISOString() })
+      .eq("id", poolId)
+      .eq("quantity_available", avail)
+      .select("quantity_available")
+      .maybeSingle();
+    if (moved) return; // done
+    // conflict → retry with a fresh read
+  }
+}
+
+type Pools = { pizza_box: string | null; overlay: string | null };
+
+type GrabResult =
+  | { ok: true; item_id: string; item_name: string; quantity: number; remaining: number; pizza_box: boolean; plastic_overlay: boolean }
+  | { ok: false; item_id: string; item_name: string; quantity: number; error: string };
+
+// Decrement one item with optimistic-concurrency retries; log the pickup and
+// (if the person chose packaging the item offers) decrement the pool.
+async function grabOne(line: Line, who: { name: string; email: string; ip: string }, pools: Pools): Promise<GrabResult> {
   if (line.quantity > MAX_GRAB_QTY) {
     return { ok: false, item_id: line.item_id, item_name: "", quantity: line.quantity, error: "Quantity too large." };
   }
@@ -137,7 +175,7 @@ async function grabOne(
   for (let attempt = 0; attempt < 4; attempt++) {
     const { data: item } = await supabaseAdmin
       .from("marketing_inventory_items")
-      .select("id,name,quantity_available")
+      .select("id,name,quantity_available,pizza_box,plastic_overlay")
       .eq("id", line.item_id)
       .maybeSingle();
     if (!item) {
@@ -157,15 +195,33 @@ async function grabOne(
 
     const moved = await consumeStock(line.item_id, line.quantity, available);
     if (moved.ok) {
+      // Honor a packaging choice only if the item actually offers it.
+      const wantsPizza = line.pizza_box && !!(item as any).pizza_box;
+      const wantsOverlay = line.plastic_overlay && !!(item as any).plastic_overlay;
+
       await supabaseAdmin.from("marketing_item_grabs").insert({
         item_id: line.item_id,
         item_name: itemName,
         grabbed_by_name: who.name,
         grabbed_by_email: who.email,
         quantity: line.quantity,
+        pizza_box: wantsPizza,
+        plastic_overlay: wantsOverlay,
         ip: who.ip,
       });
-      return { ok: true, item_id: line.item_id, item_name: itemName, quantity: line.quantity, remaining: moved.available };
+
+      if (wantsPizza) await decrementPool(pools.pizza_box, line.quantity);
+      if (wantsOverlay) await decrementPool(pools.overlay, line.quantity);
+
+      return {
+        ok: true,
+        item_id: line.item_id,
+        item_name: itemName,
+        quantity: line.quantity,
+        remaining: moved.available,
+        pizza_box: wantsPizza,
+        plastic_overlay: wantsOverlay,
+      };
     }
     // conflict → retry with a fresh read
   }
@@ -200,18 +256,34 @@ export async function POST(req: Request) {
     if (!lines.length) return NextResponse.json({ error: "Pick at least one item." }, { status: 400 });
     if (lines.length > 100) return NextResponse.json({ error: "Too many items at once." }, { status: 400 });
 
-    // Process sequentially — carts are small, and this keeps stock math simple.
-    const results = [];
-    for (const line of lines) results.push(await grabOne(line, { name, email, ip }));
+    // Resolve the packaging stock pools once for the whole cart.
+    const { data: poolRows } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .select("id,packaging_role")
+      .in("packaging_role", ["pizza_box", "overlay"]);
+    const pools: Pools = {
+      pizza_box: (poolRows || []).find((p: any) => p.packaging_role === "pizza_box")?.id || null,
+      overlay: (poolRows || []).find((p: any) => p.packaging_role === "overlay")?.id || null,
+    };
 
-    const taken = results.filter((r): r is Extract<typeof r, { ok: true }> => r.ok);
-    const failed = results.filter((r): r is Extract<typeof r, { ok: false }> => !r.ok);
+    // Process sequentially — carts are small, and this keeps stock math simple.
+    const results: GrabResult[] = [];
+    for (const line of lines) results.push(await grabOne(line, { name, email, ip }, pools));
+
+    const taken = results.filter((r): r is Extract<GrabResult, { ok: true }> => r.ok);
+    const failed = results.filter((r): r is Extract<GrabResult, { ok: false }> => !r.ok);
 
     if (taken.length) {
       void notifyGrab({
         by: name,
         email,
-        items: taken.map((t) => ({ name: t.item_name, quantity: t.quantity, remaining: t.remaining })),
+        items: taken.map((t) => ({
+          name: t.item_name,
+          quantity: t.quantity,
+          remaining: t.remaining,
+          pizza_box: t.pizza_box,
+          plastic_overlay: t.plastic_overlay,
+        })),
       });
     }
 
