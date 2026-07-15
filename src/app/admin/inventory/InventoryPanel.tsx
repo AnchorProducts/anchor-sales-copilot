@@ -96,6 +96,10 @@ export default function AdminInventoryPage({
   const [itemQrOpen, setItemQrOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
+  // Items tab filters (search + category) so long lists stay findable.
+  const [itemSearch, setItemSearch] = useState("");
+  const [itemCat, setItemCat] = useState("");
+
   const loadAll = useCallback(async () => {
     const [itemsRes, coRes, grabRes] = await Promise.all([
       fetch("/api/inventory", { cache: "no-store" }),
@@ -148,6 +152,19 @@ export default function AdminInventoryPage({
 
   const overdueCount = useMemo(() => checkouts.filter((c) => c.overdue).length, [checkouts]);
   const openCount = useMemo(() => checkouts.filter((c) => c.status === "out").length, [checkouts]);
+
+  const filteredItems = useMemo(() => {
+    const q = itemSearch.trim().toLowerCase();
+    return items.filter((it) => {
+      if (itemCat && it.category !== itemCat) return false;
+      if (!q) return true;
+      return (
+        it.name.toLowerCase().includes(q) ||
+        (it.sku || "").toLowerCase().includes(q) ||
+        (it.description || "").toLowerCase().includes(q)
+      );
+    });
+  }, [items, itemSearch, itemCat]);
 
   // ── Item create/edit ───────────────────────────────────────────────────────
   function openCreate() {
@@ -482,15 +499,40 @@ export default function AdminInventoryPage({
             )}
 
             {tab === "items" ? (
-              <ItemsList
-                items={items}
-                onEdit={openEdit}
-                onCheckout={openCheckout}
-                onDelete={deleteItem}
-                onRemoveImage={removeImage}
-                onRestock={openRestock}
-                busy={busy}
-              />
+              <>
+                <div className="mb-3 flex flex-col gap-2">
+                  <Input
+                    value={itemSearch}
+                    onChange={(e) => setItemSearch(e.target.value)}
+                    placeholder="Search by name or SKU…"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    <FilterChip label="All" active={itemCat === ""} onClick={() => setItemCat("")} />
+                    {INVENTORY_CATEGORIES.map((c) => (
+                      <FilterChip
+                        key={c.key}
+                        label={c.label}
+                        active={itemCat === c.key}
+                        onClick={() => setItemCat(c.key)}
+                      />
+                    ))}
+                  </div>
+                  {(itemSearch || itemCat) && (
+                    <span className="text-xs text-[var(--anchor-gray)]">
+                      Showing {filteredItems.length} of {items.length}
+                    </span>
+                  )}
+                </div>
+                <ItemsList
+                  items={filteredItems}
+                  onEdit={openEdit}
+                  onCheckout={openCheckout}
+                  onDelete={deleteItem}
+                  onRemoveImage={removeImage}
+                  onRestock={openRestock}
+                  busy={busy}
+                />
+              </>
             ) : tab === "checkouts" ? (
               <CheckoutsList checkouts={checkouts} onCheckin={openCheckin} busy={busy} />
             ) : (
@@ -779,6 +821,22 @@ export default function AdminInventoryPage({
   );
 }
 
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        active
+          ? "bg-[var(--anchor-green)] text-white"
+          : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function ItemsList({
   items,
   onEdit,
@@ -799,10 +857,10 @@ function ItemsList({
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (items.length === 0) {
-    return <Card className="p-6 text-sm text-[var(--anchor-gray)]">No inventory items yet. Add your first one.</Card>;
+    return <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items to show.</Card>;
   }
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const open = openId === it.id;
         return (
@@ -829,7 +887,7 @@ function ItemsList({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-1.5">
-                  <h3 className="truncate text-sm font-bold text-[var(--anchor-deep)]">{it.name}</h3>
+                  <h3 className="text-sm font-bold leading-snug text-[var(--anchor-deep)] break-words">{it.name}</h3>
                   <span
                     className={`shrink-0 text-[var(--anchor-gray)] transition-transform ${open ? "rotate-180" : ""}`}
                     aria-hidden
