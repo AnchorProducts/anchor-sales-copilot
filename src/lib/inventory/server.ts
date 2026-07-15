@@ -105,29 +105,43 @@ export async function getGrabConfig(): Promise<GrabConfig | null> {
   return { token: clean((data as any).token), enabled: !!(data as any).enabled };
 }
 
-// Notify the pickup channel that someone grabbed stock from the aisle.
-// Best-effort; never throws. `remaining` is the item's new available count so
-// recipients can see at a glance whether it needs restocking.
+// Notify the pickup channel that someone grabbed stock from the aisle — one
+// alert per pickup even when several items are taken at once. Best-effort;
+// never throws. Each line's `remaining` is that item's new available count so
+// recipients can see at a glance whether anything needs restocking.
 export async function notifyGrab(args: {
-  itemName: string;
-  quantity: number;
   by: string;
   email: string;
-  remaining: number;
+  items: { name: string; quantity: number; remaining: number }[];
 }): Promise<void> {
+  if (!args.items.length) return;
   const url = "/admin/inventory";
-  const line = `${args.by} grabbed ${args.quantity} × ${args.itemName} (${args.remaining} left).`;
+
+  const parts = args.items.map((i) => `${i.quantity} × ${i.name} (${i.remaining} left)`);
+  const totalUnits = args.items.reduce((n, i) => n + i.quantity, 0);
+
+  // Push: a compact one-liner. Email: an itemized list.
+  const pushBody =
+    args.items.length === 1
+      ? `${args.by} grabbed ${parts[0]}.`
+      : `${args.by} grabbed ${args.items.length} items (${totalUnits} units): ${parts.join(", ")}.`;
+  const subject =
+    args.items.length === 1
+      ? `Aisle pickup — ${args.items[0].name}`
+      : `Aisle pickup — ${args.items.length} items`;
+  const emailText =
+    `${args.by} <${args.email}> grabbed:\n` +
+    args.items.map((i) => `  • ${i.quantity} × ${i.name} (${i.remaining} left)`).join("\n") +
+    `\n\nInventory: ${internalAppUrl(url)}`;
+
   try {
     void sendPushToTool("inventory_grab", {
       title: "Marketing aisle pickup",
-      body: line,
+      body: pushBody,
       url,
-      tag: `inv-grab-${args.itemName}`,
+      tag: `inv-grab-${args.email}`,
     });
-    void emailToolUsers("inventory_grab", {
-      subject: `Aisle pickup — ${args.itemName}`,
-      text: `${line}\n\nTaken by: ${args.by} <${args.email}>\n\nInventory: ${internalAppUrl(url)}`,
-    });
+    void emailToolUsers("inventory_grab", { subject, text: emailText });
   } catch (e: any) {
     console.warn("inventory grab notify failed", e?.message || e);
   }

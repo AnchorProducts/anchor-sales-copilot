@@ -1,14 +1,15 @@
 "use client";
 
 // PUBLIC (no login) marketing-aisle pickup page, opened by scanning the aisle
-// QR code. Shows an in-stock pick-list; tapping an item asks for name, email,
-// and quantity, then records the pickup (which decrements stock). The name/email
-// are remembered in localStorage so repeat pickups don't retype them.
+// QR code. A cart: enter name + email ONCE, set a quantity on any number of
+// items, then take them all in one tap. Recording a pickup decrements stock.
+// The name/email are remembered in localStorage so the next visit is prefilled.
 //
 // Reached at /grab/<token>; the token gates access via the public grab API.
-// Uses only presentational UI (Card/Button/Input) — no auth context.
+// ?cat=<key> filters to a category (per-category QR); ?item=<id> focuses one
+// item (per-item shelf QR). Uses only presentational UI — no auth context.
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
@@ -44,14 +45,13 @@ export default function GrabPage({
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [qty, setQty] = useState("1");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
+  const [qty, setQty] = useState<Record<string, number>>({}); // item id -> units
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ name: string; qty: number } | null>(null);
+  const [done, setDone] = useState<{ count: number; units: number; failed: string[] } | null>(null);
 
   // Restore a remembered identity so repeat pickups skip the typing.
   useEffect(() => {
@@ -80,10 +80,9 @@ export default function GrabPage({
       }
       const list: GrabItem[] = json?.items || [];
       setItems(list);
-      // A per-item QR lands straight on that one item — open its form.
+      // A per-item QR lands on one item — start it at 1 so it's one tap to take.
       if (singleItem && list.length === 1 && list[0].quantity_available > 0) {
-        setOpenId(list[0].id);
-        setQty("1");
+        setQty({ [list[0].id]: 1 });
       }
     } catch {
       setLoadErr("Couldn't reach the server. Check your connection and try again.");
@@ -96,20 +95,30 @@ export default function GrabPage({
     load();
   }, [load]);
 
-  function openItem(it: GrabItem) {
-    setFormErr(null);
-    setDone(null);
-    setQty("1");
-    setOpenId(it.id);
+  function setItemQty(it: GrabItem, next: number) {
+    const clamped = Math.max(0, Math.min(next, it.quantity_available));
+    setQty((prev) => {
+      const copy = { ...prev };
+      if (clamped <= 0) delete copy[it.id];
+      else copy[it.id] = clamped;
+      return copy;
+    });
   }
 
-  async function submit(it: GrabItem) {
+  const selected = useMemo(
+    () => items.filter((it) => (qty[it.id] || 0) > 0),
+    [items, qty]
+  );
+  const totalUnits = useMemo(
+    () => selected.reduce((n, it) => n + (qty[it.id] || 0), 0),
+    [selected, qty]
+  );
+
+  async function submit() {
     setFormErr(null);
-    const q = Math.floor(Number(qty));
+    if (!selected.length) return setFormErr("Add a quantity to at least one item.");
     if (!name.trim()) return setFormErr("Enter your name.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setFormErr("Enter a valid email.");
-    if (!Number.isFinite(q) || q <= 0) return setFormErr("Enter a quantity of 1 or more.");
-    if (q > it.quantity_available) return setFormErr(`Only ${it.quantity_available} left.`);
 
     setBusy(true);
     try {
@@ -118,18 +127,16 @@ export default function GrabPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
-          item_id: it.id,
           name: name.trim(),
           email: email.trim(),
-          quantity: q,
           website,
+          items: selected.map((it) => ({ item_id: it.id, quantity: qty[it.id] })),
         }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         setFormErr(json?.error || "Couldn't record that pickup.");
-        // Stock may have changed under us — refresh the list.
-        if (res.status === 409) void load();
+        if (res.status === 409) void load(); // stock moved under us — refresh
         return;
       }
       try {
@@ -137,16 +144,15 @@ export default function GrabPage({
       } catch {
         /* ignore */
       }
-      setDone({ name: it.name, qty: q });
-      setOpenId(null);
-      // Reflect the new count locally without a full reload.
-      setItems((prev) =>
-        prev
-          .map((x) =>
-            x.id === it.id ? { ...x, quantity_available: json?.quantity_available ?? x.quantity_available - q } : x
-          )
-          .filter((x) => x.quantity_available > 0)
-      );
+      const taken = (json?.taken || []) as { quantity: number }[];
+      const failed = (json?.failed || []) as { item_name: string; error: string }[];
+      setDone({
+        count: taken.length,
+        units: taken.reduce((n, t) => n + (t.quantity || 0), 0),
+        failed: failed.map((f) => `${f.item_name}: ${f.error}`),
+      });
+      setQty({});
+      await load(); // refresh remaining counts
     } catch {
       setFormErr("Couldn't reach the server. Try again.");
     } finally {
@@ -155,22 +161,62 @@ export default function GrabPage({
   }
 
   return (
-    <main className="min-h-screen bg-[var(--surface-soft,#f6f7f5)] px-4 py-6">
+    <main className="min-h-screen bg-[var(--surface-soft,#f6f7f5)] px-4 pb-28 pt-6">
       <div className="mx-auto max-w-md">
         <header className="mb-4 text-center">
           <h1 className="text-xl font-bold text-[var(--anchor-deep,#0f2e2a)]">
             {categoryLabel ? `Marketing Aisle — ${categoryLabel}` : "Marketing Aisle"}
           </h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray,#5b6b66)]">
-            Taking something? Tap it, tell us who you are, and we&apos;ll update stock.
+            Set how many of each you&apos;re taking, add your name once, and tap Take.
           </p>
         </header>
 
         {done && (
           <Card className="mb-4 border-green-200 bg-green-50 p-4 text-sm text-green-800">
-            Thanks! Recorded <strong>{done.qty}</strong> × <strong>{done.name}</strong>. Grab another below if you need it.
+            Thanks! Recorded <strong>{done.units}</strong> unit{done.units === 1 ? "" : "s"} across{" "}
+            <strong>{done.count}</strong> item{done.count === 1 ? "" : "s"}.
+            {done.failed.length > 0 && (
+              <div className="mt-2 text-amber-800">
+                Couldn&apos;t take: {done.failed.join("; ")}.
+              </div>
+            )}
           </Card>
         )}
+
+        {/* Identity — entered once for everything in the cart. */}
+        {!loading && !loadErr && items.length > 0 && (
+          <Card className="mb-4 p-4">
+            <div className="grid gap-2.5">
+              <label className="block text-sm">
+                <span className="font-medium">Your name</span>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last" />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Your email</span>
+                <Input
+                  type="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                />
+              </label>
+              {/* Honeypot — off-screen; bots fill it, humans don't. */}
+              <input
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                className="absolute left-[-9999px] h-0 w-0 opacity-0"
+              />
+            </div>
+          </Card>
+        )}
+
+        {formErr && <Card className="mb-3 border-red-200 bg-red-50 p-3 text-sm text-red-700">{formErr}</Card>}
 
         {loading ? (
           <Card className="p-5 text-sm text-black/60">Loading…</Card>
@@ -183,93 +229,63 @@ export default function GrabPage({
         ) : (
           <div className="grid gap-2.5">
             {items.map((it) => {
-              const open = openId === it.id;
+              const n = qty[it.id] || 0;
+              const out = it.quantity_available <= 0;
               return (
-                <Card key={it.id} className="overflow-hidden p-0">
-                  <button
-                    type="button"
-                    onClick={() => (open ? setOpenId(null) : openItem(it))}
-                    aria-expanded={open}
-                    className="flex w-full items-center gap-3 p-3 text-left"
-                  >
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-black/5">
-                      {it.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-black/40">
-                          No photo
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{it.name}</h3>
-                      {it.description && (
-                        <p className="truncate text-xs text-[var(--anchor-gray,#5b6b66)]">{it.description}</p>
-                      )}
-                      {it.quantity_available > 0 ? (
-                        <p className="mt-0.5 text-xs font-semibold text-green-700">{it.quantity_available} in stock</p>
-                      ) : (
-                        <p className="mt-0.5 text-xs font-semibold text-[var(--anchor-gray,#5b6b66)]">Out of stock</p>
-                      )}
-                    </div>
-                    <span className={`shrink-0 text-black/30 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
-                      ▾
-                    </span>
-                  </button>
-
-                  {open && it.quantity_available <= 0 && (
-                    <div className="border-t border-black/10 p-3 text-sm text-[var(--anchor-gray,#5b6b66)]">
-                      This item is out of stock right now.
-                    </div>
-                  )}
-
-                  {open && it.quantity_available > 0 && (
-                    <div className="border-t border-black/10 p-3">
-                      {formErr && (
-                        <div className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">{formErr}</div>
-                      )}
-                      <div className="grid gap-2.5">
-                        <label className="block text-sm">
-                          <span className="font-medium">How many?</span>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={1}
-                            max={it.quantity_available}
-                            step={1}
-                            value={qty}
-                            onChange={(e) => setQty(e.target.value)}
-                          />
-                        </label>
-                        <label className="block text-sm">
-                          <span className="font-medium">Your name</span>
-                          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last" />
-                        </label>
-                        <label className="block text-sm">
-                          <span className="font-medium">Your email</span>
-                          <Input
-                            type="email"
-                            inputMode="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@company.com"
-                          />
-                        </label>
-                        {/* Honeypot — visually hidden, off-screen; bots fill it, humans don't. */}
-                        <input
-                          type="text"
-                          tabIndex={-1}
-                          autoComplete="off"
-                          aria-hidden="true"
-                          value={website}
-                          onChange={(e) => setWebsite(e.target.value)}
-                          className="absolute left-[-9999px] h-0 w-0 opacity-0"
-                        />
-                        <Button onClick={() => submit(it)} disabled={busy}>
-                          {busy ? "Saving…" : `I'm taking ${qty || 1}`}
-                        </Button>
+                <Card key={it.id} className={`flex items-center gap-3 p-3 ${n > 0 ? "ring-2 ring-[var(--anchor-green,#1f8a4c)]" : ""}`}>
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-black/5">
+                    {it.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] text-black/40">
+                        No photo
                       </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{it.name}</h3>
+                    {it.description && (
+                      <p className="truncate text-xs text-[var(--anchor-gray,#5b6b66)]">{it.description}</p>
+                    )}
+                    {out ? (
+                      <p className="mt-0.5 text-xs font-semibold text-[var(--anchor-gray,#5b6b66)]">Out of stock</p>
+                    ) : (
+                      <p className="mt-0.5 text-xs font-semibold text-green-700">{it.quantity_available} in stock</p>
+                    )}
+                  </div>
+
+                  {/* Quantity stepper */}
+                  {!out && (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`Remove one ${it.name}`}
+                        onClick={() => setItemQty(it, n - 1)}
+                        disabled={n <= 0}
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={it.quantity_available}
+                        value={n === 0 ? "" : n}
+                        placeholder="0"
+                        onChange={(e) => setItemQty(it, Math.floor(Number(e.target.value) || 0))}
+                        className="h-9 w-11 rounded-lg border border-black/15 text-center text-sm"
+                      />
+                      <button
+                        type="button"
+                        aria-label={`Add one ${it.name}`}
+                        onClick={() => setItemQty(it, n + 1)}
+                        disabled={n >= it.quantity_available}
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-lg font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                      >
+                        +
+                      </button>
                     </div>
                   )}
                 </Card>
@@ -280,6 +296,29 @@ export default function GrabPage({
 
         <p className="mt-5 text-center text-[11px] text-black/35">Anchor Products · Marketing inventory</p>
       </div>
+
+      {/* Sticky action bar — appears once something is selected. */}
+      {selected.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 border-t border-black/10 bg-white/95 p-3 backdrop-blur">
+          <div className="mx-auto flex max-w-md items-center gap-3">
+            <div className="min-w-0 flex-1 text-sm">
+              <div className="font-semibold text-[var(--anchor-deep,#0f2e2a)]">
+                {totalUnits} unit{totalUnits === 1 ? "" : "s"} · {selected.length} item{selected.length === 1 ? "" : "s"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setQty({})}
+                className="text-xs text-[var(--anchor-gray,#5b6b66)] underline"
+              >
+                Clear
+              </button>
+            </div>
+            <Button onClick={submit} disabled={busy} className="shrink-0">
+              {busy ? "Recording…" : `Take ${totalUnits}`}
+            </Button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

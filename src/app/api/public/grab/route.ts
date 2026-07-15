@@ -100,7 +100,80 @@ export async function GET(req: Request) {
   }
 }
 
-// POST — record a pickup and decrement stock.
+// Normalize the requested lines into [{ item_id, quantity }]. Accepts a cart
+// (`items: [...]`) or the legacy single-item shape (`item_id` + `quantity`).
+function parseLines(body: Record<string, unknown>): { item_id: string; quantity: number }[] {
+  const raw = Array.isArray(body.items)
+    ? (body.items as unknown[])
+    : [{ item_id: body.item_id, quantity: body.quantity }];
+  const lines: { item_id: string; quantity: number }[] = [];
+  for (const r of raw) {
+    const o = (r || {}) as Record<string, unknown>;
+    const id = clean(o.item_id);
+    const qty = Math.floor(Number(o.quantity));
+    if (!id) continue;
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    // Collapse duplicate lines for the same item.
+    const existing = lines.find((l) => l.item_id === id);
+    if (existing) existing.quantity += qty;
+    else lines.push({ item_id: id, quantity: qty });
+  }
+  return lines;
+}
+
+// Decrement one item with optimistic-concurrency retries; log the pickup.
+async function grabOne(
+  line: { item_id: string; quantity: number },
+  who: { name: string; email: string; ip: string }
+): Promise<
+  | { ok: true; item_id: string; item_name: string; quantity: number; remaining: number }
+  | { ok: false; item_id: string; item_name: string; quantity: number; error: string }
+> {
+  if (line.quantity > MAX_GRAB_QTY) {
+    return { ok: false, item_id: line.item_id, item_name: "", quantity: line.quantity, error: "Quantity too large." };
+  }
+
+  let itemName = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data: item } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .select("id,name,quantity_available")
+      .eq("id", line.item_id)
+      .maybeSingle();
+    if (!item) {
+      return { ok: false, item_id: line.item_id, item_name: "", quantity: line.quantity, error: "No longer exists." };
+    }
+    itemName = clean((item as any).name);
+    const available = (item as any).quantity_available as number;
+    if (line.quantity > available) {
+      return {
+        ok: false,
+        item_id: line.item_id,
+        item_name: itemName,
+        quantity: line.quantity,
+        error: available > 0 ? `Only ${available} left.` : "Out of stock.",
+      };
+    }
+
+    const moved = await consumeStock(line.item_id, line.quantity, available);
+    if (moved.ok) {
+      await supabaseAdmin.from("marketing_item_grabs").insert({
+        item_id: line.item_id,
+        item_name: itemName,
+        grabbed_by_name: who.name,
+        grabbed_by_email: who.email,
+        quantity: line.quantity,
+        ip: who.ip,
+      });
+      return { ok: true, item_id: line.item_id, item_name: itemName, quantity: line.quantity, remaining: moved.available };
+    }
+    // conflict → retry with a fresh read
+  }
+  return { ok: false, item_id: line.item_id, item_name: itemName, quantity: line.quantity, error: "Stock changed — retry." };
+}
+
+// POST — record a pickup of one or more items and decrement stock. Identity
+// (name + email) is entered once for the whole cart.
 export async function POST(req: Request) {
   try {
     const ip = clientIp(req);
@@ -118,63 +191,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "This pickup link is invalid or disabled." }, { status: 404 });
     }
 
-    const itemId = clean(body.item_id);
     const name = clean(body.name);
     const email = clean(body.email);
-    const quantity = Math.floor(Number(body.quantity));
-
-    if (!itemId) return NextResponse.json({ error: "Pick an item." }, { status: 400 });
     if (!name) return NextResponse.json({ error: "Enter your name." }, { status: 400 });
     if (!EMAIL_RE.test(email)) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
-    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_GRAB_QTY) {
-      return NextResponse.json({ error: "Quantity must be a positive whole number." }, { status: 400 });
+
+    const lines = parseLines(body);
+    if (!lines.length) return NextResponse.json({ error: "Pick at least one item." }, { status: 400 });
+    if (lines.length > 100) return NextResponse.json({ error: "Too many items at once." }, { status: 400 });
+
+    // Process sequentially — carts are small, and this keeps stock math simple.
+    const results = [];
+    for (const line of lines) results.push(await grabOne(line, { name, email, ip }));
+
+    const taken = results.filter((r): r is Extract<typeof r, { ok: true }> => r.ok);
+    const failed = results.filter((r): r is Extract<typeof r, { ok: false }> => !r.ok);
+
+    if (taken.length) {
+      void notifyGrab({
+        by: name,
+        email,
+        items: taken.map((t) => ({ name: t.item_name, quantity: t.quantity, remaining: t.remaining })),
+      });
     }
 
-    // Decrement with optimistic-concurrency retries: re-read the current count
-    // and try again if another pickup landed between our read and write.
-    let remaining = -1;
-    let itemName = "";
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const { data: item } = await supabaseAdmin
-        .from("marketing_inventory_items")
-        .select("id,name,quantity_available")
-        .eq("id", itemId)
-        .maybeSingle();
-      if (!item) return NextResponse.json({ error: "That item no longer exists." }, { status: 404 });
-
-      itemName = clean((item as any).name);
-      const available = (item as any).quantity_available as number;
-      if (quantity > available) {
-        return NextResponse.json(
-          { error: `Only ${available} left — can't take ${quantity}.` },
-          { status: 409 }
-        );
-      }
-
-      const moved = await consumeStock(itemId, quantity, available);
-      if (moved.ok) {
-        remaining = moved.available;
-        break;
-      }
-      // conflict → loop and retry with a fresh read
-    }
-    if (remaining < 0) {
-      return NextResponse.json({ error: "Stock changed while saving — please retry." }, { status: 409 });
+    // Nothing succeeded → surface as an error the page can show.
+    if (!taken.length) {
+      return NextResponse.json(
+        { error: failed[0]?.error ? `Couldn't take that: ${failed[0].error}` : "Couldn't record that pickup.", results },
+        { status: 409 }
+      );
     }
 
-    // Log the pickup (best-effort — the stock has already moved).
-    await supabaseAdmin.from("marketing_item_grabs").insert({
-      item_id: itemId,
-      item_name: itemName,
-      grabbed_by_name: name,
-      grabbed_by_email: email,
-      quantity,
-      ip,
-    });
-
-    void notifyGrab({ itemName, quantity, by: name, email, remaining });
-
-    return NextResponse.json({ ok: true, quantity_available: remaining }, { status: 201 });
+    return NextResponse.json(
+      {
+        ok: true,
+        taken: taken.map((t) => ({ item_id: t.item_id, item_name: t.item_name, quantity: t.quantity, remaining: t.remaining })),
+        failed: failed.map((f) => ({ item_id: f.item_id, item_name: f.item_name, quantity: f.quantity, error: f.error })),
+      },
+      { status: 201 }
+    );
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to record pickup." }, { status: 500 });
   }
