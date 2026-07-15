@@ -15,7 +15,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ITEM_COLS =
-  "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,created_at,updated_at";
+  "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,checkout_enabled,pizza_box,plastic_overlay,packaging_role,created_at,updated_at";
+
+const PACKAGING_ROLES = ["pizza_box", "overlay"] as const;
+function parsePackagingRole(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  return (PACKAGING_ROLES as readonly string[]).includes(s) ? s : "__invalid__";
+}
 
 // Parse a non-negative integer from a request value; returns null if absent,
 // or a number (clamped to >= 0). Invalid -> NaN so callers can 400.
@@ -31,6 +39,15 @@ function parseCost(v: unknown): number | null | undefined {
   if (v === null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? n : NaN;
+}
+
+function parseBool(v: unknown): boolean {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
+// A duplicate packaging-role assignment trips the partial unique index.
+function isPackagingRoleConflict(err: { code?: string; message?: string } | null): boolean {
+  return err?.code === "23505" || /packaging_role_uq/i.test(err?.message || "");
 }
 
 // GET — list all items. Admins + inside reps + outside reps (read-only).
@@ -99,6 +116,10 @@ export async function POST(req: Request) {
     if (Number.isNaN(cost)) {
       return NextResponse.json({ error: "Unit cost is invalid." }, { status: 400 });
     }
+    const packagingRole = parsePackagingRole(body.packaging_role);
+    if (packagingRole === "__invalid__") {
+      return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
+    }
 
     const { data: row, error } = await supabaseAdmin
       .from("marketing_inventory_items")
@@ -112,6 +133,10 @@ export async function POST(req: Request) {
         quantity_available: available,
         quantity_out: 0,
         low_stock_threshold: threshold,
+        checkout_enabled: parseBool(body.checkout_enabled),
+        pizza_box: parseBool(body.pizza_box),
+        plastic_overlay: parseBool(body.plastic_overlay),
+        packaging_role: packagingRole ?? null,
         created_by: auth.user.id,
         updated_by: auth.user.id,
       })
@@ -119,6 +144,12 @@ export async function POST(req: Request) {
       .single();
 
     if (error || !row) {
+      if (isPackagingRoleConflict(error)) {
+        return NextResponse.json(
+          { error: "Another item is already set as that packaging pool. Clear it there first." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: error?.message || "Failed to create item." }, { status: 500 });
     }
 
@@ -192,6 +223,14 @@ export async function PATCH(req: Request) {
       if (Number.isNaN(available)) return NextResponse.json({ error: "Quantity must be a whole number." }, { status: 400 });
       updates.quantity_available = available ?? 0;
     }
+    if (body?.checkout_enabled !== undefined) updates.checkout_enabled = parseBool(body.checkout_enabled);
+    if (body?.pizza_box !== undefined) updates.pizza_box = parseBool(body.pizza_box);
+    if (body?.plastic_overlay !== undefined) updates.plastic_overlay = parseBool(body.plastic_overlay);
+    if (body?.packaging_role !== undefined) {
+      const role = parsePackagingRole(body.packaging_role);
+      if (role === "__invalid__") return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
+      updates.packaging_role = role ?? null;
+    }
 
     const { data: row, error } = await supabaseAdmin
       .from("marketing_inventory_items")
@@ -200,6 +239,12 @@ export async function PATCH(req: Request) {
       .select(ITEM_COLS)
       .single();
     if (error || !row) {
+      if (isPackagingRoleConflict(error)) {
+        return NextResponse.json(
+          { error: "Another item is already set as that packaging pool. Clear it there first." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: error?.message || "Failed to update item." }, { status: 500 });
     }
 
