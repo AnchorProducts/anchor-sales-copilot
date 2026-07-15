@@ -89,6 +89,50 @@ export async function notifyLowStockIfCrossed(
   }
 }
 
+// ── Marketing-aisle grab (public QR pickup) ─────────────────────────────────
+
+export type GrabConfig = { token: string; enabled: boolean };
+
+// Read the single-row aisle config. Returns null if the row is missing (the
+// migration seeds it, so that only happens if it was deleted).
+export async function getGrabConfig(): Promise<GrabConfig | null> {
+  const { data } = await supabaseAdmin
+    .from("marketing_grab_config")
+    .select("token,enabled")
+    .eq("id", 1)
+    .maybeSingle();
+  if (!data) return null;
+  return { token: clean((data as any).token), enabled: !!(data as any).enabled };
+}
+
+// Notify the pickup channel that someone grabbed stock from the aisle.
+// Best-effort; never throws. `remaining` is the item's new available count so
+// recipients can see at a glance whether it needs restocking.
+export async function notifyGrab(args: {
+  itemName: string;
+  quantity: number;
+  by: string;
+  email: string;
+  remaining: number;
+}): Promise<void> {
+  const url = "/admin/inventory";
+  const line = `${args.by} grabbed ${args.quantity} × ${args.itemName} (${args.remaining} left).`;
+  try {
+    void sendPushToTool("inventory_grab", {
+      title: "Marketing aisle pickup",
+      body: line,
+      url,
+      tag: `inv-grab-${args.itemName}`,
+    });
+    void emailToolUsers("inventory_grab", {
+      subject: `Aisle pickup — ${args.itemName}`,
+      text: `${line}\n\nTaken by: ${args.by} <${args.email}>\n\nInventory: ${internalAppUrl(url)}`,
+    });
+  } catch (e: any) {
+    console.warn("inventory grab notify failed", e?.message || e);
+  }
+}
+
 // Atomically move `qty` units available -> out for a checkout. Guarded on the
 // item's current counts (optimistic concurrency): if another write changed them
 // between read and write, the update affects 0 rows and we report a conflict so

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
@@ -77,23 +78,29 @@ export default function AdminInventoryPage({
   const [accessError, setAccessError] = useState<string | null>(null);
   const [role, setRole] = useState<string>("");
 
-  const [tab, setTab] = useState<"items" | "checkouts">("items");
+  const [tab, setTab] = useState<"items" | "checkouts" | "pickups">("items");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [checkouts, setCheckouts] = useState<ItemCheckout[]>([]);
+  const [grabs, setGrabs] = useState<GrabRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // Modals
   const [itemModal, setItemModal] = useState<ItemDraft | null>(null);
   const [itemFile, setItemFile] = useState<File | null>(null);
   const [checkoutItem, setCheckoutItem] = useState<InventoryItem | null>(null);
   const [checkinLoan, setCheckinLoan] = useState<ItemCheckout | null>(null);
+  const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
+  const [restockQty, setRestockQty] = useState("");
+  const [itemQrOpen, setItemQrOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
-    const [itemsRes, coRes] = await Promise.all([
+    const [itemsRes, coRes, grabRes] = await Promise.all([
       fetch("/api/inventory", { cache: "no-store" }),
       fetch("/api/inventory/checkouts", { cache: "no-store" }),
+      fetch("/api/inventory/grabs", { cache: "no-store" }),
     ]);
     const itemsJson = await itemsRes.json().catch(() => null);
     if (!itemsRes.ok) {
@@ -104,6 +111,8 @@ export default function AdminInventoryPage({
     setItems(itemsJson?.items || []);
     const coJson = await coRes.json().catch(() => null);
     if (coRes.ok) setCheckouts(coJson?.items || []);
+    const grabJson = await grabRes.json().catch(() => null);
+    if (grabRes.ok) setGrabs(grabJson?.items || []);
   }, []);
 
   useEffect(() => {
@@ -354,6 +363,45 @@ export default function AdminInventoryPage({
     }
   }
 
+  // ── Quick restock (add units to an item's on-hand count) ────────────────────
+  function openRestock(it: InventoryItem) {
+    setModalErr(null);
+    setRestockQty("");
+    setRestockItem(it);
+  }
+
+  async function submitRestock() {
+    if (!restockItem) return;
+    const add = Math.floor(Number(restockQty));
+    if (!Number.isFinite(add) || add <= 0) {
+      setModalErr("Enter how many units to add (1 or more).");
+      return;
+    }
+    setBusy(true);
+    setModalErr(null);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: restockItem.id,
+          quantity_available: restockItem.quantity_available + add,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setModalErr(json?.error || "Failed to add stock.");
+        return;
+      }
+      setRestockItem(null);
+      await loadAll();
+    } catch (e: any) {
+      setModalErr(e?.message || "Failed to add stock.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const shell = (
     <>
       <div className={embedded ? "pt-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
@@ -372,11 +420,19 @@ export default function AdminInventoryPage({
                   Track marketing stock and check items out for tradeshows.
                 </p>
               </div>
-              {tab === "items" && (
-                <Button onClick={openCreate} disabled={busy}>
-                  + Add item
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setQrOpen(true)} disabled={busy}>
+                  Aisle QR
                 </Button>
-              )}
+                <Button variant="secondary" onClick={() => setItemQrOpen(true)} disabled={busy}>
+                  Item QR codes
+                </Button>
+                {tab === "items" && (
+                  <Button onClick={openCreate} disabled={busy}>
+                    + Add item
+                  </Button>
+                )}
+              </div>
             </header>
 
             {/* Tabs */}
@@ -408,6 +464,17 @@ export default function AdminInventoryPage({
                   </span>
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("pickups")}
+                className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${
+                  tab === "pickups"
+                    ? "bg-[var(--anchor-green)] text-white"
+                    : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                }`}
+              >
+                Aisle pickups ({grabs.length})
+              </button>
             </div>
 
             {loadErr && (
@@ -421,10 +488,13 @@ export default function AdminInventoryPage({
                 onCheckout={openCheckout}
                 onDelete={deleteItem}
                 onRemoveImage={removeImage}
+                onRestock={openRestock}
                 busy={busy}
               />
-            ) : (
+            ) : tab === "checkouts" ? (
               <CheckoutsList checkouts={checkouts} onCheckin={openCheckin} busy={busy} />
+            ) : (
+              <PickupsList grabs={grabs} />
             )}
           </>
         )}
@@ -541,6 +611,49 @@ export default function AdminInventoryPage({
               </Button>
               <Button onClick={saveItem} disabled={busy}>
                 {busy ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Aisle QR modal */}
+      <AisleQrModal open={qrOpen} onClose={() => setQrOpen(false)} canRotate={role === "admin"} />
+
+      {/* Item QR export modal */}
+      <ItemQrModal open={itemQrOpen} onClose={() => setItemQrOpen(false)} items={items} />
+
+      {/* Restock modal */}
+      <Modal open={!!restockItem} className="max-w-sm">
+        {restockItem && (
+          <div className="p-5">
+            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Add stock — {restockItem.name}</h2>
+            <p className="text-sm text-[var(--anchor-gray)]">
+              {restockItem.quantity_available} on hand now.
+            </p>
+            {modalErr && <div className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{modalErr}</div>}
+            <label className="mt-3 block text-sm">
+              <span className="font-medium">Units to add</span>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={restockQty}
+                onChange={(e) => setRestockQty(e.target.value)}
+                placeholder="e.g. 20"
+              />
+            </label>
+            {Number(restockQty) > 0 && (
+              <p className="mt-2 text-xs text-[var(--anchor-gray)]">
+                New total: <strong>{restockItem.quantity_available + Math.floor(Number(restockQty))}</strong>
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setRestockItem(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button onClick={submitRestock} disabled={busy}>
+                {busy ? "Adding…" : "Add stock"}
               </Button>
             </div>
           </div>
@@ -672,6 +785,7 @@ function ItemsList({
   onCheckout,
   onDelete,
   onRemoveImage,
+  onRestock,
   busy,
 }: {
   items: InventoryItem[];
@@ -679,6 +793,7 @@ function ItemsList({
   onCheckout: (it: InventoryItem) => void;
   onDelete: (it: InventoryItem) => void;
   onRemoveImage: (it: InventoryItem) => void;
+  onRestock: (it: InventoryItem) => void;
   busy: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -765,6 +880,9 @@ function ItemsList({
                   </div>
                 </dl>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => onRestock(it)} disabled={busy}>
+                    + Add stock
+                  </Button>
                   <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
                     Check out
                   </Button>
@@ -785,6 +903,513 @@ function ItemsList({
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+type GrabRow = {
+  id: string;
+  item_id: string | null;
+  item_name: string;
+  grabbed_by_name: string;
+  grabbed_by_email: string;
+  quantity: number;
+  created_at: string;
+};
+
+// The scope selector for the aisle QR codes: one "master" QR for everything,
+// plus one per category (Samples, Swag, Brochures, …). All scopes share the same
+// underlying token, so a single rotate/disable controls every printed code.
+const QR_SCOPES: { key: string; label: string }[] = [
+  { key: "", label: "All items" },
+  ...INVENTORY_CATEGORIES.map((c) => ({ key: c.key, label: c.label })),
+];
+
+// Build the public /grab URL for a scope. `base` is the token URL from the API;
+// a category scope just appends ?cat=<key>.
+function scopeUrl(base: string, key: string): string {
+  if (!base) return "";
+  return key ? `${base}?cat=${encodeURIComponent(key)}` : base;
+}
+
+// The printable aisle QR codes. Fetches the shared token, then renders a QR for
+// the selected scope (via the qrcode package — no external calls). Admins can
+// copy a link, print one poster, print every category poster at once, or rotate
+// the token (which invalidates all printed codes).
+function AisleQrModal({
+  open,
+  onClose,
+  canRotate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  canRotate: boolean;
+}) {
+  const [base, setBase] = useState<string>("");
+  const [enabled, setEnabled] = useState<boolean>(true);
+  const [scope, setScope] = useState<string>(""); // "" = all items
+  const [dataUrl, setDataUrl] = useState<string>("");
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const activeLabel = QR_SCOPES.find((s) => s.key === scope)?.label || "All items";
+  const activeUrl = scopeUrl(base, scope);
+
+  const makeQr = useCallback(async (link: string): Promise<string> => {
+    if (!link) return "";
+    try {
+      return await QRCode.toDataURL(link, { width: 640, margin: 2, errorCorrectionLevel: "M" });
+    } catch {
+      return "";
+    }
+  }, []);
+
+  // Re-render the QR whenever the base URL or selected scope changes.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const png = await makeQr(scopeUrl(base, scope));
+      if (alive) setDataUrl(png);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [base, scope, makeQr]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/inventory/aisle-qr", { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(json?.error || "Failed to load the aisle QR.");
+        return;
+      }
+      setBase(json.url || "");
+      setEnabled(!!json.enabled);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  async function post(action: string, extra: Record<string, unknown> = {}) {
+    setWorking(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/inventory/aisle-qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...extra }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(json?.error || "That didn't work.");
+        return;
+      }
+      setBase(json.url || "");
+      setEnabled(!!json.enabled);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(activeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — ignore */
+    }
+  }
+
+  // One printed page per poster. `posters` is [{label, dataUrl}] — the selected
+  // scope for "Print poster", or every scope for "Print all".
+  function printPosters(posters: { label: string; dataUrl: string }[]) {
+    const usable = posters.filter((p) => p.dataUrl);
+    if (!usable.length) return;
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) return;
+    const pages = usable
+      .map(
+        (p) =>
+          `<section><h1>Taking ${p.label === "All items" ? "marketing stock" : p.label}?</h1>` +
+          `<p>Scan to tell us — it updates inventory automatically.</p>` +
+          `<img src="${p.dataUrl}" alt="Aisle QR code" />` +
+          `<small>Anchor Products · Marketing Inventory · ${p.label}</small></section>`
+      )
+      .join("");
+    w.document.write(
+      `<!doctype html><html><head><title>Marketing Aisle QR</title>` +
+        `<style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;color:#0f2e2a}` +
+        `section{text-align:center;padding:48px;page-break-after:always;box-sizing:border-box}` +
+        `section:last-child{page-break-after:auto}` +
+        `h1{font-size:34px;margin:0 0 6px}p{color:#5b6b66;font-size:18px;margin:0 0 28px}` +
+        `img{width:420px;height:420px}small{display:block;margin-top:22px;color:#8a9691;font-size:13px}</style>` +
+        `</head><body>${pages}<script>window.onload=function(){window.print()}</script></body></html>`
+    );
+    w.document.close();
+  }
+
+  async function printAll() {
+    if (!base) return;
+    setWorking(true);
+    try {
+      const posters = await Promise.all(
+        QR_SCOPES.map(async (s) => ({ label: s.label, dataUrl: await makeQr(scopeUrl(base, s.key)) }))
+      );
+      printPosters(posters);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <Modal open={open} className="max-w-md">
+      <div className="p-5">
+        <div className="flex items-start justify-between">
+          <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Marketing aisle QR codes</h2>
+          <button type="button" onClick={onClose} className="text-sm text-[var(--anchor-gray)]">
+            Close
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-[var(--anchor-gray)]">
+          Print one master code for everything, or a separate code per category. Anyone can scan — no login — to
+          record what they take, and stock updates automatically.
+        </p>
+
+        {err && <div className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{err}</div>}
+
+        {loading ? (
+          <div className="mt-4 text-sm text-black/60">Loading…</div>
+        ) : (
+          <>
+            {!enabled && (
+              <div className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">
+                The aisle is currently <strong>disabled</strong> — scans are refused until you re-enable it.
+              </div>
+            )}
+
+            {/* Scope selector */}
+            <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+              {QR_SCOPES.map((s) => (
+                <button
+                  key={s.key || "all"}
+                  type="button"
+                  onClick={() => setScope(s.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    scope === s.key
+                      ? "bg-[var(--anchor-green)] text-white"
+                      : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-col items-center">
+              {dataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={dataUrl} alt={`${activeLabel} QR code`} className="h-56 w-56" />
+              ) : (
+                <div className="flex h-56 w-56 items-center justify-center rounded-lg bg-black/5 text-sm text-black/40">
+                  No QR
+                </div>
+              )}
+              <div className="mt-2 text-sm font-semibold text-[var(--anchor-deep)]">{activeLabel}</div>
+              <code className="mt-1 max-w-full truncate text-xs text-[var(--anchor-gray)]">{activeUrl}</code>
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Button
+                onClick={() => printPosters([{ label: activeLabel, dataUrl }])}
+                disabled={!dataUrl}
+              >
+                Print this poster
+              </Button>
+              <Button variant="secondary" onClick={printAll} disabled={working || !base}>
+                Print all posters
+              </Button>
+              <Button variant="secondary" onClick={copyLink} disabled={!activeUrl}>
+                {copied ? "Copied!" : "Copy link"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => post("toggle", { enabled: !enabled })}
+                disabled={working || !canRotate}
+              >
+                {enabled ? "Disable" : "Enable"}
+              </Button>
+            </div>
+
+            {canRotate && (
+              <div className="mt-3 border-t border-[var(--border-default)] pt-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("Rotate the token? Every already-printed QR code will stop working.")) {
+                      void post("rotate");
+                    }
+                  }}
+                  disabled={working}
+                  className="text-xs text-red-600 underline disabled:opacity-50"
+                >
+                  Rotate token (invalidates all printed codes)
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function slug(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item";
+}
+
+// Per-item QR codes for shelf labels. Each code deep-links to /grab/<token>?item=<id>
+// (shares the same aisle token), so scanning one jumps straight to that item's
+// pickup form. Scope by All items or a category, then download a single PNG or
+// print a full sheet (which can be saved as a PDF) — one code per item.
+function ItemQrModal({
+  open,
+  onClose,
+  items,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: InventoryItem[];
+}) {
+  const [base, setBase] = useState<string>("");
+  const [scope, setScope] = useState<string>(""); // "" = all items
+  const [qrs, setQrs] = useState<{ id: string; name: string; qty: number; dataUrl: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [rendering, setRendering] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const scopeLabel = QR_SCOPES.find((s) => s.key === scope)?.label || "All items";
+  const scoped = useMemo(() => items.filter((it) => !scope || it.category === scope), [items, scope]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const res = await fetch("/api/inventory/aisle-qr", { cache: "no-store" });
+        const json = await res.json().catch(() => null);
+        if (!alive) return;
+        if (!res.ok) {
+          setErr(json?.error || "Failed to load the aisle token.");
+          return;
+        }
+        setBase(json.url || "");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !base) {
+      setQrs([]);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      setRendering(true);
+      const out = await Promise.all(
+        scoped.map(async (it) => ({
+          id: it.id,
+          name: it.name,
+          qty: it.quantity_available,
+          dataUrl: await QRCode.toDataURL(`${base}?item=${encodeURIComponent(it.id)}`, {
+            width: 512,
+            margin: 2,
+            errorCorrectionLevel: "M",
+          }).catch(() => ""),
+        }))
+      );
+      if (alive) {
+        setQrs(out);
+        setRendering(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open, base, scoped]);
+
+  function downloadOne(name: string, dataUrl: string) {
+    if (!dataUrl) return;
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `qr-${slug(name)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function printSheet() {
+    const usable = qrs.filter((q) => q.dataUrl);
+    if (!usable.length) return;
+    const w = window.open("", "_blank", "width=900,height=1000");
+    if (!w) return;
+    const cells = usable
+      .map(
+        (q) =>
+          `<div class="cell"><img src="${q.dataUrl}" alt="" /><div class="nm">${escapeHtml(q.name)}</div>` +
+          `<div class="sub">Scan to take · ${q.qty} in stock</div></div>`
+      )
+      .join("");
+    w.document.write(
+      `<!doctype html><html><head><title>Item QR codes — ${escapeHtml(scopeLabel)}</title>` +
+        `<style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:24px;color:#0f2e2a}` +
+        `h1{font-size:20px;text-align:center;margin:0 0 18px}` +
+        `.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}` +
+        `.cell{border:1px solid #dfe4e1;border-radius:12px;padding:16px;text-align:center;break-inside:avoid}` +
+        `.cell img{width:210px;height:210px}` +
+        `.nm{font-weight:700;font-size:16px;margin-top:8px}` +
+        `.sub{color:#8a9691;font-size:12px;margin-top:2px}</style>` +
+        `</head><body><h1>Marketing Inventory — ${escapeHtml(scopeLabel)}</h1>` +
+        `<div class="grid">${cells}</div>` +
+        `<script>window.onload=function(){window.print()}</script></body></html>`
+    );
+    w.document.close();
+  }
+
+  return (
+    <Modal open={open} className="max-w-2xl">
+      <div className="p-5">
+        <div className="flex items-start justify-between">
+          <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Item QR codes</h2>
+          <button type="button" onClick={onClose} className="text-sm text-[var(--anchor-gray)]">
+            Close
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-[var(--anchor-gray)]">
+          One QR per item for shelf labels — scanning jumps straight to that item&apos;s pickup form. Download a
+          single code, or print a whole sheet (Save as PDF to export).
+        </p>
+
+        {err && <div className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{err}</div>}
+
+        {loading ? (
+          <div className="mt-4 text-sm text-black/60">Loading…</div>
+        ) : (
+          <>
+            {/* Scope selector */}
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {QR_SCOPES.map((s) => (
+                <button
+                  key={s.key || "all"}
+                  type="button"
+                  onClick={() => setScope(s.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    scope === s.key
+                      ? "bg-[var(--anchor-green)] text-white"
+                      : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-xs text-[var(--anchor-gray)]">
+                {scoped.length} item{scoped.length === 1 ? "" : "s"} in “{scopeLabel}”
+              </span>
+              <Button onClick={printSheet} disabled={rendering || qrs.filter((q) => q.dataUrl).length === 0}>
+                Print sheet
+              </Button>
+            </div>
+
+            <div className="mt-3 max-h-[52vh] overflow-y-auto pr-1">
+              {scoped.length === 0 ? (
+                <Card className="p-5 text-sm text-[var(--anchor-gray)]">No items in this group.</Card>
+              ) : rendering ? (
+                <div className="p-4 text-sm text-black/60">Generating codes…</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {qrs.map((q) => (
+                    <Card key={q.id} className="flex flex-col items-center p-3 text-center">
+                      {q.dataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={q.dataUrl} alt={`${q.name} QR`} className="h-28 w-28" />
+                      ) : (
+                        <div className="flex h-28 w-28 items-center justify-center bg-black/5 text-[10px] text-black/40">
+                          No QR
+                        </div>
+                      )}
+                      <div className="mt-1 line-clamp-2 text-xs font-semibold text-[var(--anchor-deep)]">
+                        {q.name}
+                      </div>
+                      <div className="text-[10px] text-[var(--anchor-gray)]">{q.qty} in stock</div>
+                      <button
+                        type="button"
+                        onClick={() => downloadOne(q.name, q.dataUrl)}
+                        disabled={!q.dataUrl}
+                        className="mt-1 text-[11px] text-[var(--anchor-green)] underline disabled:opacity-40"
+                      >
+                        Download PNG
+                      </button>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function PickupsList({ grabs }: { grabs: GrabRow[] }) {
+  if (grabs.length === 0) {
+    return (
+      <Card className="p-6 text-sm text-[var(--anchor-gray)]">
+        No aisle pickups yet. Print the aisle QR (top right) and post it in the marketing aisle.
+      </Card>
+    );
+  }
+  return (
+    <div className="grid gap-2">
+      {grabs.map((g) => (
+        <Card key={g.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+          <div className="min-w-0">
+            <p className="text-sm">
+              <strong>{g.quantity}</strong> × <strong>{g.item_name}</strong>
+            </p>
+            <p className="text-xs text-[var(--anchor-gray)]">
+              {g.grabbed_by_name} · {g.grabbed_by_email}
+            </p>
+          </div>
+          <span className="text-xs text-[var(--anchor-gray)]">{fmtDateTime(g.created_at)}</span>
+        </Card>
+      ))}
     </div>
   );
 }

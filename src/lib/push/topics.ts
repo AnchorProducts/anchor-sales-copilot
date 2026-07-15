@@ -63,6 +63,11 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     description: "A marketing inventory item drops to or below its low-stock threshold.",
   },
   {
+    key: "inventory_grab",
+    label: "Marketing aisle pickup",
+    description: "Someone scans the aisle QR and grabs stock (name, item, quantity).",
+  },
+  {
     key: "fm_intake",
     label: "Rooftop Equipment Intake (FM)",
     description: "A Rooftop Equipment Intake (FM form) is submitted for review.",
