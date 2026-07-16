@@ -118,7 +118,7 @@ export default function MarketingInventoryPage() {
             {filteredItems.length === 0 ? (
               <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items match your search.</Card>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredItems.map((it) => (
                   <Card key={it.id} className="flex gap-4 p-4">
                     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">

@@ -921,7 +921,7 @@ function ItemsList({
     return <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items to show.</Card>;
   }
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const open = openId === it.id;
         return (
@@ -1268,7 +1268,7 @@ function AisleQrModal({
                 </div>
               )}
               <div className="mt-2 text-sm font-semibold text-[var(--anchor-deep)]">{activeLabel}</div>
-              <code className="mt-1 max-w-full truncate text-xs text-[var(--anchor-gray)]">{activeUrl}</code>
+              <code className="mt-1 block w-full truncate text-center text-xs text-[var(--anchor-gray)]">{activeUrl}</code>
             </div>
 
             <div className="mt-4 flex flex-wrap justify-center gap-2">
