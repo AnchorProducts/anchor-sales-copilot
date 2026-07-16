@@ -929,12 +929,14 @@ function ItemsList({
             key={it.id}
             className={`overflow-hidden p-0 ${open ? "col-span-2 lg:col-span-3 xl:col-span-4" : ""}`}
           >
-            {/* Compact tile — click to open the item's details + actions. */}
+            {/* Compact tile — click the main area to open details + actions, or
+                the Edit button to jump straight into editing this item. */}
+            <div className="flex items-stretch">
             <button
               type="button"
               onClick={() => setOpenId(open ? null : it.id)}
               aria-expanded={open}
-              className="flex w-full items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
+              className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
             >
               <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
                 {it.image_url ? (
@@ -994,6 +996,21 @@ function ItemsList({
                 </div>
               </div>
             </button>
+              {/* Always-visible per-item edit — no need to expand the card first. */}
+              <button
+                type="button"
+                onClick={() => onEdit(it)}
+                disabled={busy}
+                aria-label={`Edit ${it.name}`}
+                title="Edit item"
+                className="flex shrink-0 items-center gap-1 border-l border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/30 disabled:opacity-50"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
+                  <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                </svg>
+                Edit
+              </button>
+            </div>
 
             {open && (
               <div className="border-t border-[var(--border-default)] px-3 py-3">
