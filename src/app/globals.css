@@ -523,8 +523,14 @@ input[type="datetime-local"] {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
+  /* Flex (not grid) so the modal's `width: min(100%, 640px)` measures 100% of
+     the padded viewport. A grid overlay sizes its implicit column to the
+     modal's content instead, which let wide modals overflow off-screen on
+     mobile. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
   padding: var(--space-3);
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(3px);
@@ -532,6 +538,12 @@ input[type="datetime-local"] {
 
 .ds-modal {
   width: min(100%, 640px);
+  /* The overlay centers the modal as a flex item, which defaults to
+     `min-width: auto` — a wide/unbreakable child (e.g. a long QR URL) would
+     otherwise stretch the modal past `width` and off the side of a phone.
+     `min-width: 0` keeps the modal at its computed width and clips overflow. */
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--anchor-white);
