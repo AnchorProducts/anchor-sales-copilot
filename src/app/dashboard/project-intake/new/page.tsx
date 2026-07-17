@@ -31,7 +31,7 @@ export default function ProjectIntakePage() {
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
             Use this when you&rsquo;re already working with Anchor and need a quote — share the
             project, roof, and equipment specs and our team will price it and follow up with
-            recommendations. Optionally flag whether it&rsquo;s an FM (Factory Mutual) project and add
+            recommendations. Optionally flag whether it&rsquo;s an FM project and add
             an FM Index-Record # if it&rsquo;s FM insured.
           </p>
           <p className="mt-3 text-sm text-[var(--anchor-gray)]">

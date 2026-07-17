@@ -103,7 +103,7 @@ function CheckRow({
   );
 }
 
-// FM (Factory Mutual) is optional on a Project Intake: the user flags whether
+// FM is optional on a Project Intake: the user flags whether
 // it's an FM project and, if the project is FM insured, supplies the index #.
 function FMBlock({
   values,
@@ -126,7 +126,7 @@ function FMBlock({
             onChange("fmIndexRecord", "");
           }
         }}
-        label="This is an FM (Factory Mutual) project"
+        label="This is an FM project"
         hint="Check if the building/insurer follows FM Global requirements."
       />
       {fmProject && (
