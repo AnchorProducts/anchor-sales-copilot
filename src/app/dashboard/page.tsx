@@ -618,8 +618,7 @@ export default function DashboardPage() {
     // Sales personas get the workspace tools plus the submission forms.
     actions.push({ key: "assets",     href: "/assets",                       label: t("assetManagement"),     desc: t("assetManagementDesc"),     icon: "library",  badge: "Library"    });
     actions.push({ key: "chat",       href: "/chat",                         label: t("openCopilot"),         desc: "Get solution recommendations and next steps.", icon: "sparkles", badge: "AI" });
-    actions.push({ key: "project",    href: "/dashboard/opportunities/new",  label: t("projectIdentifier"),   desc: "New request — get a rep's help, no quote yet.",   icon: "clipboard", badge: "Projects"   });
-    actions.push({ key: "project-intake", href: "/dashboard/project-intake/new", label: "Project Intake",       desc: "Request a quote — you already work with Anchor.", icon: "clipboard", badge: "Quote" });
+    actions.push({ key: "project",    href: "/dashboard/get-started",        label: "Talk to a Rep or Request a Quote", desc: "New to Anchor or an existing customer — we'll route you to the right form.", icon: "clipboard", badge: "Projects" });
     actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: "Coming soon — temporarily unavailable.", icon: "shield",   badge: "Soon", comingSoon: true });
     actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
     actions.push({ key: "marketing-orders", href: "/marketing-orders",        label: "Marketing Orders",     desc: "Order samples, brochures, swag, and other marketing collateral.", icon: "package", badge: "Marketing" });
