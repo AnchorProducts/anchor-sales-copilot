@@ -28,6 +28,11 @@ export default function NewNotableProjectPage() {
           <div className="ds-caption">{t("notableProject")}</div>
           <h1 className="mt-2 text-2xl">{t("notableProjectTitle")}</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("notableProjectFormDesc")}</p>
+          <p className="mt-3 text-sm text-[var(--anchor-gray)]">
+            Share the project name and location, the Anchor solution(s) used, and a few strong
+            rooftop photos. Standout submissions get featured in the showcase and marketing —
+            a great way to get your work in front of the wider Anchor network.
+          </p>
         </Card>
         {!ready ? (
           <ToolLoader feature="notable" label={t("loading")} />
