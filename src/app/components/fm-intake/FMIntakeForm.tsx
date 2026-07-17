@@ -12,6 +12,7 @@ type FieldDef = {
   kind?: "text" | "date" | "yesno";
   placeholder?: string;
   full?: boolean;
+  required?: boolean;
 };
 
 type Values = Record<string, string>;
@@ -32,7 +33,10 @@ function FieldGrid({
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {fields.map((f) => (
         <label key={f.key} className={f.full ? "sm:col-span-2" : ""}>
-          <span className={labelCls}>{f.label}</span>
+          <span className={labelCls}>
+            {f.label}
+            {f.required && <span className="text-red-500"> *</span>}
+          </span>
           {f.kind === "yesno" ? (
             <Select
               value={values[f.key] ?? ""}
@@ -427,10 +431,10 @@ export default function FMIntakeForm() {
     setter((cur) => (cur.length <= 1 ? cur : cur.filter((_, i) => i !== idx)));
 
   const customerFields: FieldDef[] = [
-    { key: "firstName", label: "First Name" },
-    { key: "lastName", label: "Last Name" },
-    { key: "phone", label: "Phone Number" },
-    { key: "email", label: "Email" },
+    { key: "firstName", label: "First Name", required: true },
+    { key: "lastName", label: "Last Name", required: true },
+    { key: "phone", label: "Phone Number", required: true },
+    { key: "email", label: "Email", required: true },
     { key: "companyName", label: "Company Name" },
     { key: "projectName", label: "Project Name / Building Name or #", full: true },
     { key: "projectAddress", label: "Project / Building Address", full: true },
@@ -763,9 +767,6 @@ export default function FMIntakeForm() {
         <Button onClick={submit} disabled={saving} className="text-sm">
           {saving ? "Submitting…" : "Submit quote request"}
         </Button>
-        <span className="text-xs text-[var(--anchor-gray)]">
-          Required: name + email or phone. Everything else is optional.
-        </span>
       </div>
     </div>
   );
