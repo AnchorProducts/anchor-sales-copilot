@@ -85,28 +85,22 @@ export default function ProjectIntakePage() {
   );
 }
 
-// Optional, collapsed-by-default commission claim for authorized reps. Kept
-// separate from the quote request above — it posts its own claim to
-// /api/commission with its own submit button.
+// Optional commission claim for authorized reps — a check-to-reveal section
+// matching the intake form's other toggle sections. Kept separate from the
+// quote request above: it posts its own claim to /api/commission.
 function CommissionSection() {
   const [open, setOpen] = useState(false);
   return (
     <Card className="mt-4 p-4 sm:p-5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-start gap-3 text-left"
-      >
-        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--anchor-green)]/10 text-[var(--anchor-green)]">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M20 12V8H4a2 2 0 0 1 0-4h14v4" />
-            <rect x="2" y="6" width="20" height="14" rx="2" />
-            <circle cx="16" cy="13" r="1.5" />
-          </svg>
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-base font-bold text-[var(--anchor-deep)] sm:text-lg">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={open}
+          onChange={(e) => setOpen(e.target.checked)}
+          className="mt-1 h-5 w-5 shrink-0 rounded border-[var(--border-default)] text-[var(--anchor-green)] focus:ring-[var(--anchor-green)]"
+        />
+        <span>
+          <span className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">
             File a commission claim (optional)
           </span>
           <span className="mt-0.5 block text-sm text-[var(--anchor-gray)]">
@@ -114,19 +108,7 @@ function CommissionSection() {
             separate submission from the quote request above.
           </span>
         </span>
-        <svg
-          viewBox="0 0 24 24"
-          className={`mt-1 h-5 w-5 shrink-0 text-[var(--anchor-gray)] transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
+      </label>
       {open && (
         <div className="mt-4">
           <CommissionForm />
