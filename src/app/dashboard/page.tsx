@@ -244,6 +244,39 @@ function RepPopover({
   );
 }
 
+function StatesPopover({ states, onClose }: { states: string[]; onClose: () => void }) {
+  return (
+    <div role="menu" className="overflow-hidden rounded-2xl border border-black/10 bg-white p-1.5 text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+      <div className="px-3 pb-1 pt-2">
+        <div className="text-sm font-semibold text-[var(--anchor-deep)]">Service States</div>
+        <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+          The territories you&apos;re assigned to.
+        </div>
+      </div>
+      {states.length === 0 ? (
+        <div className="px-3 py-2 text-sm text-[var(--anchor-gray)]">No states assigned yet.</div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 px-3 py-2">
+          {states.map((st) => (
+            <span key={st} className="rounded-lg bg-[var(--anchor-mint)]/50 px-2 py-1 text-xs font-semibold text-[var(--anchor-deep)]">
+              {st}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="my-1 border-t border-black/5" />
+      <Link
+        href="/dashboard/settings"
+        role="menuitem"
+        onClick={onClose}
+        className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+      >
+        Manage in Settings
+      </Link>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => supabaseBrowser(), []);
@@ -257,6 +290,7 @@ export default function DashboardPage() {
   const [salesReps, setSalesReps] = useState<SalesRepLite[]>([]);
   const [internalReps, setInternalReps] = useState<SalesRepLite[]>([]);
   const [repModalOpen, setRepModalOpen] = useState(false);
+  const [statesModalOpen, setStatesModalOpen] = useState(false);
   const [fullName, setFullName] = useState<string>("");
   const [canSeeCommission, setCanSeeCommission] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -555,7 +589,9 @@ export default function DashboardPage() {
     ? { label: "Service Reps", value: "All", trend: "Manage", href: "/admin/sales-reps", icon: "user" as IconName, tutorialKey: "stat-reps" }
     : isInternal
     ? { label: "Resource Library", value: "Browse", trend: "Library", href: "/assets", icon: "library" as IconName, tutorialKey: "stat-assets" }
-    : { label: serviceStates.length > 1 ? "Service States" : "Service State", value: serviceStates.length ? serviceStates.join(", ") : "—", trend: serviceStates.length ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceStates.length ? serviceStates.join(", ") : "Set", tutorialKey: "stat-service-state" };
+    // Multi-state reps get the count in the circle and the full list in a
+    // popover — the joined list overflows the fixed-size circle past one state.
+    : { label: serviceStates.length > 1 ? "Service States" : "Service State", value: serviceStates.length ? serviceStates.join(", ") : "—", trend: serviceStates.length ? "Active" : "Set up", href: "/dashboard/settings", icon: "shield" as IconName, text: serviceStates.length > 1 ? String(serviceStates.length) : serviceStates[0] || "Set", popup: serviceStates.length > 1 ? "states" : undefined, tutorialKey: "stat-service-state" };
 
   const stat2 = isAdmin
     ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
@@ -854,19 +890,27 @@ export default function DashboardPage() {
         <div data-tutorial="stat-buttons" className="grid grid-cols-2 gap-4">
           {stats.map((s, i) => {
             const isExt = "external" in s && (s as { external?: boolean }).external;
-            const isPopup = "popup" in s && (s as { popup?: string }).popup === "rep";
+            const popupKind = "popup" in s ? (s as { popup?: string }).popup : undefined;
+            const isStatesPopup = popupKind === "states";
+            const isPopup = popupKind === "rep" || isStatesPopup;
+            const popOpen = isStatesPopup ? statesModalOpen : repModalOpen;
+            const setPopOpen = isStatesPopup ? setStatesModalOpen : setRepModalOpen;
             const tKey = (s as { tutorialKey?: string }).tutorialKey;
             const Wrap = isPopup
               ? ({ children }: { children: React.ReactNode }) => (
                   <div className="relative flex flex-col items-center gap-2">
-                    <button type="button" onClick={() => setRepModalOpen((v) => !v)} aria-label={s.label} aria-expanded={repModalOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">
+                    <button type="button" onClick={() => setPopOpen((v) => !v)} aria-label={s.label} aria-expanded={popOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">
                       {children}
                     </button>
-                    {repModalOpen && (
+                    {popOpen && (
                       <>
-                        <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
-                        <div className="absolute bottom-full right-0 z-[120] mb-3 w-64">
-                          <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setRepModalOpen(false)} />
+                        <button type="button" aria-hidden tabIndex={-1} onClick={() => setPopOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
+                        <div className={`absolute bottom-full z-[120] mb-3 w-64 ${isStatesPopup ? "left-0" : "right-0"}`}>
+                          {isStatesPopup ? (
+                            <StatesPopover states={serviceStates} onClose={() => setPopOpen(false)} />
+                          ) : (
+                            <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setPopOpen(false)} />
+                          )}
                         </div>
                       </>
                     )}
@@ -886,7 +930,7 @@ export default function DashboardPage() {
               <Wrap key={i}>
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)]">
                   {sText ? (
-                    <span className="text-[20px] font-bold tracking-tight">{sText}</span>
+                    <span className="max-w-full truncate px-1 text-[20px] font-bold tracking-tight">{sText}</span>
                   ) : (
                     <Icon name={s.icon} className="h-7 w-7" />
                   )}
@@ -1051,17 +1095,25 @@ export default function DashboardPage() {
             <div data-tutorial="stat-buttons" className="mt-6 flex flex-wrap items-start gap-8">
               {stats.map((s, i) => {
                 const isExt = "external" in s && (s as { external?: boolean }).external;
-                const isPopup = "popup" in s && (s as { popup?: string }).popup === "rep";
+                const popupKind = "popup" in s ? (s as { popup?: string }).popup : undefined;
+                const isStatesPopup = popupKind === "states";
+                const isPopup = popupKind === "rep" || isStatesPopup;
+                const popOpen = isStatesPopup ? statesModalOpen : repModalOpen;
+                const setPopOpen = isStatesPopup ? setStatesModalOpen : setRepModalOpen;
                 const tKey = (s as { tutorialKey?: string }).tutorialKey;
                 const Wrap = isPopup
                   ? ({ children }: { children: React.ReactNode }) => (
                       <div className="relative flex flex-col items-center gap-2">
-                        <button type="button" onClick={() => setRepModalOpen((v) => !v)} aria-label={s.label} aria-expanded={repModalOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</button>
-                        {repModalOpen && (
+                        <button type="button" onClick={() => setPopOpen((v) => !v)} aria-label={s.label} aria-expanded={popOpen} data-tutorial={tKey} className="group flex flex-col items-center gap-2">{children}</button>
+                        {popOpen && (
                           <>
-                            <button type="button" aria-hidden tabIndex={-1} onClick={() => setRepModalOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
+                            <button type="button" aria-hidden tabIndex={-1} onClick={() => setPopOpen(false)} className="fixed inset-0 z-[110] cursor-default" />
                             <div className="absolute bottom-full left-1/2 z-[120] mb-3 w-64 -translate-x-1/2">
-                              <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setRepModalOpen(false)} />
+                              {isStatesPopup ? (
+                                <StatesPopover states={serviceStates} onClose={() => setPopOpen(false)} />
+                              ) : (
+                                <RepPopover salesReps={salesReps} internalReps={internalReps} onClose={() => setPopOpen(false)} />
+                              )}
                             </div>
                           </>
                         )}
@@ -1079,7 +1131,7 @@ export default function DashboardPage() {
                   <Wrap key={i}>
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-[var(--anchor-deep)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition group-hover:bg-[var(--anchor-green)] group-hover:text-white group-hover:shadow-[0_4px_14px_rgba(0,0,0,0.1)]">
                       {sText ? (
-                        <span className="text-2xl font-bold tracking-tight">{sText}</span>
+                        <span className="max-w-full truncate px-1 text-2xl font-bold tracking-tight">{sText}</span>
                       ) : (
                         <Icon name={s.icon} className="h-8 w-8" />
                       )}
