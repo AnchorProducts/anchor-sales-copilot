@@ -649,7 +649,7 @@ export default function DashboardPage() {
     ? { label: "Reports", value: "View", trend: "Audit", href: "/admin/rooftop-reports", icon: "clipboard" as IconName, tutorialKey: "stat-reports" }
     : isInternal
     ? { label: "Copilot", value: "Ask", trend: "AI", href: "/chat", icon: "sparkles" as IconName, tutorialKey: "stat-copilot" }
-    : { label: salesReps.length > 1 ? "Your Contacts" : "Your Contact", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: "#", popup: "rep", icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
+    : { label: salesReps.length > 1 ? "Contact Your Reps" : "Contact Your Rep", value: salesReps[0]?.name?.split(" ")[0] || "—", trend: salesReps[0]?.teams_link ? "Ready" : "Setup", href: "#", popup: "rep", icon: "phone" as IconName, tutorialKey: "stat-your-rep" };
 
   // Internal sales reps don't get the Asset Library / Copilot stat tiles.
   const stats = isInternal && !isAdmin ? [] : [stat1, stat2];
