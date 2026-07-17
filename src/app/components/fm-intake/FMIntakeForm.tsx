@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import Button from "@/app/components/ui/Button";
@@ -194,13 +194,90 @@ function ToggleSection({
 }
 
 // Reference diagram shown at the top of a section to illustrate the fields.
+// Click to open a full-screen lightbox; click the enlarged image to zoom into
+// the spot under the cursor (move to pan), and use the ✕ / Escape to close.
 function RefImage({ src, alt }: { src: string; alt: string }) {
+  const [open, setOpen] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [origin, setOrigin] = useState("50% 50%");
+
+  const close = () => {
+    setOpen(false);
+    setZoomed(false);
+    setOrigin("50% 50%");
+  };
+
+  // Escape to close + lock body scroll while the lightbox is open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  const trackPointer = (clientX: number, clientY: number, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const x = ((clientX - r.left) / r.width) * 100;
+    const y = ((clientY - r.top) / r.height) * 100;
+    setOrigin(`${x}% ${y}%`);
+  };
+
   return (
-    <img
-      src={src}
-      alt={alt}
-      className="mb-4 w-full max-w-2xl rounded-xl border border-[var(--border-default)]"
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Enlarge ${alt}`}
+        className="mb-4 block w-full max-w-2xl cursor-zoom-in overflow-hidden rounded-xl border border-[var(--border-default)]"
+      >
+        <img src={src} alt={alt} className="block w-full" />
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={close}
+        >
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close image"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-2xl leading-none text-white transition hover:bg-white/25"
+          >
+            ×
+          </button>
+          <img
+            src={src}
+            alt={alt}
+            onClick={(e) => {
+              e.stopPropagation();
+              trackPointer(e.clientX, e.clientY, e.currentTarget);
+              setZoomed((z) => !z);
+            }}
+            onMouseMove={(e) => {
+              if (zoomed) trackPointer(e.clientX, e.clientY, e.currentTarget);
+            }}
+            onTouchMove={(e) => {
+              const t = e.touches[0];
+              if (zoomed && t) trackPointer(t.clientX, t.clientY, e.currentTarget);
+            }}
+            className={`max-h-[90vh] max-w-[92vw] rounded-lg object-contain transition-transform duration-200 ${
+              zoomed ? "cursor-zoom-out" : "cursor-zoom-in"
+            }`}
+            style={{ transform: zoomed ? "scale(2.4)" : "scale(1)", transformOrigin: origin }}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
