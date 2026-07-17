@@ -253,8 +253,8 @@ const HVAC_FIELDS: FieldDef[] = [
 ];
 
 const PIPE_STACK_FIELDS: FieldDef[] = [
-  { key: "pipeStackHeight", label: "Pipe Stack Height (in.)" },
-  { key: "pipeStackDiameter", label: "Pipe Stack Diameter (in.)" },
+  { key: "pipeStackHeight", label: "Overall Height (in.)" },
+  { key: "pipeStackDiameter", label: "Pipe Diameter (in.)" },
   { key: "heightFirstGuy", label: "Height to First Set of Guy Wires (in.)" },
   { key: "heightOptionalGuy", label: "Height to Optional Set of Guy Wires (in.)" },
   { key: "pipeWallThickness", label: "Pipe Wall Thickness (in.)" },
