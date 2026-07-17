@@ -182,6 +182,20 @@ function RepPopover({
 }) {
   const row =
     "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40";
+
+  // Reps that span more than one of the rep's service states get a state filter
+  // so the popover shows one state's reps at a time instead of the full list.
+  const availableStates = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of [...salesReps, ...internalReps]) (r.states ?? []).forEach((x) => s.add(x));
+    return [...s].sort();
+  }, [salesReps, internalReps]);
+  const [stateFilter, setStateFilter] = useState<string>("all");
+  const showStateFilter = availableStates.length > 1;
+  const matchesFilter = (r: SalesRepLite) =>
+    !showStateFilter || stateFilter === "all" || (r.states ?? []).includes(stateFilter);
+  const visibleSales = salesReps.filter(matchesFilter);
+  const visibleInternal = internalReps.filter(matchesFilter);
   const mail = (
     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
@@ -195,12 +209,21 @@ function RepPopover({
   );
 
   return (
-    <div role="menu" className="overflow-hidden rounded-2xl border border-black/10 bg-white p-1.5 text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+    <div role="menu" className="flex max-h-[75vh] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+      {showStateFilter && (
+        <div className="flex flex-wrap gap-1.5 border-b border-black/5 px-2 py-2">
+          <FilterChip label="All" active={stateFilter === "all"} onClick={() => setStateFilter("all")} />
+          {availableStates.map((s) => (
+            <FilterChip key={s} label={s} active={stateFilter === s} onClick={() => setStateFilter(s)} />
+          ))}
+        </div>
+      )}
+      <div className="overflow-y-auto p-1.5">
       {salesReps.length === 0 && internalReps.length === 0 ? (
         <div className="px-3 py-2 text-sm text-[var(--anchor-gray)]">No reps assigned yet.</div>
       ) : (
         <>
-          {salesReps.map((rep, i) => (
+          {visibleSales.map((rep, i) => (
             <div key={`ext-${i}`}>
               <div className="px-3 pb-1 pt-2">
                 <div className="text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "Sales rep"}</div>
@@ -221,9 +244,13 @@ function RepPopover({
             </div>
           ))}
 
-          {internalReps.length > 0 && <div className="my-1 border-t border-black/5" />}
+          {visibleSales.length > 0 && visibleInternal.length > 0 && <div className="my-1 border-t border-black/5" />}
 
-          {internalReps.map((rep, i) => (
+          {visibleSales.length === 0 && visibleInternal.length === 0 && (
+            <div className="px-3 py-2 text-sm text-[var(--anchor-gray)]">No reps for this state.</div>
+          )}
+
+          {visibleInternal.map((rep, i) => (
             <div key={`int-${i}`}>
               <div className="px-3 pb-1 pt-2">
                 <div className="text-sm font-semibold text-[var(--anchor-deep)]">{rep.name || "Inside sales rep"}</div>
@@ -240,7 +267,24 @@ function RepPopover({
           ))}
         </>
       )}
+      </div>
     </div>
+  );
+}
+
+function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+        active
+          ? "bg-[var(--anchor-deep)] text-white"
+          : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/40"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -441,21 +485,29 @@ export default function DashboardPage() {
             if (serviceZip) qs.set("zip", serviceZip);
             const res = await fetch(`/api/sales-reps/by-state?${qs.toString()}`, { cache: "no-store" });
             const json = await res.json().catch(() => null);
-            return {
-              external: (Array.isArray(json?.reps) ? json.reps : []) as SalesRepLite[],
-              internal: (Array.isArray(json?.internal) ? json.internal : []) as SalesRepLite[],
-            };
+            // Tag each rep with the service state it was fetched under, so a
+            // multi-state rep can filter the popover to one state at a time.
+            const tag = (reps: unknown): SalesRepLite[] =>
+              (Array.isArray(reps) ? reps : []).map((r) => ({ ...(r as SalesRepLite), states: [state] }));
+            return { external: tag(json?.reps), internal: tag(json?.internal) };
           })
         );
         if (!alive) return;
+        // Dedupe by email/name, unioning the service states each rep covers.
         const dedupe = (reps: SalesRepLite[]) => {
-          const seen = new Set<string>();
-          const out: SalesRepLite[] = [];
+          const byKey = new Map<string, SalesRepLite>();
           for (const r of reps) {
             const key = (r.email || r.name || "").trim().toLowerCase();
-            if (key && !seen.has(key)) { seen.add(key); out.push(r); }
+            if (!key) continue;
+            const existing = byKey.get(key);
+            if (existing) {
+              const merged = new Set([...(existing.states ?? []), ...(r.states ?? [])]);
+              existing.states = [...merged].sort();
+            } else {
+              byKey.set(key, { ...r, states: [...(r.states ?? [])].sort() });
+            }
           }
-          return out;
+          return [...byKey.values()];
         };
         setSalesReps(dedupe(results.flatMap((r) => r.external)));
         setInternalReps(dedupe(results.flatMap((r) => r.internal)));
