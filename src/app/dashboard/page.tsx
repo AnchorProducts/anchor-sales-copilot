@@ -90,7 +90,7 @@ function heroSpecFor(feature: HeroFeatureKey, role: string | null): HeroSpec {
       return { title: "Browse the Resource Library for fresh assets", linkLabel: "Open Library", href: "/assets" };
     case "consults":
       return role === "external_rep"
-        ? { title: "Send a Rooftop Equipment Consult to your inside team", linkLabel: "Start a Consult", href: "/dashboard/opportunities/new" }
+        ? { title: "Talk to a rep or request a quote", linkLabel: "Get started", href: "/dashboard/get-started" }
         : { title: "Triage Rooftop Equipment Consults from your region", linkLabel: "Open Consults", href: "/dashboard/opportunities" };
     case "commission":
       return { title: "File a Commission Claim before your order ships", linkLabel: "Open Claim Form", href: "/dashboard/commission/new" };
