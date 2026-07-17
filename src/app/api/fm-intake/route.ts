@@ -5,6 +5,8 @@ import { Resend } from "resend";
 import { internalAppUrl } from "@/lib/appUrl";
 import { sendPushToTool } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails } from "@/lib/push/recipients";
+import { resolveStatesForUser } from "@/lib/sales/regions";
+import { deriveUsState } from "@/lib/sales/deriveState";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -146,22 +148,53 @@ export async function POST(req: Request) {
       ? payload.equipment.map((e: unknown) => clean(e)).filter(Boolean)
       : [];
 
-    const { data: row, error: insErr } = await supabaseAdmin
-      .from("fm_intake_submissions")
-      .insert({
-        created_by: auth.user.id,
-        first_name: clean(customer.firstName) || null,
-        last_name: clean(customer.lastName) || null,
-        email: clean(customer.email) || null,
-        phone: clean(customer.phone) || null,
-        company_name: clean(customer.companyName) || null,
-        project_name: clean(customer.projectName) || null,
-        project_address: clean(customer.projectAddress) || null,
-        equipment,
-        payload,
-      })
-      .select("id")
-      .single();
+    // Territory routing: derive the US state from the project address (+ optional
+    // lat/long) so internal reps see the intake in their region's Active Consults
+    // queue. Best-effort — an undetermined state leaves the row admin-only.
+    let state: string | null = null;
+    try {
+      state = await deriveUsState(clean(customer.projectAddress), clean(customer.latLong));
+    } catch (e: any) {
+      console.warn("fm intake state derivation failed", e?.message || e);
+    }
+
+    const baseRow: Record<string, unknown> = {
+      created_by: auth.user.id,
+      first_name: clean(customer.firstName) || null,
+      last_name: clean(customer.lastName) || null,
+      email: clean(customer.email) || null,
+      phone: clean(customer.phone) || null,
+      company_name: clean(customer.companyName) || null,
+      project_name: clean(customer.projectName) || null,
+      project_address: clean(customer.projectAddress) || null,
+      equipment,
+      payload,
+    };
+
+    // Insert with the territory columns; if the migration hasn't been applied yet
+    // (state/region_code missing), retry without them so a customer's quote
+    // request never fails — it just stays unscoped until the migration lands.
+    let row: { id?: string } | null = null;
+    let insErr: { message?: string } | null = null;
+    {
+      const res = await supabaseAdmin
+        .from("fm_intake_submissions")
+        .insert({ ...baseRow, state, region_code: state })
+        .select("id")
+        .single();
+      row = res.data;
+      insErr = res.error;
+      if (insErr && /region_code|['"]?state['"]?\s+column|could not find/i.test(insErr.message || "")) {
+        console.warn("fm_intake state columns missing — inserting unscoped. Apply migration 20260717_000001.");
+        const retry = await supabaseAdmin
+          .from("fm_intake_submissions")
+          .insert(baseRow)
+          .select("id")
+          .single();
+        row = retry.data;
+        insErr = retry.error;
+      }
+    }
     if (insErr || !row?.id) {
       return NextResponse.json({ error: insErr?.message || "Failed to save intake." }, { status: 500 });
     }
@@ -210,24 +243,56 @@ export async function POST(req: Request) {
   }
 }
 
-// Admin-only: the submissions list (the back office). Summary fields per row plus
-// attachment count and the reviewer's name.
-export async function GET() {
+// Submissions list. Admin sees everything; an internal (anchor_rep) sees only
+// the intakes in their assigned states — the same territory scoping REC consults
+// use — so this list can be folded into the internal Active Consults queue.
+export async function GET(req: Request) {
   try {
     const supabase = await supabaseRoute();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((await getRole(auth.user.id)) !== "admin") {
+    const role = await getRole(auth.user.id);
+    if (role !== "admin" && role !== "anchor_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("fm_intake_submissions")
-      .select(
-        "id,first_name,last_name,email,phone,company_name,project_name,project_address,equipment,attachments,status,review_notes,reviewed_by,reviewed_at,created_at"
-      )
-      .order("created_at", { ascending: false })
-      .limit(500);
+    // anchor_rep is auto-scoped to their assigned states (null = admin/no scope,
+    // [] = anchor_rep with no states yet, ["TX",…] = scoped by region_code).
+    let repStates: string[] | null = null;
+    if (role === "anchor_rep") {
+      repStates = await resolveStatesForUser(auth.user.id);
+      if (repStates.length === 0) {
+        return NextResponse.json({ items: [], scopedStates: [] });
+      }
+    }
+
+    const region = clean(new URL(req.url).searchParams.get("region")).toUpperCase();
+    const BASE_COLS =
+      "id,first_name,last_name,email,phone,company_name,project_name,project_address,equipment,attachments,status,review_notes,reviewed_by,reviewed_at,created_at";
+
+    const runList = async (withState: boolean) => {
+      let q = supabaseAdmin
+        .from("fm_intake_submissions")
+        .select(withState ? `${BASE_COLS},state,region_code` : BASE_COLS)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (withState) {
+        // Admin may narrow by region via ?region=XX; scoped reps are always filtered.
+        if (repStates && repStates.length > 0) q = q.in("region_code", repStates);
+        else if (region) q = q.eq("region_code", region);
+      }
+      return q;
+    };
+
+    let { data, error } = await runList(true);
+    // Migration 20260717_000001 not applied yet? Fall back to the un-scoped list
+    // so admins still see submissions. A scoped rep can't be filtered without the
+    // column, so they get an empty list until the migration lands.
+    if (error && /region_code|['"]?state['"]?\s+column|could not find/i.test(error.message || "")) {
+      console.warn("fm_intake state columns missing — listing unscoped. Apply migration 20260717_000001.");
+      if (repStates) return NextResponse.json({ items: [], scopedStates: repStates });
+      ({ data, error } = await runList(false));
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const rows = (data || []) as any[];
@@ -252,6 +317,8 @@ export async function GET() {
       company_name: r.company_name,
       project_name: r.project_name,
       project_address: r.project_address,
+      state: r.state || null,
+      region_code: r.region_code || null,
       equipment: r.equipment || [],
       attachment_count: Array.isArray(r.attachments) ? r.attachments.length : 0,
       status: r.status || "new",
@@ -261,7 +328,7 @@ export async function GET() {
       created_at: r.created_at,
     }));
 
-    return NextResponse.json({ items });
+    return NextResponse.json({ items, scopedStates: repStates });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load submissions." }, { status: 500 });
   }

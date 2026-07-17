@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isFmIntakeStatus } from "@/lib/fmIntake";
+import { resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,14 +19,16 @@ async function getRole(userId: string): Promise<string> {
   return clean((data as { role?: string } | null)?.role);
 }
 
-// GET — one submission in full, with signed URLs for its attachments. Admin only.
+// GET — one submission in full, with signed URLs for its attachments. Admin sees
+// any; an internal (anchor_rep) sees one only if it's in their assigned states.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     const supabase = await supabaseRoute();
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if ((await getRole(auth.user.id)) !== "admin") {
+    const role = await getRole(auth.user.id);
+    if (role !== "admin" && role !== "anchor_rep") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -38,6 +41,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!data) return NextResponse.json({ error: "Submission not found." }, { status: 404 });
 
     const row = data as any;
+
+    // Territory gate for scoped reps: only their states' intakes.
+    if (role === "anchor_rep") {
+      const repStates = await resolveStatesForUser(auth.user.id);
+      const region = clean(row.region_code).toUpperCase();
+      if (!region || !repStates.includes(region)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
     const attachments = await Promise.all(
       (Array.isArray(row.attachments) ? row.attachments : []).map(async (a: any) => {
         const path = clean(a?.path);
