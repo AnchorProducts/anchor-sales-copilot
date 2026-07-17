@@ -193,6 +193,17 @@ function ToggleSection({
   );
 }
 
+// Reference diagram shown at the top of a section to illustrate the fields.
+function RefImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="mb-4 w-full max-w-2xl rounded-xl border border-[var(--border-default)]"
+    />
+  );
+}
+
 function LinkButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -509,11 +520,7 @@ export default function FMIntakeForm() {
         open={showRoof}
         onToggle={setShowRoof}
       >
-        <img
-          src="/existing_roof_details.png"
-          alt="Existing roof details reference diagram"
-          className="mb-4 w-full max-w-2xl rounded-xl border border-[var(--border-default)]"
-        />
+        <RefImage src="/existing_roof_details.png" alt="Existing roof details reference diagram" />
         {repeatBlock("buildings", "Building", buildings, setBuildings, BUILDING_FIELDS)}
       </ToggleSection>
 
@@ -562,6 +569,7 @@ export default function FMIntakeForm() {
 
       {has("HVAC") && (
         <Section title="Section 5: HVAC – Existing Unit Details" description="Add up to 3 unit sizes.">
+          <RefImage src="/HVAC.png" alt="HVAC unit reference diagram" />
           {repeatBlock("units", "Unit", hvacUnits, setHvacUnits, HVAC_FIELDS)}
         </Section>
       )}
@@ -571,12 +579,14 @@ export default function FMIntakeForm() {
           title="Section 6: Pipe Stack Securement – Critical Dimensions"
           description="If stacks differ, add up to 3 sets of dimensions."
         >
+          <RefImage src="/Pipe_Stack.png" alt="Pipe stack reference diagram" />
           {repeatBlock("pipe stacks", "Pipe stack", pipeStacks, setPipeStacks, PIPE_STACK_FIELDS)}
         </Section>
       )}
 
       {has("Air Duct") && (
         <Section title="Section 7: Air Duct Securement">
+          <RefImage src="/Air_Duct.png" alt="Air duct securement reference diagram" />
           <FieldGrid
             fields={AIR_DUCT_FIELDS}
             values={airDuct}
@@ -590,6 +600,7 @@ export default function FMIntakeForm() {
           title="Section 8: Snow Retention System – Critical Information"
           description="Please add a drawing, roof plan, or marked satellite view in the photos step to show where snow retention should go."
         >
+          <RefImage src="/Snow_Retention.png" alt="Snow retention reference diagram" />
           <FieldGrid
             fields={SNOW_FIELDS}
             values={snow}
@@ -600,6 +611,7 @@ export default function FMIntakeForm() {
 
       {has("Guardrail") && (
         <Section title="Section 9: AP x Kattsafe – Roof Mounted Guardrail Needs">
+          <RefImage src="/Guardrail.jpeg" alt="Roof mounted guardrail reference diagram" />
           <FieldGrid
             fields={GUARDRAIL_FIELDS}
             values={guardrail}
@@ -610,6 +622,7 @@ export default function FMIntakeForm() {
 
       {has("Roof Ladder") && (
         <Section title="Section 10: AP x Kattsafe – Fixed Roof Ladder Needs">
+          <RefImage src="/Roof_ladder.jpg" alt="Fixed roof ladder reference diagram" />
           <FieldGrid
             fields={LADDER_FIELDS}
             values={roofLadder}
