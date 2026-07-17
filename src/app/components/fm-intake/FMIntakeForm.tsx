@@ -763,8 +763,8 @@ export default function FMIntakeForm() {
         </label>
       </ToggleSection>
 
-      <div className="flex items-center gap-3 pb-4">
-        <Button onClick={submit} disabled={saving} className="text-sm">
+      <div className="flex justify-center pb-4">
+        <Button onClick={submit} disabled={saving} className="flex w-full justify-center text-sm">
           {saving ? "Submitting…" : "Submit quote request"}
         </Button>
       </div>
