@@ -242,13 +242,13 @@ const ENGINEERING_FIELDS: FieldDef[] = [
 ];
 
 const HVAC_FIELDS: FieldDef[] = [
-  { key: "curbWidth", label: "Curb Width (in.)" },
-  { key: "curbHeight", label: "Curb Height (in.)" },
-  { key: "curbLength", label: "Curb Length (in.)" },
-  { key: "unitWidth", label: "Unit Width (in.)" },
-  { key: "unitHeight", label: "Unit Height (in.)" },
-  { key: "unitLength", label: "Unit Length (in.)" },
-  { key: "unitWeight", label: "Unit Weight (lbs.)" },
+  { key: "curbWidth", label: "Width of Curb (in.)" },
+  { key: "curbHeight", label: "Height of Curb (in.)" },
+  { key: "curbLength", label: "Length of Curb (in.)" },
+  { key: "unitWidth", label: "Width of Unit (in.)" },
+  { key: "unitHeight", label: "Height of Unit (in.)" },
+  { key: "unitLength", label: "Length of Unit (in.)" },
+  { key: "unitWeight", label: "Weight of Unit (lbs.)" },
   { key: "totalUnits", label: "Total # of Units with these Dimensions" },
 ];
 
