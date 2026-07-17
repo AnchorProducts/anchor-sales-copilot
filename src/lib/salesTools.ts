@@ -37,16 +37,12 @@ export const SALES_TOOLS: SalesTool[] = [
     audiences: ["internal", "external"],
   },
   {
+    // Single entry point that fronts both intake flows (the /dashboard/get-started
+    // chooser): Rooftop Equipment Consult for reps new to Anchor, Project Intake
+    // (quote) for existing customers. Deactivating this hides both from the tile.
     key: "project",
-    label: "Rooftop Equipment Consult",
-    description: "New request from someone new to Anchor who needs a rep's help (not a quote).",
-    icon: "clipboard",
-    audiences: ["internal", "external"],
-  },
-  {
-    key: "project-intake",
-    label: "Project Intake (Quote)",
-    description: "Quote request from an existing customer — project specs, optional FM details.",
+    label: "Talk to a Rep or Request a Quote",
+    description: "One tile fronting the Rooftop Equipment Consult (new to Anchor) and Project Intake quote (existing customer) forms.",
     icon: "clipboard",
     audiences: ["internal", "external"],
   },
