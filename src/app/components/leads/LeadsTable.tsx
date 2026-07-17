@@ -6,6 +6,7 @@ import { Card } from "@/app/components/ui/Card";
 import { Input, Select } from "@/app/components/ui/Field";
 import { Alert } from "@/app/components/ui/Alert";
 import { Table, TableWrapper } from "@/app/components/ui/Table";
+import { fmIntakeStatusLabel } from "@/lib/fmIntake";
 
 const STATUSES = ["new", "assigned", "contacted", "qualified", "closed_won", "closed_lost"];
 
@@ -18,6 +19,32 @@ type LeadRow = {
   assigned_rep_user_id: string | null;
 };
 
+type IntakeRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  project_name: string | null;
+  region_code: string | null;
+  status: string;
+  created_at: string;
+  reviewed_by_name: string | null;
+};
+
+// One row in the merged queue — a REC consult or a Project Intake.
+type UnifiedRow = {
+  id: string;
+  kind: "rec" | "intake";
+  title: string;
+  region: string;
+  status: string;
+  created_at: string;
+  assignment: string;
+  href: string;
+};
+
+type TypeFilter = "all" | "rec" | "intake";
+
 function formatWhen(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -27,9 +54,10 @@ function formatWhen(iso?: string | null) {
 export default function LeadsTable() {
   const [status, setStatus] = useState("");
   const [region, setRegion] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [rows, setRows] = useState<UnifiedRow[]>([]);
   // null  = admin (sees everything)
   // []    = anchor_rep with no states assigned yet
   // ["…"] = anchor_rep scoped to those states
@@ -42,31 +70,70 @@ export default function LeadsTable() {
     setError(null);
 
     try {
-      const params = new URLSearchParams();
-      if (status) params.set("status", status);
-      // Region filter only applies to admins (the only ones who see the
-      // input). For scoped reps the server enforces region itself.
-      if (region && !isScoped) params.set("region", region);
+      const leadParams = new URLSearchParams();
+      if (status) leadParams.set("status", status);
+      // Region filter only applies to admins (the only ones who see the input).
+      // For scoped reps the server enforces region itself.
+      if (region && !isScoped) leadParams.set("region", region);
 
-      const res = await fetch(`/api/leads?${params.toString()}`, { cache: "no-store" });
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : {};
+      const intakeParams = new URLSearchParams();
+      if (region && !isScoped) intakeParams.set("region", region);
 
-      if (!res.ok) {
-        setError(json?.error || "Failed to load opportunities.");
-        setLeads([]);
+      const [leadRes, intakeRes] = await Promise.all([
+        fetch(`/api/leads?${leadParams.toString()}`, { cache: "no-store" }),
+        fetch(`/api/fm-intake?${intakeParams.toString()}`, { cache: "no-store" }),
+      ]);
+
+      const leadJson = await leadRes.json().catch(() => ({}));
+      const intakeJson = await intakeRes.json().catch(() => ({}));
+
+      if (!leadRes.ok) {
+        setError(leadJson?.error || "Failed to load opportunities.");
+        setRows([]);
         setLoading(false);
         return;
       }
 
-      setLeads((json?.leads || []) as LeadRow[]);
-      setScopedStates(
-        Array.isArray(json?.scopedStates) ? (json.scopedStates as string[]) : null
+      const leads = (leadJson?.leads || []) as LeadRow[];
+      // Intake list is best-effort — never block the consult queue if it fails.
+      const intakes = intakeRes.ok ? ((intakeJson?.items || []) as IntakeRow[]) : [];
+
+      const leadRows: UnifiedRow[] = leads.map((l) => ({
+        id: l.id,
+        kind: "rec",
+        title: l.customer_company || "—",
+        region: l.region_code || "—",
+        status: l.status,
+        created_at: l.created_at,
+        assignment: l.assigned_rep_user_id ? "Assigned" : "Unassigned",
+        href: `/dashboard/opportunities/${encodeURIComponent(l.id)}`,
+      }));
+
+      const intakeRows: UnifiedRow[] = intakes.map((r) => ({
+        id: r.id,
+        kind: "intake",
+        title:
+          r.company_name ||
+          [r.first_name, r.last_name].filter(Boolean).join(" ") ||
+          r.project_name ||
+          "—",
+        region: r.region_code || "—",
+        status: fmIntakeStatusLabel(r.status),
+        created_at: r.created_at,
+        assignment: r.reviewed_by_name ? `Reviewed by ${r.reviewed_by_name}` : "—",
+        href: `/dashboard/project-intake/${encodeURIComponent(r.id)}`,
+      }));
+
+      const merged = [...leadRows, ...intakeRows].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
+
+      setRows(merged);
+      setScopedStates(Array.isArray(leadJson?.scopedStates) ? (leadJson.scopedStates as string[]) : null);
       setLoading(false);
     } catch (e: any) {
       setError(e?.message || "Failed to load opportunities.");
-      setLeads([]);
+      setRows([]);
       setLoading(false);
     }
   }
@@ -76,21 +143,38 @@ export default function LeadsTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, region]);
 
+  // A selected status is a REC-only concept; hide intakes so the filter reads
+  // consistently. The Type filter otherwise controls what's shown.
+  const visibleRows = rows.filter((r) => {
+    if (typeFilter !== "all" && r.kind !== typeFilter) return false;
+    if (status && r.kind === "intake") return false;
+    return true;
+  });
+
   return (
     <Card className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-semibold text-black">Consults</div>
+          <div className="text-sm font-semibold text-black">Consults &amp; Project Intakes</div>
           <div className="mt-1 text-sm text-[var(--anchor-gray)]">
             {isUnassigned
               ? "No states assigned to you yet"
               : isScoped
                 ? `Triage for your region: ${scopedStates!.join(", ")}`
-                : "Internal consult management"}
+                : "Internal consult & intake management"}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+            className="h-9 px-3 text-[12px] font-semibold"
+          >
+            <option value="all">All types</option>
+            <option value="rec">REC only</option>
+            <option value="intake">Project Intake only</option>
+          </Select>
           <Select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -121,24 +205,21 @@ export default function LeadsTable() {
           <Alert tone="error">{error}</Alert>
         ) : loading ? (
           <Alert tone="neutral">Loading…</Alert>
-        ) : leads.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <Alert tone={isUnassigned ? "error" : "neutral"}>
             {isUnassigned ? (
               <>
-                Your account isn&apos;t assigned to any states yet, so no
-                consults are showing. An admin needs to add you on the{" "}
-                <Link
-                  href="/admin/sales-reps"
-                  className="font-semibold underline"
-                >
+                Your account isn&apos;t assigned to any states yet, so nothing is
+                showing. An admin needs to add you on the{" "}
+                <Link href="/admin/sales-reps" className="font-semibold underline">
                   Sales Reps
                 </Link>{" "}
                 page with your email and the states you cover.
               </>
             ) : isScoped ? (
-              `No consults in ${scopedStates!.join(", ")} yet.`
+              `Nothing in ${scopedStates!.join(", ")} yet.`
             ) : (
-              "No leads found."
+              "No consults or intakes found."
             )}
           </Alert>
         ) : (
@@ -146,6 +227,7 @@ export default function LeadsTable() {
             <Table>
               <thead>
                 <tr>
+                  <th>Type</th>
                   <th>Company</th>
                   <th>Region</th>
                   <th>Status</th>
@@ -154,22 +236,31 @@ export default function LeadsTable() {
                 </tr>
               </thead>
               <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead.id}>
+                {visibleRows.map((r) => (
+                  <tr key={`${r.kind}-${r.id}`}>
+                    <td>
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                          r.kind === "rec"
+                            ? "bg-[var(--anchor-deep)] text-white"
+                            : "bg-[var(--anchor-mint)] text-[var(--anchor-deep)]"
+                        }`}
+                      >
+                        {r.kind === "rec" ? "REC" : "Project Intake"}
+                      </span>
+                    </td>
                     <td>
                       <Link
-                        href={`/dashboard/opportunities/${encodeURIComponent(lead.id)}`}
+                        href={r.href}
                         className="font-semibold text-[var(--anchor-deep)] hover:text-[var(--anchor-green)]"
                       >
-                        {lead.customer_company}
+                        {r.title}
                       </Link>
                     </td>
-                    <td className="text-[var(--anchor-gray)]">{lead.region_code}</td>
-                    <td className="text-[var(--anchor-gray)]">{lead.status}</td>
-                    <td className="text-[var(--anchor-gray)]">{formatWhen(lead.created_at)}</td>
-                    <td className="text-[var(--anchor-gray)]">
-                      {lead.assigned_rep_user_id ? "Assigned" : "Unassigned"}
-                    </td>
+                    <td className="text-[var(--anchor-gray)]">{r.region}</td>
+                    <td className="text-[var(--anchor-gray)]">{r.status}</td>
+                    <td className="text-[var(--anchor-gray)]">{formatWhen(r.created_at)}</td>
+                    <td className="text-[var(--anchor-gray)]">{r.assignment}</td>
                   </tr>
                 ))}
               </tbody>
