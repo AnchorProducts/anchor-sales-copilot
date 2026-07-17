@@ -509,6 +509,11 @@ export default function FMIntakeForm() {
         open={showRoof}
         onToggle={setShowRoof}
       >
+        <img
+          src="/existing_roof_details.png"
+          alt="Existing roof details reference diagram"
+          className="mb-4 w-full max-w-2xl rounded-xl border border-[var(--border-default)]"
+        />
         {repeatBlock("buildings", "Building", buildings, setBuildings, BUILDING_FIELDS)}
       </ToggleSection>
 
