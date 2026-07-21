@@ -237,6 +237,41 @@ async function sendMarketingOrderCreatorEmail(params: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
+// Tell an internal rep an admin just put them on an order. Best-effort email that
+// mirrors the fulfiller notifications — points them at the fulfillment queue.
+async function sendMarketingOrderAssignedEmail(params: {
+  orderId: string;
+  to: string;
+  assignedByName: string | null;
+  categories: string[];
+  items: string;
+  neededBy: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+  const orderUrl = internalAppUrl("/admin/marketing-orders");
+  const by = params.assignedByName ? ` by ${params.assignedByName}` : "";
+
+  const lines: string[] = [];
+  lines.push(`You've been assigned a marketing order${by} (ID: ${params.orderId.slice(0, 8)}).`);
+  lines.push("");
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push(`Needed by: ${params.neededBy || "—"}`);
+  lines.push("");
+  lines.push(`Work this order: ${orderUrl}`);
+
+  const subject = `You've been assigned a marketing order — ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+
+  const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await supabaseRoute();
@@ -544,7 +579,7 @@ export async function GET() {
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by"
+        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -587,6 +622,9 @@ export async function GET() {
         // Cache the territory test per submitter so shared submitters resolve once.
         const mineBySubmitter = new Map<string, boolean>();
         orders = orders.filter((o) => {
+          // An order explicitly assigned to me is always mine — even one an admin
+          // handed me outside my own territory (that's the point of assignment).
+          if (clean(o.assigned_to) === auth.user.id) return true;
           const sub = o.created_by ? subMap.get(o.created_by) : undefined;
           // Only outside reps' orders are routed to an inside rep's territory.
           if (!sub || sub.role !== "external_rep") return false;
@@ -630,7 +668,10 @@ export async function GET() {
     // delay), so the submitting rep knows which admin to contact — plus the admins
     // behind the latest activity entries. One batched lookup; mapped onto orders.
     const profileIds = new Set<string>();
-    for (const o of orders) if (o.updated_by) profileIds.add(o.updated_by);
+    for (const o of orders) {
+      if (o.updated_by) profileIds.add(o.updated_by);
+      if (o.assigned_to) profileIds.add(o.assigned_to);
+    }
     for (const a of latestActivity.values()) if (a.admin_id) profileIds.add(a.admin_id);
     const nameMap = new Map<string, { name: string | null; email: string | null }>();
     if (profileIds.size) {
@@ -645,6 +686,7 @@ export async function GET() {
 
     const items = orders.map((o) => {
       const updater = o.updated_by ? nameMap.get(o.updated_by) : undefined;
+      const assignee = o.assigned_to ? nameMap.get(o.assigned_to) : undefined;
       const act = latestActivity.get(o.id);
       const actor = act?.admin_id ? nameMap.get(act.admin_id) : undefined;
       const { updated_by, created_by, ...rest } = o;
@@ -652,6 +694,8 @@ export async function GET() {
         ...rest,
         updated_by_name: updater?.name ?? null,
         updated_by_email: updater?.email ?? null,
+        assigned_to_name: assignee?.name ?? null,
+        assigned_to_email: assignee?.email ?? null,
         last_activity: act
           ? {
               note: act.note,
@@ -664,7 +708,20 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ items, role });
+    // The pool an admin can assign an order to: internal sales reps (anchor_rep).
+    // Sent to fulfillers so the panel can render the owner picker + names. Only
+    // admins may actually change an assignment (enforced in PATCH).
+    let assignees: { id: string; full_name: string | null; email: string | null }[] = [];
+    if (isFulfiller) {
+      const { data: reps } = await supabaseAdmin
+        .from("profiles")
+        .select("id,full_name,email")
+        .eq("role", "anchor_rep")
+        .order("full_name", { ascending: true });
+      assignees = (reps || []) as any[];
+    }
+
+    return NextResponse.json({ items, role, assignees });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load orders." }, { status: 500 });
   }
@@ -692,16 +749,25 @@ export async function PATCH(req: Request) {
     // "from" status in the activity log.
     const { data: current, error: curErr } = await supabaseAdmin
       .from("marketing_orders")
-      .select("status,created_by")
+      .select("status,created_by,assigned_to,categories,items,needed_by")
       .eq("id", id)
       .maybeSingle();
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
     if (!current) return NextResponse.json({ error: "Order not found." }, { status: 404 });
     const fromStatus = clean((current as { status: string | null }).status) || "new";
+    const currentAssignee = clean((current as any).assigned_to) || null;
+    // Order content used only for assignment notifications below.
+    const current_categories = Array.isArray((current as any).categories)
+      ? ((current as any).categories as string[])
+      : [];
+    const current_items = clean((current as any).items);
+    const current_needed_by = clean((current as any).needed_by) || null;
 
-    // Inside reps may only update orders in their own territory (admins: any).
+    // Inside reps may only update orders in their own territory OR ones an admin
+    // explicitly assigned to them (admins: any).
     if (
       role === "anchor_rep" &&
+      currentAssignee !== auth.user.id &&
       !(await insideRepCanAccessOrder(clean(profile?.email), (current as any).created_by))
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -715,6 +781,41 @@ export async function PATCH(req: Request) {
     const hasStatus = body?.status !== undefined;
     const hasProjected = body?.projected_ship_date !== undefined;
     const hasDelayNotes = body?.delay_notes !== undefined;
+    const hasAssignment = body?.assigned_to !== undefined;
+
+    // Assigning (or clearing) an order's owner is an admin-only action. Validate
+    // the target is an internal sales rep before writing it, so an order can't be
+    // assigned to an outside rep or a non-user id.
+    let assignmentTarget: { id: string; full_name: string | null; email: string | null } | null = null;
+    let newAssignee: string | null = currentAssignee;
+    if (hasAssignment) {
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only admins can assign orders." }, { status: 403 });
+      }
+      newAssignee = clean(body?.assigned_to) || null;
+      if (newAssignee) {
+        const { data: target } = await supabaseAdmin
+          .from("profiles")
+          .select("id,role,full_name,email")
+          .eq("id", newAssignee)
+          .maybeSingle();
+        if (!target || clean((target as any).role) !== "anchor_rep") {
+          return NextResponse.json(
+            { error: "Pick an internal sales rep to assign this order to." },
+            { status: 400 }
+          );
+        }
+        assignmentTarget = {
+          id: newAssignee,
+          full_name: clean((target as any).full_name) || null,
+          email: clean((target as any).email) || null,
+        };
+      }
+      updates.assigned_to = newAssignee;
+      updates.assigned_by = auth.user.id;
+      updates.assigned_at = newAssignee ? now : null;
+    }
+    const assignmentChanged = hasAssignment && newAssignee !== currentAssignee;
 
     // The accountability note: what the admin did. Required to move an order to a
     // new phase, so every admin can see who handled what and no two people redo
@@ -758,7 +859,7 @@ export async function PATCH(req: Request) {
       if (hasDelayNotes) updates.delay_notes = delayNotes;
     }
 
-    if (!hasStatus && !hasProjected && !hasDelayNotes) {
+    if (!hasStatus && !hasProjected && !hasDelayNotes && !hasAssignment) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -766,7 +867,7 @@ export async function PATCH(req: Request) {
       .from("marketing_orders")
       .update(updates)
       .eq("id", id)
-      .select("id,status,projected_ship_date,delay_notes,updated_at")
+      .select("id,status,projected_ship_date,delay_notes,updated_at,assigned_to,assigned_at")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -894,6 +995,65 @@ export async function PATCH(req: Request) {
           delayNotes: finalNotes,
         }),
       });
+    }
+
+    // Assignment side-effects: log it to the shared activity trail (so the team
+    // sees who owns it) and, when handed to a real rep, tell that rep. All
+    // best-effort — a notification failure must never fail the assignment write.
+    if (assignmentChanged) {
+      const adminName = clean(profile?.full_name) || "An admin";
+      const assignNote = assignmentTarget
+        ? `Assigned this order to ${assignmentTarget.full_name || assignmentTarget.email || "a rep"}.`
+        : "Unassigned this order.";
+
+      const { data: assignAct } = await supabaseAdmin
+        .from("marketing_order_activity")
+        .insert({
+          order_id: id,
+          admin_id: auth.user.id,
+          from_status: fromStatus,
+          to_status: hasStatus && status ? status : fromStatus,
+          note: assignNote,
+        })
+        .select("id,from_status,to_status,note,created_at")
+        .single();
+      if (assignAct && !loggedActivity) {
+        loggedActivity = {
+          ...assignAct,
+          admin_name: clean(profile?.full_name) || null,
+          admin_email: clean(profile?.email) || null,
+        };
+      }
+
+      if (assignmentTarget) {
+        const shortId = String(id).slice(0, 8);
+        void sendPushToUser(assignmentTarget.id, {
+          title: "You've been assigned a marketing order",
+          body: `${adminName} assigned you ${marketingCategoriesLabel(current_categories)}.`,
+          url: "/admin/marketing-orders",
+          tag: `mo-assigned-${id}`,
+        }).catch((pushErr) => {
+          console.warn("marketing order assignment push failed", pushErr?.message || pushErr);
+        });
+
+        if (assignmentTarget.email) {
+          try {
+            await sendMarketingOrderAssignedEmail({
+              orderId: id,
+              to: assignmentTarget.email,
+              assignedByName: clean(profile?.full_name) || null,
+              categories: current_categories,
+              items: current_items,
+              neededBy: current_needed_by,
+            });
+          } catch (assignEmailErr: any) {
+            console.warn(
+              "marketing order assignment email failed",
+              assignEmailErr?.message || assignEmailErr
+            );
+          }
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, order: data, activity: loggedActivity, consumption });
