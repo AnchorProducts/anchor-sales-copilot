@@ -21,6 +21,11 @@ export type AdminCard = {
   featured?: boolean;
 };
 
+/** Admin cards belonging to the unreleased feature set behind "Site live".
+ *  They are removed from the console entirely — not just marked Inactive —
+ *  until an admin flips the switch in Manage Tools. */
+export const SITE_LIVE_CARD_KEYS = new Set(["portal-access"]);
+
 export const CARDS: AdminCard[] = [
   {
     key: "oem-analytics",
@@ -46,6 +51,15 @@ export const CARDS: AdminCard[] = [
     badge: "Config",
     href: "/admin/users",
     icon: "users",
+  },
+  {
+    key: "portal-access",
+    title: "Portal Access",
+    description:
+      "The shared authorized-emails list. Set each person's level (Admin/Internal) and team (Marketing, Sales, Operations, Leadership). Edits apply to the Anchor Internal Portal too.",
+    badge: "Config",
+    href: "/admin/portal-access",
+    icon: "shield",
   },
   {
     key: "sales-reps",

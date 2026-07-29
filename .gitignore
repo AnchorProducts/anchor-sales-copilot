@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# next-pwa build artifacts (content-hashed, regenerated each build)
+public/worker-*.js

@@ -1,0 +1,1402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anchor Sales Co-Pilot — Admin SOP</title>
+<meta name="description" content="Standard operating procedure for administering the Anchor Sales Co-Pilot, plus a developer handoff and the complete site map.">
+<style>
+:root{
+  --bg:#ffffff; --fg:#16211c; --muted:#5d6b64; --line:#e2e8e4;
+  --soft:#f5f8f6; --accent:#0b5d2e; --accent-soft:#e7f2ea;
+  --warn:#8a6d3b; --warn-soft:#fdf3e2; --code:#f0f3f1;
+  --max:56rem;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0f1512; --fg:#e6ece8; --muted:#9aa8a1; --line:#26302b;
+    --soft:#161d19; --accent:#4ba86f; --accent-soft:#16261c;
+    --warn:#d7b06a; --warn-soft:#241d10; --code:#1a221d;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:1.5rem}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.layout{display:grid;grid-template-columns:17rem minmax(0,1fr);gap:0;max-width:82rem;margin:0 auto}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+
+/* Sidebar */
+.side{
+  position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+  border-right:1px solid var(--line);padding:1.75rem 1.25rem 3rem;background:var(--soft);
+}
+@media (max-width:900px){
+  .side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:1.05rem;line-height:1.3}
+.brand span{display:block;font-weight:500;font-size:.8rem;color:var(--muted);margin-top:.2rem}
+.side nav{display:flex;flex-direction:column;margin-top:1.5rem;gap:1px}
+.side nav a{
+  color:var(--muted);text-decoration:none;font-size:.855rem;padding:.4rem .55rem;
+  border-radius:.4rem;border-left:2px solid transparent;
+}
+.side nav a:hover{color:var(--fg);background:var(--bg)}
+.side nav a.nav-l1{font-weight:700;color:var(--fg);margin-top:.6rem}
+.side-note{
+  margin-top:1.75rem;padding:.7rem .8rem;border-radius:.5rem;font-size:.78rem;
+  background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);
+}
+
+/* Content */
+main{padding:2.5rem 2.25rem 6rem;max-width:var(--max);min-width:0}
+@media (max-width:900px){main{padding:1.75rem 1.15rem 4rem}}
+h1{font-size:2rem;letter-spacing:-.025em;line-height:1.2;margin:0 0 .4rem}
+h2{
+  font-size:1.45rem;letter-spacing:-.02em;line-height:1.25;
+  margin:3.25rem 0 .9rem;padding-top:1.5rem;border-top:1px solid var(--line);
+}
+h1+h2,h2:first-of-type{border-top:0;padding-top:0;margin-top:2rem}
+h3{font-size:1.08rem;margin:2rem 0 .6rem;letter-spacing:-.01em}
+p,ul,ol{margin:0 0 1rem}
+li{margin:.3rem 0}
+a{color:var(--accent)}
+code{
+  font:.87em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--code);padding:.12em .38em;border-radius:.3em;
+}
+pre{background:var(--code);padding:1rem;border-radius:.6rem;overflow-x:auto}
+pre code{background:none;padding:0}
+hr{border:0;border-top:1px solid var(--line);margin:2.25rem 0}
+blockquote{
+  margin:1.25rem 0;padding:.85rem 1.1rem;border-left:3px solid var(--accent);
+  background:var(--accent-soft);border-radius:0 .5rem .5rem 0;
+}
+blockquote p{margin:0}
+strong{font-weight:680}
+
+/* Tables scroll inside their own box so the page never scrolls sideways. */
+.table-wrap{overflow-x:auto;margin:0 0 1.4rem;border:1px solid var(--line);border-radius:.6rem}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:.6rem .8rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--soft);font-weight:680;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+
+ul.checklist{list-style:none;padding-left:0}
+ul.checklist li{display:flex;gap:.55rem;align-items:flex-start}
+ul.checklist input{margin-top:.42rem;flex:none}
+
+/* Screenshot slots */
+.shot{margin:1.5rem 0 2rem;padding:0}
+.shot img{
+  display:block;width:100%;height:auto;border:1px solid var(--line);
+  border-radius:.6rem;background:var(--soft);
+}
+.shot figcaption{font-size:.83rem;color:var(--muted);margin-top:.5rem}
+.shot-n{
+  display:inline-block;font-weight:700;color:var(--accent);
+  font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;margin-right:.4rem;
+}
+.shot-todo{display:none}
+.shot.is-missing img,.shot.is-missing figcaption{display:none}
+.shot.is-missing .shot-todo{
+  display:block;border:1.5px dashed color-mix(in srgb,var(--accent) 45%,var(--line));
+  border-radius:.6rem;padding:1rem 1.15rem;background:var(--soft);
+}
+.shot-todo-h{font-size:.83rem;font-weight:700;color:var(--muted);margin-bottom:.6rem}
+.shot-todo dl{display:grid;grid-template-columns:5.5rem 1fr;gap:.3rem .8rem;margin:0;font-size:.85rem}
+.shot-todo dt{color:var(--muted);font-weight:600}
+.shot-todo dd{margin:0}
+
+/* Sitemap accordions */
+.sitemap{margin:1.25rem 0 2rem}
+details.sm{border:1px solid var(--line);border-radius:.6rem;margin-bottom:.55rem;background:var(--soft)}
+details.sm summary{
+  cursor:pointer;padding:.7rem 1rem;font-weight:650;font-size:.94rem;
+  list-style:none;display:flex;align-items:center;gap:.55rem;
+}
+details.sm summary::-webkit-details-marker{display:none}
+details.sm summary::before{content:"▸";color:var(--accent);font-size:.85rem;transition:transform .12s}
+details.sm[open] summary::before{transform:rotate(90deg)}
+details.sm summary:hover{color:var(--accent)}
+.sm-body{padding:.25rem 1rem 1rem;border-top:1px solid var(--line);background:var(--bg);
+  border-radius:0 0 .55rem .55rem;font-size:.92rem}
+.sm-body h3{font-size:1rem;margin:1.35rem 0 .5rem}
+.sitemap-intro{font-size:.9rem;color:var(--muted);margin-bottom:1rem}
+.sm-tools{display:flex;gap:.5rem;margin:0 0 .9rem}
+.sm-tools button{
+  font:inherit;font-size:.82rem;padding:.35rem .75rem;border-radius:.4rem;cursor:pointer;
+  border:1px solid var(--line);background:var(--bg);color:var(--fg);
+}
+.sm-tools button:hover{border-color:var(--accent);color:var(--accent)}
+
+.pagebreak{break-before:page;height:0}
+.dev-banner{
+  margin:1.25rem 0 2rem;padding:.9rem 1.1rem;border-radius:.6rem;
+  background:var(--warn-soft);color:var(--warn);font-size:.9rem;
+  border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);
+}
+
+/* Print */
+@media print{
+  .side,.sm-tools{display:none}
+  .layout{display:block;max-width:none}
+  main{padding:0;max-width:none}
+  h2{break-before:page;border-top:0;padding-top:0}
+  h1+h2,h2:first-of-type{break-before:auto}
+  h2,h3{break-after:avoid}
+  .shot,.table-wrap,blockquote{break-inside:avoid}
+  details.sm{break-inside:avoid}
+  details.sm summary{list-style:none}
+  details.sm:not([open]) .sm-body{display:block}
+  a{color:inherit;text-decoration:none}
+  body{font-size:11pt}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">Anchor Sales Co-Pilot<span>Admin SOP &amp; developer handoff</span></div>
+    <nav>
+      <a href="#anchor-sales-co-pilot-standard-operating-procedure" class="nav-l1">Anchor Sales Co-Pilot — Standard Operating Procedure</a>
+      <a href="#page-1-what-this-app-is" class="nav-l2">Page 1 — What this app is</a>
+      <a href="#page-2-getting-yourself-set-up" class="nav-l2">Page 2 — Getting yourself set up</a>
+      <a href="#page-3-roles-and-the-view-as-trap" class="nav-l2">Page 3 — Roles, and the &quot;View As&quot; trap</a>
+      <a href="#page-4-your-operating-rhythm" class="nav-l2">Page 4 — Your operating rhythm</a>
+      <a href="#page-5-notifications-read-this-one-twice" class="nav-l2">Page 5 — Notifications (read this one twice)</a>
+      <a href="#page-6-consults-recs-the-triage-queue" class="nav-l2">Page 6 — Consults (RECs): the triage queue</a>
+      <a href="#page-7-marketing-orders-inventory-and-the-qr-pickup" class="nav-l2">Page 7 — Marketing: orders, inventory, and the QR pickup</a>
+      <a href="#page-8-the-other-queues" class="nav-l2">Page 8 — The other queues</a>
+      <a href="#page-9-content-the-copilot-the-library-and-users" class="nav-l2">Page 9 — Content: the Copilot, the library, and users</a>
+      <a href="#page-10-turning-things-on-and-off" class="nav-l2">Page 10 — Turning things on and off</a>
+      <a href="#page-11-onboarding-and-offboarding-checklists" class="nav-l2">Page 11 — Onboarding and offboarding checklists</a>
+      <a href="#page-12-when-someone-says-it-s-broken" class="nav-l2">Page 12 — When someone says it's broken</a>
+      <a href="#page-13-what-you-do-not-touch" class="nav-l2">Page 13 — What you do not touch</a>
+      <a href="#page-14-for-a-developer-taking-this-on" class="nav-l1">Page 14 — For a developer taking this on</a>
+      <a href="#stack" class="nav-l2">Stack</a>
+      <a href="#the-five-things-that-will-surprise-you" class="nav-l2">The five things that will surprise you</a>
+      <a href="#architectural-notes" class="nav-l2">Architectural notes</a>
+      <a href="#if-you-re-making-large-scale-changes" class="nav-l2">If you're making large-scale changes</a>
+      <a href="#the-complete-site-map" class="nav-l2">The complete site map</a>
+      <a href="#screenshot-checklist" class="nav-l1">Appendix — Screenshot checklist</a>
+    </nav>
+    <div class="side-note">Screenshot slots marked <strong>“Screenshot needed”</strong> are placeholders. Drop a PNG into <code>docs/images/</code> with the listed filename and it replaces the slot automatically.</div>
+  </aside>
+
+  <main>
+<h1 id="anchor-sales-co-pilot-standard-operating-procedure">Anchor Sales Co-Pilot — Standard Operating Procedure</h1>
+<p><strong>For:</strong> Riley (Admin / Operator) <strong>Version:</strong> 1.0 — 2026-07-29 <strong>Companion doc:</strong> <code>SITEMAP.md</code> (the exhaustive technical inventory — routes, tables, every email). This SOP is the <em>how-to</em>; the sitemap is the <em>what-exists</em>.</p>
+<blockquote><p>The last section (Page 14) is written for a software developer, not for you. Hand the whole document to anyone brought in to make large-scale changes to the site.</p></blockquote>
+<hr>
+<h2 id="page-1-what-this-app-is">Page 1 — What this app is</h2>
+<p>The Anchor Sales Co-Pilot is the internal + external web app Anchor Products uses to run the sales support motion. It does five jobs:</p>
+<div class='table-wrap'><table><thead><tr><th>Job</th><th>What happens</th></tr></thead><tbody><tr><td><strong>Collect submissions</strong></td><td>Reps submit Rooftop Equipment Consults (RECs), commission claims, notable projects, marketing orders, and project intakes.</td></tr><tr><td><strong>Route them to a human</strong></td><td>Every submission emails and push-notifies whoever is assigned to that event category, plus the sales rep whose territory covers the project.</td></tr><tr><td><strong>Track them to done</strong></td><td>Consults, marketing orders, commission claims, intakes, and support tickets each have a status workflow an admin drives.</td></tr><tr><td><strong>Serve content</strong></td><td>A Resource Library of product docs, an AI &quot;Copilot&quot; chatbot that answers from those docs, and a marketing inventory catalog.</td></tr><tr><td><strong>Report</strong></td><td>OEM and per-user analytics, plus an automated Friday email report.</td></tr></tbody></table></div>
+<h3 id="one-codebase-two-websites">One codebase, two websites</h3>
+<p>There are <strong>two live sites running the same code</strong>:</p>
+<ul><li><strong>Internal build</strong> — for Anchor staff (<code>admin</code> and <code>anchor_rep</code> roles). Branded &quot;Anchor Internal.&quot;</li><li><strong>External build</strong> — for outside partner reps (<code>external_rep</code>). Branded &quot;Anchor App.&quot;</li></ul>
+
+<figure class="shot" id="shot-01-two-builds-png">
+  <img src="images/01-two-builds.png" alt="The two builds, side by side" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 1</span> The two builds, side by side</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 1</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/01-two-builds.png</code></dd>
+      <dt>Where</dt><dd><code>Both login pages</code></dd>
+      <dt>Capture</dt><dd>The internal and external sign-in screens next to each other, so the branding difference is obvious.</dd>
+    </dl>
+  </div>
+</figure>
+<p>The app automatically bounces you to the right one. If an Anchor staff account tries to load a page on the external site, it redirects to the login page — and vice versa. <strong>This is the single most common source of &quot;the site is broken&quot; reports.</strong> See Page 12.</p>
+<h3 id="it-s-also-a-phone-app">It's also a phone app</h3>
+
+<figure class="shot" id="shot-02-pwa-home-screen-png">
+  <img src="images/02-pwa-home-screen.png" alt="Installed on a phone home screen" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 2</span> Installed on a phone home screen</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 2</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/02-pwa-home-screen.png</code></dd>
+      <dt>Where</dt><dd><code>Your phone home screen</code></dd>
+      <dt>Capture</dt><dd>The installed app icon alongside your other apps.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Both sites are installable PWAs — a rep can &quot;Add to Home Screen&quot; on iOS/Android and it behaves like a native app, including push notifications. Nothing goes through an app store.</p>
+<hr>
+<h2 id="page-2-getting-yourself-set-up">Page 2 — Getting yourself set up</h2>
+<p>Do these once, in order.</p>
+<p><strong>1. Get an account.</strong> Go to the login page and sign in with your <code>@anchorp.com</code> email. The app creates your profile automatically on first load. Anyone with an <code>@anchorp.com</code> address is created as <code>anchor_rep</code> (internal). Everyone else is created as <code>external_rep</code> (external partner).</p>
+
+<figure class="shot" id="shot-03-login-png">
+  <img src="images/03-login.png" alt="The sign-in screen" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 3</span> The sign-in screen</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 3</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/03-login.png</code></dd>
+      <dt>Where</dt><dd><code>/</code></dd>
+      <dt>Capture</dt><dd>The sign-in card with the email field and Send code button.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>2. Get promoted to admin.</strong> A current admin must open <strong>Admin Console → Users</strong>, find you, and change your role to <code>admin</code>. You cannot do this for yourself. Until then you won't see <code>/admin</code> at all.</p>
+
+<figure class="shot" id="shot-04-users-set-role-png">
+  <img src="images/04-users-set-role.png" alt="Changing someone's role" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 4</span> Changing someone's role</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 4</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/04-users-set-role.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/users → click a person</code></dd>
+      <dt>Capture</dt><dd>The person editor with the Role dropdown open. Use a test account, not a real one.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>3. Install it on your phone.</strong> Open the internal site in Safari (iOS) or Chrome (Android) → Share → Add to Home Screen. Open it from the home screen icon at least once.</p>
+
+<figure class="shot" id="shot-05-add-to-home-screen-png">
+  <img src="images/05-add-to-home-screen.png" alt="Add to Home Screen" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 5</span> Add to Home Screen</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 5</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/05-add-to-home-screen.png</code></dd>
+      <dt>Where</dt><dd><code>Phone browser share sheet</code></dd>
+      <dt>Capture</dt><dd>The share sheet with Add to Home Screen highlighted.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>4. Turn on push notifications.</strong> In the app: <strong>Settings → Notifications → Enable</strong>. Accept the browser prompt. Push only works from the installed home-screen version on iOS — not from a Safari tab.</p>
+
+<figure class="shot" id="shot-06-enable-push-png">
+  <img src="images/06-enable-push.png" alt="Enabling push on your device" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 6</span> Enabling push on your device</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 6</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/06-enable-push.png</code></dd>
+      <dt>Where</dt><dd><code>/dashboard/settings</code></dd>
+      <dt>Capture</dt><dd>The Notifications section with the Enable control and the browser permission prompt.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>5. Assign yourself to the notification categories you own.</strong> Go to <strong>Admin Console → Notifications</strong>. Add yourself as a <em>User</em> on every event you're responsible for. If you skip this, submissions come in silently. See Page 5 — this is the highest-consequence config in the app.</p>
+
+<figure class="shot" id="shot-07-assign-self-png">
+  <img src="images/07-assign-self.png" alt="Assigning yourself to a category" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 7</span> Assigning yourself to a category</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 7</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/07-assign-self.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/notifications</code></dd>
+      <dt>Capture</dt><dd>One category expanded with a person being added to the Users list.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>6. Send yourself a test push.</strong> Settings → Notifications → Send test. If it doesn't arrive, the subscription didn't register — re-install the home-screen app and re-enable.</p>
+<h3 id="your-three-homes">Your three homes</h3>
+<div class='table-wrap'><table><thead><tr><th>Where</th><th>What it's for</th></tr></thead><tbody><tr><td><code>/dashboard</code></td><td>Your day-to-day home. Quick-action tiles and stat counts.</td></tr><tr><td><code>/admin</code></td><td>The Admin Console — every management tool, as a grid of tiles.</td></tr><tr><td><code>/dashboard/opportunities</code></td><td>Active Consults — the triage queue. You'll live here.</td></tr></tbody></table></div>
+<hr>
+<h2 id="page-3-roles-and-the-view-as-trap">Page 3 — Roles, and the &quot;View As&quot; trap</h2>
+<p>There are exactly three roles.</p>
+<div class='table-wrap'><table><thead><tr><th>Role</th><th>Who</th><th>Sees</th></tr></thead><tbody><tr><td><code>external_rep</code></td><td>Outside partner reps, OEM reps</td><td>Submission forms, Copilot, Resource Library, marketing orders. No queues, no admin.</td></tr><tr><td><code>anchor_rep</code></td><td>Anchor internal staff</td><td>Everything an external rep sees <strong>plus</strong> the Active Consults queue, Marketing Admin Center, and the Knowledge admin.</td></tr><tr><td><code>admin</code></td><td>You</td><td>Everything.</td></tr></tbody></table></div>
+<p><strong>Change a role at:</strong> Admin Console → <strong>Users</strong> → click the person → set Role → Save. It takes effect on their next page load; tell them to refresh or sign out and back in.</p>
+<h3 id="the-trap-as-an-admin-you-cannot-open-the-submission-forms">The trap: as an admin, you cannot open the submission forms</h3>
+<p>An admin account has the forms deliberately hidden — no REC form, no commission form, no marketing order form on your dashboard. This is intentional (an admin submitting as themselves would corrupt the routing data), and it confuses every new admin.</p>
+<p><strong>To test or submit a form, use View As.</strong> As an admin you have a floating role pill on <strong>every</strong> page — top-center on mobile, bottom-right on desktop. Tap it and pick one of three:</p>
+
+<figure class="shot" id="shot-08-viewas-pill-png">
+  <img src="images/08-viewas-pill.png" alt="The View As pill" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 8</span> The View As pill</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 8</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/08-viewas-pill.png</code></dd>
+      <dt>Where</dt><dd><code>Any page, as admin</code></dd>
+      <dt>Capture</dt><dd>The floating pill — top-center on mobile, bottom-right on desktop. Crop tight.</dd>
+    </dl>
+  </div>
+</figure>
+<div class='table-wrap'><table><thead><tr><th>Option</th><th>What you see</th></tr></thead><tbody><tr><td><strong>Admin</strong></td><td>Full admin view (the default).</td></tr><tr><td><strong>Internal sales</strong></td><td>The app as an Anchor rep sees it.</td></tr><tr><td><strong>External user</strong></td><td>The app as an outside rep sees it — this is the one with all the submission forms.</td></tr></tbody></table></div>
+<p>When you're viewing as someone else the pill reads &quot;Viewing as …&quot;, so you always know.</p>
+
+<figure class="shot" id="shot-09-viewas-menu-png">
+  <img src="images/09-viewas-menu.png" alt="The View As menu open" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 9</span> The View As menu open</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 9</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/09-viewas-menu.png</code></dd>
+      <dt>Where</dt><dd><code>Tap the pill</code></dd>
+      <dt>Capture</dt><dd>All three options visible: Admin, Internal sales, External user.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Two things to know about View As: - It changes <strong>what you see</strong>, not <strong>who you are</strong>. Data you fetch and any action you take is still performed by your real admin account. - It's remembered in your browser. <strong>Set it back to Admin when you're done</strong>, or you'll spend twenty minutes wondering where the Admin Console went.</p>
+<hr>
+<h2 id="page-4-your-operating-rhythm">Page 4 — Your operating rhythm</h2>
+
+<figure class="shot" id="shot-10-admin-console-png">
+  <img src="images/10-admin-console.png" alt="The Admin Console" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 10</span> The Admin Console</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 10</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/10-admin-console.png</code></dd>
+      <dt>Where</dt><dd><code>/admin</code></dd>
+      <dt>Capture</dt><dd>The full tile grid. This is the launchpad for everything in Pages 5–10.</dd>
+    </dl>
+  </div>
+</figure>
+<h3 id="every-morning-10-minutes">Every morning (10 minutes)</h3>
+<ol><li><strong>Active Consults</strong> (<code>/dashboard/opportunities</code>) — filter to status <code>new</code>. Every new REC needs an owner and a status move off <code>new</code> today.</li><li><strong>Marketing Admin Center → Orders</strong> — anything sitting on <code>New</code> gets moved to <code>Processing</code> or gets a message to the rep.</li><li><strong>Support Queue</strong> (<code>/admin/support</code>) — reply to anything <code>open</code>.</li><li><strong>Asset Reviews</strong> (<code>/admin/asset-reviews</code>) — approve or reject any pending rep photos. These are invisible to everyone until you act.</li></ol>
+<h3 id="weekly">Weekly</h3>
+<ul><li><strong>Friday:</strong> the automated analytics report emails itself at <strong>17:00 UTC</strong> (1:00 PM Eastern in summer / 12:00 PM in winter) to everyone assigned to the <code>weekly_report</code> category. Confirm it arrived. If it didn't, that's an escalation (Page 13).</li><li><strong>Commission Claims</strong> (<code>/admin/commission-claims</code>) — work the backlog. Each claim also emails a PDF at submission time.</li><li><strong>Notable Projects</strong> (<code>/admin/notable-projects</code>) — review and set status on new submissions.</li><li><strong>Marketing Inventory</strong> — scan for low stock. Items below their threshold fire a notification, but eyeball the list anyway.</li></ul>
+<h3 id="monthly">Monthly</h3>
+<ul><li><strong>Notifications</strong> (<code>/admin/notifications</code>) — walk every event category and confirm the recipient list still matches who actually works here. This is the config most likely to silently rot.</li><li><strong>Sales Reps</strong> (<code>/admin/sales-reps</code>) — verify territory coverage. Every state should map to an outside rep and an inside rep.</li><li><strong>Users</strong> — remove or downgrade anyone who's left.</li><li><strong>Knowledge</strong> (<code>/admin/knowledge</code>) — review Copilot corrections and low-rated answers; retire stale documents.</li></ul>
+<h3 id="as-it-happens">As it happens</h3>
+<ul><li>New employee → Users (set role) → Notifications (assign categories) → tell them to install the PWA and enable push.</li><li>Person leaves → Users (downgrade/remove) → Notifications (remove from every category) → Sales Reps (reassign territory) → Portal Access (remove).</li></ul>
+<hr>
+<h2 id="page-5-notifications-read-this-one-twice">Page 5 — Notifications (read this one twice)</h2>
+<p>This is the most important thing you own. If it's wrong, submissions arrive and no human is told.</p>
+<h3 id="how-it-works">How it works</h3>
+<p>Every event in the app belongs to a <strong>category</strong> (the app calls them &quot;tools&quot;). Examples: <em>New consult</em>, <em>Marketing order placed</em>, <em>Commission claim</em>, <em>Support request</em>, <em>Weekly analytics</em>.</p>
+<p>For each category you assign two kinds of recipients at <strong>Admin Console → Notifications</strong>:</p>
+
+<figure class="shot" id="shot-11-notifications-page-png">
+  <img src="images/11-notifications-page.png" alt="The Notifications page" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 11</span> The Notifications page</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 11</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/11-notifications-page.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/notifications</code></dd>
+      <dt>Capture</dt><dd>The full list of event categories, collapsed.</dd>
+    </dl>
+  </div>
+</figure>
+<div class='table-wrap'><table><thead><tr><th>Type</th><th>Gets</th><th>Use for</th></tr></thead><tbody><tr><td><strong>Users</strong></td><td>Email <strong>and</strong> push notification</td><td>Actual app accounts — staff. Push additionally requires <em>that person</em> to have enabled it on their own device.</td></tr><tr><td><strong>Emails</strong></td><td>Email only</td><td>Shared inboxes and people without app accounts (<code>marketing@anchorp.com</code>, <code>orders@anchorp.com</code>).</td></tr></tbody></table></div>
+<h3 id="the-two-things-that-bite">The two things that bite</h3>
+<p><strong>1. Nothing is pre-assigned.</strong> Every category ships with an empty recipient list. When a list is empty, the app falls back to <code>reports@anchorp.com</code> so nothing is lost outright — but the person who actually needs to act is not told. An empty category is a silent failure, not a loud one.</p>
+
+<figure class="shot" id="shot-12-notifications-empty-png">
+  <img src="images/12-notifications-empty.png" alt="An empty category — the silent failure" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 12</span> An empty category — the silent failure</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 12</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/12-notifications-empty.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/notifications</code></dd>
+      <dt>Capture</dt><dd>A category with no recipients assigned, so Riley knows what the failure state looks like.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>2. Assigning a User does not turn on their push.</strong> You control <em>who</em> is on the list. They control whether push works on their phone (Settings → Notifications → Enable). If someone says &quot;I get the emails but never the pushes,&quot; that's on their device, not your config.</p>
+<h3 id="consult-routing-is-separate-and-automatic">Consult routing is separate and automatic</h3>
+<p>New consults (RECs) go to <strong>two</strong> places:</p>
+<ul><li>The people you assigned to the <code>new_consult</code> category, <strong>and</strong></li><li>The outside rep and inside rep whose territory covers the project's state or ZIP — resolved automatically from the territory roster.</li></ul>
+<p>That roster lives on the <strong>Sales Reps</strong> tile (the phone icon, toward the bottom of the Admin Console grid at <code>/admin</code>). Each person there gets a list of states and/or ZIP prefixes; that's what decides who hears about a new consult.</p>
+
+<figure class="shot" id="shot-13-sales-reps-png">
+  <img src="images/13-sales-reps.png" alt="Territory routing" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 13</span> Territory routing</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 13</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/13-sales-reps.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/sales-reps</code></dd>
+      <dt>Capture</dt><dd>The rep table showing states and ZIP prefixes. Blur email addresses.</dd>
+    </dl>
+  </div>
+</figure>
+<p>So if a rep in Ohio says &quot;nobody contacted my customer,&quot; check <em>both</em> the notification category <em>and</em> the territory table.</p>
+<h3 id="marketing-orders-route-by-region">Marketing orders route by region</h3>
+<p>Marketing orders notify a <strong>per-region manager</strong>, not the inside rep directly. Each region has its own auto-created category named <code>marketing_order_region:&lt;rep id&gt;</code>. Assign the right manager to each one in the Notifications page. This is deliberate — orders from an outside rep flow to the manager who owns that region's fulfillment.</p>
+
+<figure class="shot" id="shot-14-region-category-png">
+  <img src="images/14-region-category.png" alt="A per-region marketing category" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 14</span> A per-region marketing category</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 14</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/14-region-category.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/notifications</code></dd>
+      <dt>Capture</dt><dd>One of the marketing_order_region entries with its assigned manager.</dd>
+    </dl>
+  </div>
+</figure>
+<hr>
+<h2 id="page-6-consults-recs-the-triage-queue">Page 6 — Consults (RECs): the triage queue</h2>
+<p><strong>Where:</strong> <code>/dashboard/opportunities</code> — also reachable as the <em>Projects</em> tile on the Admin Console.</p>
+<p>A Rooftop Equipment Consult is the app's core lead object: a rep submits a customer, a location, a roof type, and what they need.</p>
+<h3 id="two-states-and-only-two">Two states, and only two</h3>
+
+<figure class="shot" id="shot-15-consults-queue-png">
+  <img src="images/15-consults-queue.png" alt="The Active Consults queue" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 15</span> The Active Consults queue</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 15</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/15-consults-queue.png</code></dd>
+      <dt>Where</dt><dd><code>/dashboard/opportunities</code></dd>
+      <dt>Capture</dt><dd>The queue with the status filter open, showing just New and Assigned. Blur customer names.</dd>
+    </dl>
+  </div>
+</figure>
+<div class='table-wrap'><table><thead><tr><th>Status</th><th>What it means</th></tr></thead><tbody><tr><td><strong>New</strong></td><td>Nobody owns it yet. This is your work queue.</td></tr><tr><td><strong>Assigned</strong></td><td>Somebody's name is on it.</td></tr></tbody></table></div>
+<p>There is no separate status control, and nothing else to track. <strong>The status follows the assignee automatically</strong> — pick a person and it becomes Assigned; clear the person and it drops back to New. The two can't disagree because there's only one thing to set.</p>
+<p>Project Intakes use the exact same two states, so the queue reads consistently whichever kind of row you're looking at.</p>
+<h3 id="working-one">Working one</h3>
+
+<figure class="shot" id="shot-16-consult-detail-png">
+  <img src="images/16-consult-detail.png" alt="A consult detail view" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 16</span> A consult detail view</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 16</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/16-consult-detail.png</code></dd>
+      <dt>Where</dt><dd><code>/dashboard/opportunities/[id]</code></dd>
+      <dt>Capture</dt><dd>The detail page — customer, address, roof type, requested solutions. Blur identifying data.</dd>
+    </dl>
+  </div>
+</figure>
+<ol><li>Open the queue, filter to <strong>New</strong>.</li><li>Click into the consult. You'll see the customer, project address, roof type/brand, requested solutions, timeline, and any attachments the rep uploaded.</li><li>In the <strong>Assignment</strong> panel, choose the owner from the dropdown and press <strong>Save assignment</strong>. Anyone with an Anchor account — admin or internal rep — can be picked.</li><li>If the rep asked for a video call, there's a meeting-link field — paste the Teams link there and it becomes visible to the submitter.</li></ol>
+
+<figure class="shot" id="shot-17-consult-assign-png">
+  <img src="images/17-consult-assign.png" alt="Assigning a rep" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 17</span> Assigning a rep</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 17</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/17-consult-assign.png</code></dd>
+      <dt>Where</dt><dd><code>Consult detail</code></dd>
+      <dt>Capture</dt><dd>The Assignment panel with the Assigned to dropdown open, listing internal people.</dd>
+    </dl>
+  </div>
+</figure>
+<p>To hand something back to the queue, set Assigned to back to <strong>Unassigned (New)</strong> and save.</p>
+<h3 id="deleting-a-submission">Deleting a submission</h3>
+
+<figure class="shot is-missing" id="shot-18a-delete-danger-zone-png">
+  <img src="images/18a-delete-danger-zone.png" alt="The admin-only Danger zone" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 18</span> The admin-only Danger zone</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 18</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/18a-delete-danger-zone.png</code></dd>
+      <dt>Where</dt><dd><code>Consult detail → Assignment panel</code></dd>
+      <dt>Capture</dt><dd>The Danger zone with its confirm step showing. Admins only — internal reps don't see it.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Admins only — internal reps can work the queue but can't destroy anything.</p>
+<p>At the bottom of the Assignment panel there's a <strong>Danger zone</strong>. Deleting removes the consult <em>and every file uploaded with it</em>, and asks you to confirm first. <strong>There is no undo and no archive.</strong> If you only want it out of your working list, assign it to someone instead.</p>
+<p>This works the same way on Project Intakes.</p>
+<h3 id="netsuite-sync-not-live-yet">NetSuite sync — not live yet</h3>
+
+<figure class="shot" id="shot-18-consult-netsuite-png">
+  <img src="images/18-consult-netsuite.png" alt="The NetSuite panel, greyed out until it's connected" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 19</span> The NetSuite panel, greyed out until it's connected</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 19</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/18-consult-netsuite.png</code></dd>
+      <dt>Where</dt><dd><code>Consult detail</code></dd>
+      <dt>Capture</dt><dd>The greyed NetSuite card with its &quot;Coming soon&quot; badge — so Riley recognises it as expected, not broken.</dd>
+    </dl>
+  </div>
+</figure>
+<p>You'll see a greyed-out <strong>NetSuite</strong> panel marked <strong>Coming soon</strong> — on both consults and Project Intakes. That's expected, not a bug. The push is built, but Anchor's NetSuite credentials haven't been connected, so the panel is deliberately inert — better than a Sync button that can only fail.</p>
+<p><strong>Nothing you do in the admin console turns this on.</strong> It switches itself on the moment a developer adds the six <code>NETSUITE_*</code> credentials to the environment. No flag to flip, no deploy needed beyond the config.</p>
+<p>Once it's connected, here's what it will do: each consult can be pushed to NetSuite (creating the company, contact, and deal, and writing the resulting IDs back onto the consult). Each rep has a <strong>sync mode</strong> on their own settings page — <code>manual</code> or <code>automatic</code>. On manual, someone clicks Sync on the consult detail. On automatic, their consults sync on their own.</p>
+<p><strong>Project Intakes are one step further behind.</strong> Their panel shows the same status rows but has no Sync button even in principle — the push itself hasn't been wired for intakes, only for consults. Connecting the credentials lights up consults; intakes need a bit of development on top of that.</p>
+<p>If a sync fails once it <em>is</em> live, the consult shows a sync status of <code>error</code> with the message. Common causes are credential expiry or a duplicate company. <strong>Sync failures are a developer escalation</strong> — you can't fix credentials from the admin UI.</p>
+<h3 id="region-scoping">Region scoping</h3>
+<p>Anchor reps only see consults in their own territory. <strong>You, as admin, see all of them.</strong> If a rep says &quot;my consult disappeared,&quot; they're probably scoped out of a region — check their territory in Sales Reps.</p>
+<hr>
+<h2 id="page-7-marketing-orders-inventory-and-the-qr-pickup">Page 7 — Marketing: orders, inventory, and the QR pickup</h2>
+<p><strong>Where:</strong> Admin Console → <strong>Marketing Admin Center</strong> (<code>/admin/marketing</code>). Tabs: <strong>Orders</strong>, <strong>Inventory</strong>, and — once &quot;Site live&quot; is on — <strong>Submissions</strong>.</p>
+<h3 id="orders">Orders</h3>
+
+<figure class="shot" id="shot-19-marketing-orders-png">
+  <img src="images/19-marketing-orders.png" alt="The Orders tab" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 20</span> The Orders tab</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 20</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/19-marketing-orders.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/marketing?tab=orders</code></dd>
+      <dt>Capture</dt><dd>The order list with the Active/Archived tabs visible.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Statuses:</p>
+<div class='table-wrap'><table><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody><tr><td><code>New</code></td><td>Just submitted.</td></tr><tr><td><code>Processing</code></td><td>Marketing is pulling it.</td></tr><tr><td><code>Shipped</code></td><td>On its way.</td></tr><tr><td><code>Fulfilled</code></td><td>Delivered, done.</td></tr><tr><td><code>Delayed</code></td><td>Off-path. Requires a projected ship date <strong>and</strong> a reason — both are shown to the rep.</td></tr><tr><td><code>Cancelled</code></td><td>Off-path, terminal.</td></tr></tbody></table></div>
+<p><strong>Every status change emails and pushes the rep automatically.</strong> You don't need to send a separate note. Use <code>Delayed</code> rather than leaving something on <code>Processing</code> for two weeks — the rep sees the projected date and stops asking.</p>
+
+<figure class="shot" id="shot-20-order-status-png">
+  <img src="images/20-order-status.png" alt="Changing an order status" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 21</span> Changing an order status</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 21</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/20-order-status.png</code></dd>
+      <dt>Where</dt><dd><code>Marketing Admin Center → an order</code></dd>
+      <dt>Capture</dt><dd>The status selector open, showing all six statuses.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Each order has a <strong>two-way message thread</strong>. A message from you notifies the rep; a message from the rep notifies the <code>marketing_order</code> category. Unread counts show as badges. Attachments are allowed on both sides.</p>
+
+<figure class="shot" id="shot-21-order-thread-png">
+  <img src="images/21-order-thread.png" alt="The order message thread" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 22</span> The order message thread</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 22</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/21-order-thread.png</code></dd>
+      <dt>Where</dt><dd><code>An order detail</code></dd>
+      <dt>Capture</dt><dd>A thread with messages from both sides and the unread badge.</dd>
+    </dl>
+  </div>
+</figure>
+<p>There's an <strong>Active / Archived</strong> split — archive fulfilled and cancelled orders so the working list stays short. And there's an <strong>activity log</strong> per order recording who changed what status when.</p>
+<h3 id="inventory">Inventory</h3>
+
+<figure class="shot" id="shot-22-inventory-png">
+  <img src="images/22-inventory.png" alt="The Inventory tab" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 23</span> The Inventory tab</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 23</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/22-inventory.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/marketing?tab=inventory</code></dd>
+      <dt>Capture</dt><dd>The item list with quantities and any low-stock indicator.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Tracks physical marketing material: name, SKU, storage location, photo, unit cost, quantity available, quantity out, and a <strong>low-stock threshold</strong>. When an item drops to its threshold, the <code>inventory_low_stock</code> category is notified. Set thresholds deliberately — an unset threshold means you'll only learn you're out when a rep complains.</p>
+<p><strong>Tradeshow checkouts</strong> log items loaned out for an event: event name, quantity, due-back date, and a returned/damaged count when they come back.</p>
+
+<figure class="shot" id="shot-23-checkouts-png">
+  <img src="images/23-checkouts.png" alt="Tradeshow checkouts" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 24</span> Tradeshow checkouts</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 24</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/23-checkouts.png</code></dd>
+      <dt>Where</dt><dd><code>Inventory tab</code></dd>
+      <dt>Capture</dt><dd>The checkout log — event name, quantity, due-back date.</dd>
+    </dl>
+  </div>
+</figure>
+<h3 id="submissions">Submissions</h3>
+
+<figure class="shot is-missing" id="shot-24a-marketing-submissions-tab-png">
+  <img src="images/24a-marketing-submissions-tab.png" alt="The Submissions tab in the Marketing Admin Center" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 25</span> The Submissions tab in the Marketing Admin Center</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 25</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/24a-marketing-submissions-tab.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/marketing?tab=submissions</code></dd>
+      <dt>Capture</dt><dd>The three tabs with Submissions selected, showing the pitch queue and its Awaiting decision / All pitches filters.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Only present when <strong>Site live</strong> is on (Page 10) — otherwise the tab isn't there at all.</p>
+<p>This is the Pitch to Marketing review queue: marketing ideas pitched by anyone else in the company. It's the same queue as <code>/marketing/submissions</code>, surfaced here so you don't have to leave the Marketing Admin Center to work it.</p>
+<p>Two filters — <strong>Awaiting decision</strong> (your actual to-do list) and <strong>All pitches</strong>. Open a pitch and you get three actions:</p>
+<div class='table-wrap'><table><thead><tr><th>Action</th><th>What happens</th></tr></thead><tbody><tr><td><strong>Approve</strong></td><td>Asks for a timeline, then puts the idea on the Strategy Board under <em>Considering</em> and tells the submitter what to expect.</td></tr><tr><td><strong>Request info</strong></td><td>Asks the submitter a question. The pitch stays in the queue.</td></tr><tr><td><strong>Decline</strong></td><td>Asks for a reason. The submitter sees exactly what you write.</td></tr></tbody></table></div>
+<p>Every pitch also has a two-way message thread, so you can go back and forth without leaving the queue.</p>
+<p><strong>Access note — two separate requirements:</strong></p>
+<ol><li><strong>You must be on the internal site.</strong> The Marketing Hub doesn't exist on the external build at all, so the tab won't even appear there.</li><li><strong>You must have a Portal Access entry</strong> (Page 9) with level Admin or team Marketing. Your <em>app</em> role isn't enough on its own — membership comes from the shared list.</li></ol>
+<p>If either is missing you'll get a message telling you which, rather than the queue.</p>
+<h3 id="the-qr-pickup-flow">The QR pickup flow</h3>
+
+<figure class="shot" id="shot-24-grab-qr-png">
+  <img src="images/24-grab-qr.png" alt="The public QR pickup page" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 26</span> The public QR pickup page</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 26</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/24-grab-qr.png</code></dd>
+      <dt>Where</dt><dd><code>/grab/&lt;token&gt;</code></dd>
+      <dt>Capture</dt><dd>The scan-to-pick-up page as someone at the shelf sees it, plus the printed QR if you have one.</dd>
+    </dl>
+  </div>
+</figure>
+<p>There's a public, no-login QR code (<code>/grab/&lt;token&gt;</code>) you can print and stick on a shelf. Someone scans it, enters their name and email once, sets quantities on any number of items, and takes them in one tap. The pickup <strong>decrements stock automatically</strong> and notifies the assigned recipient.</p>
+<p>Three things must be true for it to work: the QR token must be generated, a notification recipient must be assigned, and it must be served from a domain that doesn't sit behind SSO — a login wall defeats the entire point.</p>
+<hr>
+<h2 id="page-8-the-other-queues">Page 8 — The other queues</h2>
+<p>Each of these is the same shape: a list, a status, and a notification that fired when it arrived.</p>
+<h3 id="commission-claims-admin-commission-claims">Commission Claims — <code>/admin/commission-claims</code></h3>
+
+<figure class="shot" id="shot-25-commission-claims-png">
+  <img src="images/25-commission-claims.png" alt="Commission Claims" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 27</span> Commission Claims</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 27</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/25-commission-claims.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/commission-claims</code></dd>
+      <dt>Capture</dt><dd>The claim list. Blur rep names and order details.</dd>
+    </dl>
+  </div>
+</figure>
+<p>External reps only, and only reps who have the <strong>commission flag</strong> turned on in their profile (Users page). Each submission emails a PDF of the claim. Review the rep info, certification, order details, and ship-to, then set status.</p>
+<h3 id="notable-projects-admin-notable-projects">Notable Projects — <code>/admin/notable-projects</code></h3>
+
+<figure class="shot" id="shot-26-notable-projects-png">
+  <img src="images/26-notable-projects.png" alt="Notable Projects" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 28</span> Notable Projects</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 28</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/26-notable-projects.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/notable-projects</code></dd>
+      <dt>Capture</dt><dd>The submission list with photo thumbnails.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Reps submit installations with photos and a writeup. Review, then set status. Useful as marketing raw material.</p>
+<h3 id="project-intake-fm-admin-fm-intake">Project Intake / FM — <code>/admin/fm-intake</code></h3>
+
+<figure class="shot" id="shot-27-fm-intake-png">
+  <img src="images/27-fm-intake.png" alt="Project Intake" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 29</span> Project Intake</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 29</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/27-fm-intake.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/fm-intake</code></dd>
+      <dt>Capture</dt><dd>The intake list and the status control. Blur company names.</dd>
+    </dl>
+  </div>
+</figure>
+<p>The Universal Rooftop Equipment Intake — a longer quote-request form covering buildings, HVAC units, and pipe stacks, with attachments. Same two states as consults (<strong>New</strong> / <strong>Assigned</strong>), driven the same way by the <strong>Assigned to</strong> picker, plus a free-text review-notes field for your recommendation. Admins can delete an intake and its files from the same panel. There's also a <strong>New intake</strong> form on this page so you can key one in on someone's behalf.</p>
+<p>Intakes carry the same greyed-out <strong>NetSuite / Coming soon</strong> panel as consults (Page 6). Expected, not a bug.</p>
+<p>Intakes also appear in the Active Consults queue alongside RECs, so you can work both from one list.</p>
+<h3 id="support-queue-admin-support">Support Queue — <code>/admin/support</code></h3>
+
+<figure class="shot" id="shot-28-support-queue-png">
+  <img src="images/28-support-queue.png" alt="The Support Queue" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 30</span> The Support Queue</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 30</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/28-support-queue.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/support</code></dd>
+      <dt>Capture</dt><dd>The thread list plus one thread open with the reply box.</dd>
+    </dl>
+  </div>
+</figure>
+<p>In-app help requests from any rep. Open a thread, reply (the requester is emailed and pushed), close when resolved. Note: an admin visiting <code>/dashboard/support</code> is redirected here — you see the whole queue, not just your own tickets.</p>
+<h3 id="asset-reviews-admin-asset-reviews">Asset Reviews — <code>/admin/asset-reviews</code></h3>
+
+<figure class="shot" id="shot-29-asset-reviews-png">
+  <img src="images/29-asset-reviews.png" alt="Asset Reviews" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 31</span> Asset Reviews</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 31</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/29-asset-reviews.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/asset-reviews</code></dd>
+      <dt>Capture</dt><dd>The pending filter with Approve and Reject buttons visible.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Photos internal reps uploaded to a product &quot;tackle box.&quot; Filter by <code>pending</code> / <code>approved</code> / <code>rejected</code>. <strong>Pending photos are invisible to everyone</strong> until you approve them. Approve or reject — don't let this queue sit.</p>
+<hr>
+<h2 id="page-9-content-the-copilot-the-library-and-users">Page 9 — Content: the Copilot, the library, and users</h2>
+<h3 id="knowledge-the-copilot-admin-knowledge">Knowledge / the Copilot — <code>/admin/knowledge</code></h3>
+
+<figure class="shot" id="shot-30-knowledge-png">
+  <img src="images/30-knowledge.png" alt="The Knowledge admin" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 32</span> The Knowledge admin</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 32</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/30-knowledge.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/knowledge</code></dd>
+      <dt>Capture</dt><dd>The document list showing indexed and allow-listed state.</dd>
+    </dl>
+  </div>
+</figure>
+<p>The chatbot answers from indexed documents, not from general knowledge. Three levers:</p>
+<ol><li><strong>Which documents are indexed and allowed.</strong> A document has to be both indexed <em>and</em> allow-listed to be used in answers. If the Copilot doesn't know something, the source document is usually missing or not allowed.</li><li><strong>Corrections.</strong> When someone corrects a Copilot answer, that correction is stored and injected into future similar questions. Review these — a bad correction teaches the bot something wrong, permanently, until you deactivate it.</li><li><strong>Feedback.</strong> Thumbs and 1–5 ratings on answers. Low-rated answers are your list of what to fix. A daily digest of corrections and low ratings emails automatically.</li></ol>
+
+<figure class="shot" id="shot-31-corrections-png">
+  <img src="images/31-corrections.png" alt="Copilot corrections" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 33</span> Copilot corrections</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 33</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/31-corrections.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/knowledge → corrections</code></dd>
+      <dt>Capture</dt><dd>The correction console with an active correction.</dd>
+    </dl>
+  </div>
+</figure>
+<p>The Copilot's document catalog mirrors the 11-category solution structure. Adding a document to the library is what makes the Copilot able to cite it.</p>
+<h3 id="resource-library">Resource Library</h3>
+
+<figure class="shot" id="shot-32-resource-library-png">
+  <img src="images/32-resource-library.png" alt="The Resource Library" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 34</span> The Resource Library</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 34</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/32-resource-library.png</code></dd>
+      <dt>Where</dt><dd><code>/assets</code></dd>
+      <dt>Capture</dt><dd>The product tackle-box browser.</dd>
+    </dl>
+  </div>
+</figure>
+<p>Product &quot;tackle boxes&quot; — each product has documents, data sheets, and photos attached. Internal users additionally see an internal-assets section with per-product internal docs and manufacturer contacts.</p>
+<p><strong>Replacing a document notifies people.</strong> In the Knowledge admin you can replace a file <em>in place</em> — the path never changes, so every existing link (including the ones anchorp.com serves) keeps working and just resolves to the new version. When that happens, everyone assigned to the <strong>Document replaced</strong> category (Page 5) gets an email and a push naming the file and who replaced it.</p>
+<p>That's the only document notification. There's no revision or version-label field to maintain — if the contents change, replace the file and the right people are told.</p>
+<p>All files live in private storage. Nothing is publicly readable; every view goes through a short-lived signed link the server generates. There is one deliberate exception: a public document endpoint used by anchorp.com's Resource Library to serve a specific set of public files.</p>
+<h3 id="users-admin-users">Users — <code>/admin/users</code></h3>
+
+<figure class="shot" id="shot-34-users-page-png">
+  <img src="images/34-users-page.png" alt="The Users page" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 35</span> The Users page</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 35</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/34-users-page.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/users</code></dd>
+      <dt>Capture</dt><dd>The people list. Blur emails and phone numbers.</dd>
+    </dl>
+  </div>
+</figure>
+<p>One page to edit every person: app users, OEM reps, tech reps, and consultants. Click anyone to change name, email, phone, role, OEM affiliation, or the commission flag.</p>
+<h3 id="portal-access-admin-portal-access-only-visible-when-site-live-is-on">Portal Access — <code>/admin/portal-access</code> (only visible when &quot;Site live&quot; is on)</h3>
+
+<figure class="shot" id="shot-35-portal-access-png">
+  <img src="images/35-portal-access.png" alt="Portal Access" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 36</span> Portal Access</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 36</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/35-portal-access.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/portal-access</code></dd>
+      <dt>Capture</dt><dd>The shared authorized-email list with level and team badges. Blur addresses.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>This is not the same list as Users.</strong> Users edits <em>this app's</em> login accounts. Portal Access edits the <strong>shared authorized-email list that the Anchor Internal Portal also reads</strong> — edit it here and it changes there, and vice versa. Each entry gets a level (Admin / Internal) and a team (Marketing, Sales, Operations, Leadership).</p>
+<p>A person can exist in one list and not the other. When someone joins or leaves, handle <strong>both</strong>.</p>
+<hr>
+<h2 id="page-10-turning-things-on-and-off">Page 10 — Turning things on and off</h2>
+<p><strong>Where:</strong> Admin Console → <strong>Manage Tools</strong> (<code>/admin/tools</code>).</p>
+<h3 id="two-independent-controls">Two independent controls</h3>
+<p><strong>1. Admin Console tools.</strong> Deactivate a tool and it stays visible to you, marked &quot;Inactive,&quot; but is switched off. Use this to retire a tool without deleting it.</p>
+
+<figure class="shot" id="shot-36-manage-tools-png">
+  <img src="images/36-manage-tools.png" alt="Manage Tools" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 37</span> Manage Tools</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 37</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/36-manage-tools.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/tools</code></dd>
+      <dt>Capture</dt><dd>The Admin Console tools section with one tool toggled off and marked Inactive.</dd>
+    </dl>
+  </div>
+</figure>
+<p><strong>2. Sales rep tools.</strong> Deactivate a tool and it <strong>disappears</strong> from reps' dashboards. Internal and external reps are toggled separately — you can hide the commission form from internal reps while leaving it live for external ones.</p>
+
+<figure class="shot" id="shot-37-rep-tools-png">
+  <img src="images/37-rep-tools.png" alt="Sales rep tool toggles" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 38</span> Sales rep tool toggles</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 38</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/37-rep-tools.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/tools</code></dd>
+      <dt>Capture</dt><dd>The rep tools section showing the separate internal and external toggles.</dd>
+    </dl>
+  </div>
+</figure>
+<h3 id="site-live-the-master-switch">&quot;Site live&quot; — the master switch</h3>
+
+<figure class="shot" id="shot-38-site-live-png">
+  <img src="images/38-site-live.png" alt="The Site live switch" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 39</span> The Site live switch</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 39</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/38-site-live.png</code></dd>
+      <dt>Where</dt><dd><code>/admin/tools (top card)</code></dd>
+      <dt>Capture</dt><dd>The Site live card with its five listed surfaces and the Go live button.</dd>
+    </dl>
+  </div>
+</figure>
+<p>At the top of Manage Tools there's a single <strong>Site live</strong> card. It gates an entire feature set that ships hidden from everyone — reps, marketing, and admins alike:</p>
+<ul><li><strong>Pitch to Marketing</strong> — any internal user pitches a marketing idea and tracks the decision</li><li><strong>Submissions inbox</strong> — the marketing review queue for those pitches, both at <code>/marketing/submissions</code> and as a third tab in the Marketing Admin Center (Page 7)</li><li><strong>Email templates</strong> — marketing writes and designs the pitch notification emails</li><li><strong>All Documents</strong> — a flat, searchable index over the whole resource library</li><li><strong>Portal Access</strong> — the shared authorized-emails manager (Page 9)</li></ul>
+<p>The card lists exactly what's about to become visible before you flip it. It is <strong>off unless explicitly turned on</strong> — unlike every other tool in the app, which is on by default.</p>
+<p><strong>Flip it once, deliberately, when marketing is ready to run the pitch workflow.</strong> Flipping it back to Hidden takes all five surfaces away again without losing any data.</p>
+<h3 id="the-pitch-workflow-once-site-live-is-on">The pitch workflow (once Site live is on)</h3>
+
+<figure class="shot is-missing" id="shot-39-pitch-submissions-png">
+  <img src="images/39-pitch-submissions.png" alt="The pitch Submissions inbox" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 40</span> The pitch Submissions inbox</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 40</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/39-pitch-submissions.png</code></dd>
+      <dt>Where</dt><dd><code>/marketing/submissions</code></dd>
+      <dt>Capture</dt><dd>The review queue with the four review statuses.</dd>
+    </dl>
+  </div>
+</figure>
+<p>An internal user pitches an idea with a category (Campaign, Social, Email, Event/Tradeshow, Ad, Content, Partnership, Website, Other). Marketing reviews it in the Submissions inbox and sets a review status: <strong>Pending review → Needs info / Approved / Declined</strong>. There's a two-way comment thread, and each decision emails the submitter using the templates marketing controls.</p>
+<hr>
+<h2 id="page-11-onboarding-and-offboarding-checklists">Page 11 — Onboarding and offboarding checklists</h2>
+<h3 id="onboarding-an-anchor-employee">Onboarding an Anchor employee</h3>
+<ul class="checklist"><li><input type="checkbox" disabled> <span>They sign in once with their <code>@anchorp.com</code> email (creates the profile automatically as <code>anchor_rep</code>).</span></li><li><input type="checkbox" disabled> <span>Users → set the right role (<code>anchor_rep</code> or <code>admin</code>).</span></li><li><input type="checkbox" disabled> <span>Notifications → add them as a <em>User</em> to every category they own.</span></li><li><input type="checkbox" disabled> <span>Sales Reps → if they carry a territory, add states and/or ZIP prefixes and a Teams link.</span></li><li><input type="checkbox" disabled> <span>Portal Access → add their email with the right level and team.</span></li><li><input type="checkbox" disabled> <span>Tell them: install to home screen, then Settings → Notifications → Enable.</span></li><li><input type="checkbox" disabled> <span>Point them at the Walkthroughs — every page has a guided tour button.</span></li></ul>
+<h3 id="onboarding-an-external-partner-rep">Onboarding an external partner rep</h3>
+<ul class="checklist"><li><input type="checkbox" disabled> <span>They sign in once (creates the profile automatically as <code>external_rep</code>).</span></li><li><input type="checkbox" disabled> <span>Users → turn on the <strong>commission flag</strong> if they're eligible to file commission claims. Without it, the commission form doesn't exist for them.</span></li><li><input type="checkbox" disabled> <span>Confirm their territory state is covered in Sales Reps so their consults route to somebody.</span></li><li><input type="checkbox" disabled> <span>Tell them: install to home screen, enable push.</span></li></ul>
+<h3 id="offboarding-anyone">Offboarding anyone</h3>
+<ul class="checklist"><li><input type="checkbox" disabled> <span>Users → downgrade or remove.</span></li><li><input type="checkbox" disabled> <span>Notifications → remove from <strong>every</strong> category. A departed person on a recipient list is the most common cause of &quot;why did that email bounce.&quot;</span></li><li><input type="checkbox" disabled> <span>Sales Reps → reassign their states and ZIP prefixes to somebody. <strong>Do this first</strong> — an uncovered state means consults silently route to the fallback address only.</span></li><li><input type="checkbox" disabled> <span>Portal Access → remove.</span></li><li><input type="checkbox" disabled> <span>Reassign their open consults, orders, and support threads.</span></li></ul>
+<hr>
+<h2 id="page-12-when-someone-says-it-s-broken">Page 12 — When someone says it's broken</h2>
+<p>Work down this list before escalating.</p>
+
+<figure class="shot is-missing" id="shot-40-wrong-build-png">
+  <img src="images/40-wrong-build.png" alt="The wrong-build redirect" loading="lazy"
+       onerror="this.closest('.shot').classList.add('is-missing')"
+       onload="this.closest('.shot').classList.remove('is-missing')">
+  <figcaption><span class="shot-n">Fig. 41</span> The wrong-build redirect</figcaption>
+  <div class="shot-todo">
+    <div class="shot-todo-h"><span class="shot-n">Fig. 41</span> Screenshot needed</div>
+    <dl>
+      <dt>Save as</dt><dd><code>docs/images/40-wrong-build.png</code></dd>
+      <dt>Where</dt><dd><code>Wrong build for your role</code></dd>
+      <dt>Capture</dt><dd>The bounce back to the login screen — the single most-reported 'bug'.</dd>
+    </dl>
+  </div>
+</figure>
+<div class='table-wrap'><table><thead><tr><th>Report</th><th>Likely cause</th><th>Fix</th></tr></thead><tbody><tr><td><strong>&quot;It logs me out / bounces me to the login page.&quot;</strong></td><td>They're on the wrong build. Anchor staff on the external site, or a partner rep on the internal site, get redirected.</td><td>Send them the correct URL for their role. This is #1 by a wide margin.</td></tr><tr><td><strong>&quot;I can't find the REC / commission / marketing order form.&quot;</strong></td><td>They're signed in as admin — forms are hidden from admins on purpose.</td><td>Use <strong>View As</strong> and pick a sales role.</td></tr><tr><td><strong>&quot;The Admin Console vanished.&quot;</strong></td><td>View As is still set to a sales role from last time — the floating pill will say &quot;Viewing as …&quot;.</td><td>Tap the pill, set it back to Admin.</td></tr><tr><td><strong>&quot;The commission form isn't there.&quot;</strong></td><td>The commission flag is off on their profile, or they're internal (external reps only).</td><td>Users → turn on the flag.</td></tr><tr><td><strong>&quot;I never got notified.&quot;</strong></td><td>Empty recipient list on that category, or their push isn't enabled on their device.</td><td>Notifications → check the category. Then have them check Settings → Notifications.</td></tr><tr><td><strong>&quot;I get emails but never pushes.&quot;</strong></td><td>Their device subscription. Push is per-device and per-install.</td><td>Re-install the home-screen app, re-enable push, send a test.</td></tr><tr><td><strong>&quot;Nobody contacted my customer.&quot;</strong></td><td>Territory gap — no rep covers that state or ZIP.</td><td>Sales Reps → check coverage for that state.</td></tr><tr><td><strong>&quot;My consult disappeared.&quot;</strong></td><td>Region scoping. Reps see only their own territory.</td><td>Look it up yourself — you see everything.</td></tr><tr><td><strong>&quot;Upload failed&quot; / &quot;Failed to parse body as FormData.&quot;</strong></td><td>The file exceeded the hosting request-size cap on an older upload path.</td><td>Developer escalation. Note the exact file size and which screen.</td></tr><tr><td><strong>&quot;The Copilot doesn't know about X.&quot;</strong></td><td>Document isn't indexed, or isn't allow-listed.</td><td>Knowledge → check both.</td></tr><tr><td><strong>&quot;The Friday report didn't arrive.&quot;</strong></td><td>Either nobody is assigned to <code>weekly_report</code>, or the scheduled job failed.</td><td>Check the recipient list first. If it's populated, escalate.</td></tr><tr><td><strong>&quot;A photo I uploaded never showed up.&quot;</strong></td><td>It's sitting in Asset Reviews awaiting approval.</td><td>Approve it.</td></tr><tr><td><strong>A page shows &quot;Coming soon.&quot;</strong></td><td>Rooftop Reports and Rooftop Audit Logic are placeholders — not built yet.</td><td>Not a bug.</td></tr><tr><td><strong>The NetSuite panel is greyed out.</strong></td><td>NetSuite credentials aren't connected yet, so the panel is intentionally inert.</td><td>Not a bug. A developer adds the credentials; it turns itself on.</td></tr><tr><td><strong>&quot;The Marketing Hub is limited to admins and the Marketing team&quot; — but I am both.</strong></td><td>Almost always the wrong build: the Hub only runs on the internal site. Being an admin doesn't help on the external one.</td><td>Open the internal site. If it persists there, check your Portal Access entry.</td></tr></tbody></table></div>
+<p><strong>Before escalating anything, capture:</strong> who (email and role), what URL, what they clicked, the exact error text, whether it was phone or desktop, and whether it's reproducible.</p>
+<hr>
+<h2 id="page-13-what-you-do-not-touch">Page 13 — What you do not touch</h2>
+<p>These are outside the admin UI and need a developer. Don't attempt them from a database console.</p>
+<ul><li><strong>Anything in the Supabase dashboard.</strong> All admin tasks have a UI. If you find yourself in a SQL editor, stop.</li><li><strong>NetSuite credentials and sync failures.</strong></li><li><strong>Email deliverability</strong> — bounces, domain/SPF issues, the sending service.</li><li><strong>Push signing keys.</strong></li><li><strong>Environment variables and deployment settings.</strong></li><li><strong>The scheduled Friday job.</strong></li><li><strong>Storage buckets directly.</strong> Upload through the app, never through the storage console — the app records metadata the console won't.</li></ul>
+<p><strong>Escalate with:</strong> what you were doing, the exact error, the affected person's email, a timestamp, and a screenshot.</p>
+<hr>
+<div class='pagebreak'></div>
+<h1 id="page-14-for-a-developer-taking-this-on">Page 14 — For a developer taking this on</h1>
+<p><em>Everything above is operator documentation. This section is for an engineer making structural changes. Read <code>SITEMAP.md</code> alongside it — that file is the exhaustive inventory of routes, tables, notifications, and integrations, and it is kept accurate.</em></p>
+<h2 id="stack">Stack</h2>
+<p>Next.js 16 (App Router, React 19, TypeScript, Tailwind v4) on Vercel. Supabase for Postgres + auth + storage + edge functions + pgvector. OpenAI for chat and embeddings. Resend for all transactional email. <code>web-push</code> (VAPID) for push. <code>next-pwa</code> for the service worker. NetSuite via an OAuth 1.0 TBA RESTlet.</p>
+<p>Build is pinned to webpack (<code>next build --webpack</code>), not Turbopack, because <code>next-pwa</code> doesn't cooperate with the Turbopack build.</p>
+<h2 id="the-five-things-that-will-surprise-you">The five things that will surprise you</h2>
+<p><strong>1. There are two deployments off one repo and one branch.</strong> Two Vercel projects both build <code>AnchorProducts/anchor-sales-copilot</code> on <code>main</code>: <code>anchor-internal</code> (<code>NEXT_PUBLIC_APP_MODE=internal</code>) and <code>anchor-sales-copilot</code> (unset = external). Env vars are per-project. A single push to <code>main</code> ships both.</p>
+<p><code>src/middleware.ts</code> cross-redirects by an <code>anchor-role</code> cookie: on the internal build, <code>external_rep</code> is bounced to <code>/</code>; on the external build, <code>admin</code>/<code>anchor_rep</code> are bounced to <code>/</code>. This applies to UI routes only, never <code>/api/*</code>.</p>
+<p><em>Gotcha:</em> the Vercel team has <strong>&quot;Require Verified Commits&quot;</strong> enabled at the team level. Unsigned commits cause builds to be <strong>silently cancelled</strong> with a message about an unverified commit. It's disabled at the project level on both current projects (since 2026-05-12), but any new Vercel project for this repo inherits the team default and will appear to just not deploy.</p>
+<p><strong>2. Middleware is not your authorization layer.</strong> Middleware enforces only session presence on a small set of paths (<code>/chat</code>, <code>/api/chat</code>, <code>/api/docs</code>) plus the deploy split. <strong>Real authorization is client-side UI gating plus 403s inside each API route.</strong> If you add a privileged route, the gate goes in the route handler — putting it in middleware alone is a hole.</p>
+<p>Most writes go through service-role API routes that bypass RLS entirely. RLS exists and is meaningful for direct-from-browser reads, but do not assume a table's RLS policy is protecting a write path; check the route.</p>
+<p><strong>3. Uploads must not go through API routes.</strong> Vercel caps serverless request bodies at ~4.5MB. <code>await req.formData()</code> on a multipart upload throws <code>&quot;Failed to parse body as FormData&quot;</code> the moment a real photo shows up.</p>
+<p>The established pattern, already applied across the app, is a two-phase signed-URL flow: 1. Browser POSTs small JSON <code>{ phase: &quot;sign&quot;, fileName, contentType }</code>; the server (service-role client) calls <code>createSignedUploadUrl(path, { upsert })</code> and returns <code>{ bucket, path, token, signedUrl }</code>. 2. Browser uploads bytes straight to Storage via <code>supabase.storage.from(bucket).uploadToSignedUrl(path, token, file, { contentType })</code>. The token authorizes the write, so no service key is exposed client-side. 3. If DB rows are needed, browser POSTs <code>{ phase: &quot;commit&quot;, path, ... }</code> and the server validates the path prefix before recording metadata.</p>
+<p><code>upsert</code> belongs on <code>createSignedUploadUrl</code>, <strong>not</strong> on <code>uploadToSignedUrl</code> (no effect there). Already converted: <code>api/assets/upload-images</code>, <code>api/internal/asset-reviews/upload</code>, <code>api/admin/assets/upload</code>, <code>api/inventory/[id]/image</code>. <strong>Any new upload feature must follow this.</strong></p>
+<p><strong>4. The database is shared with a second application.</strong> Supabase project <code>mytlsruwxujfakxzbvtp</code> is shared with the <strong>Anchor Internal Portal</strong> (<code>~/Desktop/dev/anchorp-website</code>, Next 15 + Payload). The <code>mkt_*</code> tables and <code>portal_invites</code> are read and written by both. A schema change here can break that app.</p>
+<p>Two premises worth internalizing: - <strong><code>profiles</code> is this app's user list; <code>portal_invites</code> is the portal's allow-list.</strong> They are not the same set. <code>src/lib/portalAccess.ts</code> treats the portal level+team as an <em>overlay</em>: an invite row wins, otherwise it falls back <code>admin→admin</code>, <code>anchor_rep→internal</code>, <code>external_rep→no portal level</code>. <code>requireMarketingUser()</code> deliberately demands a real invite row, because the shared <code>mkt_*</code> tables are gated on the portal's <code>is_marketing()</code> which reads only <code>portal_invites</code> — without that stricter check an app admin passes the app gate and then sees an empty board. - <strong>The <code>assets</code> table is not the library.</strong> The <code>knowledge</code> bucket holds ~332 files; <code>assets</code> indexed only 25. This app's Resource Library has always listed the bucket directly; the portal's Documents view reads <code>assets</code>. <code>/api/admin/library/backfill</code> (admin-only, dry-run by default) indexes bucket files into <code>assets</code> so both surfaces see everything. Pointing the app at <code>assets</code> alone would be a ~92% content loss.</p>
+<p><em>Watch out:</em> a <strong>separate</strong> Supabase project named &quot;AnchorP Academy&quot; also contains <code>manufacturer_contacts</code> and <code>profiles</code> with similar data. Running migrations against it does nothing for this app. Verify you're on <code>mytlsruwxujfakxzbvtp</code> — it has <code>manufacturer_contacts</code> but no <code>courses</code>/<code>quizzes</code>/<code>lessons</code>.</p>
+<p><strong>5. Migrations are applied by hand, and the schema cache lies.</strong> 67 SQL files in <code>supabase/migrations/</code>, applied through the Supabase dashboard SQL editor. There's no CI migration step.</p>
+<p>After DDL, PostgREST — which is what the app actually talks to — keeps serving a stale schema. <strong><code>NOTIFY pgrst, 'reload schema';</code> does not work</strong>; the transaction-mode pooler drops LISTEN/NOTIFY, so it reports success and reloads nothing. Reliable reloads: make the change through the <strong>Table Editor UI</strong>, save any option under <strong>Settings → API</strong>, or restart the project.</p>
+<p>Error codes distinguish the two failure modes: <code>42703</code> (raw Postgres &quot;column does not exist&quot;) means the column genuinely isn't there; <code>PGRST205</code> means the table isn't in the cache.</p>
+<h2 id="architectural-notes">Architectural notes</h2>
+<p><strong>Feature flags: <code>admin_tools</code>.</strong> A key/active table driving both the Admin Console tiles and the sales-rep dashboard tiles. <code>src/app/admin/cards.tsx</code> is the single source of truth for the console catalog — <strong>keys are permanent</strong>; changing one orphans its saved state.</p>
+<p><strong><code>site_live</code> inverts the convention.</strong> Everywhere else in <code>admin_tools</code>, a <em>missing row means active</em> so new tiles light up on deploy. <code>site_live</code> is the opposite: <strong>missing means off</strong>. It gates the entire App↔Portal reconciliation feature set (Pitch to Marketing, Submissions, Email templates, All Documents, Portal Access). Enforcement lives inside <code>requireInternalUser</code> / <code>requireMarketingUser</code> / <code>requireAdminUser</code> in <code>portalAccess.ts</code>, so new routes using those guards inherit it for free. Server-side reads (<code>src/lib/flags/server.ts</code>) <strong>fail closed</strong> — missing row, missing table, or read error all mean dark.</p>
+<p><strong>Notifications are a registry, not scattered calls.</strong> <code>src/lib/push/topics.ts</code> defines the category (&quot;tool&quot;) keys. Recipients resolve from two tables: <code>notification_tool_assignments</code> (app users → email + push) and <code>notification_tool_emails</code> (raw addresses → email only). Empty list falls back to <code>reports@anchorp.com</code> or a tool-specific env var. Adding a notification means adding a topic key, not inventing a new recipient mechanism. Region-scoped marketing routing uses dynamic keys of the form <code>marketing_order_region:&lt;repId&gt;</code>.</p>
+<p><strong>NetSuite is gated on its own credentials, not on a flag.</strong> <code>src/lib/netsuite/config.ts</code> exports <code>isNetSuiteConfigured()</code>, true only when all six <code>NETSUITE_*</code> vars are present and non-empty. Both <code>GET /api/leads/[id]</code> and <code>GET /api/fm-intake/[id]</code> return that boolean as <code>netsuiteConfigured</code> (never the credentials). The shared <code>NetSuitePanel</code> renders greyed with a &quot;Coming soon&quot; badge when false, and the automatic-sync effect short-circuits. <code>POST /api/leads/[id]/netsuite-sync</code> returns <strong>503</strong> with the list of missing vars as a backstop. Populate the six vars and the feature appears — there is no flag to flip.</p>
+<p><code>fm_intake_submissions</code> carries the same five <code>netsuite_*</code> columns as <code>leads</code> (migration <code>20260729_000002</code>), so the panel can show real state once wired — but <strong>the intake push itself does not exist yet</strong>. The <code>netsuite-lead-sync</code> edge function takes a <code>lead_id</code> and only handles leads; intakes render the panel read-only (<code>NetSuitePanel</code> without <code>onSync</code>). Wiring them means extending that edge function and adding a sync route, not just adding credentials.</p>
+<p>Note the actual OAuth 1.0 TBA call is made by the <code>netsuite-lead-sync</code> <strong>edge function</strong>, which reads these from Supabase secrets, not from the Next.js environment. So they must be set in three places: <code>.env.local</code>, both Vercel projects, and <code>supabase secrets set</code>. The UI gate can only see the first two.</p>
+<p><strong>Lead routing is data, not code.</strong> <code>sales_reps</code> maps people to <code>states[]</code> and <code>zip_prefixes[]</code>. It's seeded with 11 named reps and is the only place real humans are hardcoded. Territory changes are an admin task, not a deploy.</p>
+<p><strong>All enums are <code>text</code> + CHECK constraints.</strong> No native Postgres enums anywhere. Status values are mirrored in TypeScript constants (<code>src/lib/marketingOrders.ts</code> is the model — the comment there explains the intent). <strong>Change both, or the DB check constraint rejects a value the UI happily offers.</strong></p>
+<p><strong>Storage is private.</strong> Two buckets, <code>knowledge</code> and <code>lead-uploads</code>, both private. Every read is a server-generated <code>createSignedUrl</code>. There is one intentional public path (<code>/api/public/doc</code>) used by anchorp.com's Resource Library, gated to a specific set of prefixes (<code>solutions/</code>, <code>anchor/u-anchors/</code>, <code>spec/</code>). Don't widen it casually.</p>
+<p><strong>Background work</strong> lives in three Supabase edge functions — <code>netsuite-lead-sync</code>, <code>revision-change-email</code> (target of a <code>pg_net</code> webhook on <code>assets</code> revision changes), <code>training-digest</code> — plus one Vercel cron (<code>vercel.json</code>, Fridays 17:00 UTC → <code>/api/reports/weekly</code>, guarded by <code>CRON_SECRET</code>).</p>
+<p><strong>The document notification fires on replacement, in application code.</strong> It used to hang off a QMS-style revision label: a text field on one obscure screen, wired through a DB trigger and the <code>revision-change-email</code> edge function. No asset ever had a revision set, so it never fired — but it would have, on the first person to type in that box. Migration <code>20260729_000003</code> retired that path:</p>
+<ul><li><code>trg_assets_notify_revision_change</code> and its function are <strong>dropped</strong>, which makes the <code>revision-change-email</code> edge function unreachable. It stays deployed but is dead; delete it when convenient.</li><li>The topic key was renamed <code>document_revision</code> → <code>document_replaced</code>, and existing recipient rows were carried over so nobody silently stopped being notified.</li><li>The notification is now sent from the commit phase of <code>POST /api/admin/assets/upload</code> when <code>replace === true</code>, so it fires exactly once per completed replace and can name the file and the person.</li><li>The revision UI is gone (both the per-card editor and the rep-agreement upload field), and <code>/api/internal-assets/revision</code> — its only writer — was deleted.</li><li><code>assets.revision</code> is <strong>not</strong> dropped. It's unused and nothing reads or writes it, but the column is shared with the portal, so removing it is a separate, verified decision.</li></ul>
+<h2 id="if-you-re-making-large-scale-changes">If you're making large-scale changes</h2>
+<ul><li><strong>Read <code>SITEMAP.md</code> first.</strong> It is current and comprehensive — routes, every API endpoint, every table with its columns and RLS posture, all 15 email types with their recipients, all 16 push types, buckets, edge functions, and env vars.</li><li><strong>Grep before you rename.</strong> Status strings and <code>admin_tools</code> keys are duplicated between TypeScript constants and SQL check constraints on purpose.</li><li><strong>Test both deploys.</strong> A change that works on internal can be invisible or broken on external because of the middleware split and <code>appMode.ts</code> branding. Test with all three roles, and test View-As.</li><li><strong>Check the other app.</strong> Before touching <code>mkt_*</code>, <code>portal_invites</code>, <code>assets</code>, or <code>profiles</code>, open the portal repo. Verify actual row counts in the shared project rather than trusting any spec's framing of what a table contains — both divergences documented above were invisible from either repo alone.</li><li><strong>Ship risky work behind <code>site_live</code></strong> (or a new <code>admin_tools</code> key). The pattern exists and works: build it dark, flip it once.</li><li><strong><code>SITEMAP.md</code> is part of the deliverable.</strong> If you change routes, tables, or notifications, update it in the same PR. It's the only reason this handoff is possible.</li></ul>
+<h3 id="known-gaps-honestly-stated">Known gaps, honestly stated</h3>
+<ul><li>Rooftop Reports and Rooftop Audit Logic are <code>ComingSoon</code> placeholders with backing tables (<code>assessment_reports</code>, <code>rooftop_assessment_config</code>) but no UI.</li><li>The learning admin page lives at a route under <code>/api/…</code> (<code>src/app/api/admin/learning/page.tsx</code>) with no inline role gate — a wart worth fixing.</li><li><code>notification_settings</code> (a single-row table) is largely superseded by the tool-assignment tables but still referenced. Consolidating them is a real cleanup.</li><li><code>sales_regions</code> is dead weight superseded by <code>sales_reps</code>.</li><li>Several base tables predate the repo's migrations; their columns were reconstructed from later <code>ALTER</code>s and from code. <code>SITEMAP.md</code> marks these with ⚠.</li><li>No automated test suite. Verification is manual, across two deploys and three roles.</li></ul>
+<h2 id="the-complete-site-map">The complete site map</h2>
+<p>Everything below is generated from <code>SITEMAP.md</code> — routes by role, every API endpoint, every table with its columns and RLS posture, all 15 email types with their recipients, all 16 push types, storage buckets, edge functions, and env vars. Expand any section.</p>
+<blockquote><p><strong>Currency note:</strong> <code>SITEMAP.md</code> was last revised 2026-07-08 and does <strong>not</strong> yet cover the App↔Portal reconciliation work (the pitch-to-marketing routes, <code>/admin/portal-access</code>, <code>/assets/documents</code>, and the <code>mkt_*</code> tables). Treat those as documented in the sections above but absent from the inventory below, and update <code>SITEMAP.md</code> when that work merges.</p></blockquote>
+<div class="sitemap"><div class="sitemap-intro"><p><em>Last updated: 2026-07-29. Covers routes (external / internal / admin), API surface, notifications (emails + push, with recipients &amp; names), database tables, storage buckets, and integrations.</em> &gt; <strong>Changed 2026-07-29</strong> — consults &amp; Project Intakes moved to a two-state workflow (<code>new</code> | <code>assigned</code>) with an assignee picker and admin delete; NetSuite gated behind its own credentials; the document notification retargeted from a revision label to document <em>replacement</em>; the App↔Portal reconciliation surfaces (Pitch to Marketing, Portal Access, All Documents) documented for the first time, all behind the <code>site_live</code> flag.</p></div><details class="sm"><summary>1. Roles &amp; access model</summary><div class="sm-body"><p>Roles live on <code>profiles</code> (<code>role</code> + <code>user_type</code>). Profiles auto-create on first dashboard/chat load: <code>@anchorp.com</code> emails → <code>anchor_rep</code>/<code>internal</code>, everyone else → <code>external_rep</code>/<code>external</code>.</p>
+<div class='table-wrap'><table><thead><tr><th>Role</th><th>user_type</th><th>Sees</th></tr></thead><tbody><tr><td><code>external_rep</code></td><td>external</td><td>Submission forms only — consult (REC), commission, notable project, marketing orders, marketing inventory</td></tr><tr><td><code>anchor_rep</code></td><td>internal</td><td>Consult triage queue + shared tools + some admin pages (inventory, marketing-orders, knowledge)</td></tr><tr><td><code>admin</code></td><td>internal</td><td>Everything — all triage, analytics, reviews, knowledge, notifications config</td></tr></tbody></table></div>
+<p><strong>View-As</strong> (<code>src/lib/role/viewAs.ts</code>): admins preview the app as any role via a <code>localStorage</code> override. UI gating uses the <em>effective</em> role; data fetches/sign-out use the <em>real</em> session. Admin-as-admin cannot open submission forms — must View-As a sales role.</p>
+<p><strong><code>site_live</code> kill switch</strong> (<code>src/lib/flags/</code>): one <code>admin_tools</code> row gates the whole App↔Portal reconciliation feature set (Pitch to Marketing, Submissions, Email templates, All Documents, Portal Access). It <strong>inverts</strong> the table's usual convention — everywhere else a missing row means ACTIVE; a missing <code>site_live</code> row means OFF. Enforced inside <code>requireInternalUser</code> / <code>requireMarketingUser</code> / <code>requireAdminUser</code> (<code>src/lib/portalAccess.ts</code>), so new routes using those guards inherit it. Server reads fail closed.</p>
+<p><strong>Portal access overlay</strong> (<code>src/lib/portalAccess.ts</code>): the shared <code>portal_invites</code> allow-list (level <code>admin</code>|<code>internal</code> + team) overlays this app's <code>profiles.role</code>. <code>requireMarketingUser()</code> is deliberately stricter — it demands a real invite row <strong>and</strong> the internal deploy, because the shared <code>mkt_*</code> tables are gated on the portal's <code>is_marketing()</code>, which reads only <code>portal_invites</code>.</p>
+<p><strong>Two-deploy split</strong> (<code>src/lib/appMode.ts</code> + <code>src/middleware.ts</code>): <code>NEXT_PUBLIC_APP_MODE=internal</code> = internal build, unset = external build. Middleware cross-redirects by the <code>anchor-role</code> cookie (external reps kept out of internal build; Anchor staff kept out of external build). Middleware only enforces auth presence + the deploy split — page-level role gating is client-side + API 403s.</p></div></details>
+<details class="sm"><summary>2. Public / Auth routes</summary><div class="sm-body"><div class='table-wrap'><table><thead><tr><th>Route</th><th>Purpose</th></tr></thead><tbody><tr><td><code>/</code></td><td>Login (Supabase) + redirect already-authed users</td></tr><tr><td><code>/forgot</code></td><td>Request password reset</td></tr><tr><td><code>/reset</code></td><td>Set new password</td></tr><tr><td><code>/signup</code></td><td>Listed in middleware <code>PUBLIC_PATHS</code> — no <code>page.tsx</code> (handled on <code>/</code>)</td></tr><tr><td><code>/auth/callback</code></td><td>Magic-link / OAuth callback (route handler)</td></tr><tr><td><code>/grab/[token]</code></td><td><strong>Public, no login</strong> — marketing aisle QR pickup. Self-report items taken; decrements stock and notifies.</td></tr></tbody></table></div></div></details>
+<details class="sm"><summary>3. Shared routes (all authenticated roles)</summary><div class="sm-body"><div class='table-wrap'><table><thead><tr><th>Route</th><th>Purpose</th></tr></thead><tbody><tr><td><code>/dashboard</code></td><td>Role-aware home hub — hero + quick-action cards + stat tiles</td></tr><tr><td><code>/chat</code></td><td>AI Sales Copilot (RAG over knowledge base)</td></tr><tr><td><code>/assets</code></td><td>Resource Library browser (internal users also see internal-assets section)</td></tr><tr><td><code>/assets/[id]</code></td><td>Product &quot;Tackle Box&quot; detail</td></tr><tr><td><code>/docs/view</code></td><td>Full-screen document viewer</td></tr><tr><td><code>/dashboard/settings</code></td><td>Profile / service-state / NetSuite-sync-mode settings</td></tr><tr><td><code>/dashboard/faq</code></td><td>FAQ</td></tr><tr><td><code>/dashboard/get-started</code></td><td>Onboarding / first-run guide</td></tr><tr><td><code>/assets/documents</code></td><td><strong>All Documents</strong> — flat searchable index over the library (<code>site_live</code>)</td></tr><tr><td><code>/dashboard/support</code></td><td>Personal support-thread list (admins redirect → <code>/admin/support</code>)</td></tr><tr><td><code>/dashboard/support/[id]</code></td><td>Support thread detail</td></tr></tbody></table></div></div></details>
+<details class="sm"><summary>4. External Rep routes (<code>external_rep</code>)</summary><div class="sm-body"><div class='table-wrap'><table><thead><tr><th>Route</th><th>Purpose</th><th>Gate</th></tr></thead><tbody><tr><td><code>/dashboard/opportunities/new</code></td><td><strong>Rooftop Equipment Consult (REC)</strong> submission</td><td><code>sales</code> audience (ext + anchor)</td></tr><tr><td><code>/dashboard/notable-projects/new</code></td><td>Notable Project submission (photos)</td><td><code>sales</code></td></tr><tr><td><code>/marketing-orders</code></td><td>Order samples / brochures / swag</td><td><code>sales</code></td></tr><tr><td><code>/marketing-inventory</code></td><td>Browse marketing inventory</td><td><code>sales</code></td></tr><tr><td><code>/dashboard/commission/new</code></td><td>Commission Claim form</td><td><strong>external_rep only</strong> + <code>anchor_commission</code> flag</td></tr><tr><td><code>/rooftop</code></td><td>Rooftop Audit — <code>ComingSoon</code> placeholder</td><td><code>sales</code></td></tr></tbody></table></div></div></details>
+<details class="sm"><summary>5. Internal / Anchor Rep routes (<code>anchor_rep</code>)</summary><div class="sm-body"><p>Anchor reps see all shared + sales-form routes, plus:</p>
+<div class='table-wrap'><table><thead><tr><th>Route</th><th>Purpose</th><th>Gate</th></tr></thead><tbody><tr><td><code>/dashboard/opportunities</code></td><td><strong>Active Consults</strong> triage queue (region-scoped)</td><td>internal (admin + anchor_rep)</td></tr><tr><td><code>/dashboard/opportunities/[id]</code></td><td>Consult detail — status, assignment, meeting link, attachments, NetSuite sync</td><td>internal</td></tr><tr><td><code>/internal-assets/docs/[productId]</code></td><td>Per-product internal docs</td><td>internal content</td></tr><tr><td><code>/internal-assets/contacts/[productId]</code></td><td>Per-product manufacturer contacts</td><td>internal content</td></tr><tr><td><code>/dashboard/project-intake/new</code></td><td>Project Intake submission</td><td>internal</td></tr><tr><td><code>/dashboard/project-intake/[id]</code></td><td>Intake detail — assignee, delete (admin), NetSuite panel</td><td>internal, territory-scoped</td></tr><tr><td><code>/dashboard/pitch</code></td><td><strong>Pitch to Marketing</strong> — pitch an idea, track the decision</td><td>internal (<code>site_live</code>)</td></tr></tbody></table></div>
+<p>Three &quot;admin&quot; pages also admit <code>anchor_rep</code>: <code>/admin/inventory</code>, <code>/admin/marketing-orders</code>, <code>/admin/knowledge</code>.</p></div></details>
+<details class="sm"><summary>6. Admin routes (<code>admin</code>)</summary><div class="sm-body"><p>Hub <code>/admin</code> renders tiles from <code>src/app/admin/cards.tsx</code>.</p>
+<div class='table-wrap'><table><thead><tr><th>Route</th><th>Purpose</th><th>Gate</th></tr></thead><tbody><tr><td><code>/admin</code></td><td>Admin console hub</td><td>admin</td></tr><tr><td><code>/admin/analytics</code></td><td>OEM analytics</td><td>admin</td></tr><tr><td><code>/admin/user-analytics</code></td><td>Per-user activity analytics</td><td>admin</td></tr><tr><td><code>/dashboard/reports</code></td><td>&quot;What every Anchor employee is doing&quot; activity report</td><td>admin (via API 403)</td></tr><tr><td><code>/admin/users</code></td><td>User management (roles, <code>anchor_commission</code> toggle)</td><td>admin</td></tr><tr><td><code>/admin/sales-reps</code></td><td>Sales-rep territory (state / ZIP) assignment</td><td>admin</td></tr><tr><td><code>/admin/notifications</code></td><td>Notification recipient config (who gets emailed/pushed)</td><td>admin</td></tr><tr><td><code>/admin/support</code> + <code>/admin/support/[id]</code></td><td>Support queue + thread</td><td>admin</td></tr><tr><td><code>/admin/commission-claims</code></td><td>Review commission claims</td><td>admin</td></tr><tr><td><code>/admin/notable-projects</code></td><td>Review notable projects</td><td>admin</td></tr><tr><td><code>/admin/marketing</code></td><td>Marketing Admin Center</td><td>admin</td></tr><tr><td><code>/admin/marketing-orders</code></td><td>Marketing order fulfillment queue</td><td>admin + anchor_rep</td></tr><tr><td><code>/admin/inventory</code></td><td>Marketing inventory management</td><td>admin + anchor_rep</td></tr><tr><td><code>/admin/fm-intake</code></td><td>Rooftop Equipment Intake (FM form) review</td><td>admin</td></tr><tr><td><code>/admin/knowledge</code></td><td>Knowledge base / doc library management</td><td>admin + anchor_rep</td></tr><tr><td><code>/admin/asset-reviews</code></td><td>Approve/reject rep photo uploads</td><td>admin</td></tr><tr><td><code>/admin/manufacturer-contacts</code></td><td>Manage OEM/consultant contact directory</td><td>admin</td></tr><tr><td><code>/admin/walkthroughs</code></td><td>Trigger in-app page tutorials</td><td>admin (via hub)</td></tr><tr><td><code>/admin/tools</code></td><td>Activate/deactivate tool tiles (<code>admin_tools</code>) + the <strong>Site live</strong> master switch</td><td>admin</td></tr><tr><td><code>/admin/portal-access</code></td><td>Shared authorized-emails manager (<code>portal_invites</code>)</td><td>admin (<code>site_live</code>)</td></tr><tr><td><code>/marketing/submissions</code></td><td>Pitch review queue — approve / request info / decline</td><td>marketing or admin, internal deploy, <code>site_live</code></td></tr><tr><td><code>/marketing/email-templates</code></td><td>Editable pitch notification emails</td><td>marketing or admin, internal deploy, <code>site_live</code></td></tr><tr><td><code>/admin/rooftop-reports</code></td><td>Assessment reports — <code>ComingSoon</code></td><td>admin</td></tr><tr><td><code>/admin/rooftop-logic</code></td><td>Rooftop audit logic — <code>ComingSoon</code></td><td>admin</td></tr><tr><td><code>/api/admin/learning/page.tsx</code></td><td>Learning admin (doc allow-list + correction console; page under an <code>/api/…</code> path)</td><td>no inline gate</td></tr></tbody></table></div></div></details>
+<details class="sm"><summary>7. Navigation surfaces</summary><div class="sm-body"><ul><li><strong>Desktop sidebar</strong> (<code>AppSidebar.tsx</code>): Dashboard, Copilot, Assets, Support, Settings, Sign out for all. Sales roles add REC / Notable / Marketing Orders / Commission. <code>anchor_rep</code> adds Active Consults. <code>admin</code> adds Admin + Reports.</li><li><strong>Mobile bottom nav</strong> (<code>MobileBottomNav.tsx</code>): Dashboard + 2 recents + Settings, recents filtered per role.</li><li><strong>Marketing Admin Center</strong> (<code>/admin/marketing</code>): tabs <strong>Orders</strong>, <strong>Inventory</strong>, and <strong>Submissions</strong> — the last only when <code>site_live</code> <strong>and</strong> the internal build (<code>isInternal</code>); otherwise the tab is not rendered at all, and <code>?tab=submissions</code> falls back to Orders.</li><li><strong>Dashboard quick-action cards</strong> (<code>dashboard/page.tsx</code>): sales personas see form cards; admin sees Copilot/Assets/Active Consults/Admin Console/Assessment Reports (forms hidden — must View-As). Deactivated <code>admin_tools</code> are stripped from sales viewers' hero + cards.</li></ul></div></details>
+<details class="sm"><summary>8. API routes</summary><div class="sm-body"><h3 id="auth">Auth</h3>
+<ul><li><code>POST /api/auth/callback</code>, <code>POST /api/auth/sync</code></li></ul>
+<h3 id="chat-knowledge-learning">Chat / Knowledge / Learning</h3>
+<ul><li><code>POST /api/chat</code> — Copilot (OpenAI + RAG, injects matched corrections)</li><li><code>POST /api/corrections</code> — per-message corrections (teaches copilot)</li><li><code>POST /api/feedback</code> — thumbs / rating on answers</li><li><code>GET /api/docs</code>, <code>GET /api/doc-open</code> (signed URL + <code>doc_opened</code> event), <code>POST /api/doc-event</code></li><li><code>GET /api/knowledge-counts</code>, <code>/api/knowledge-list</code></li><li><code>GET /api/public/doc</code>, <code>/api/public/library</code> — signed public doc access</li><li><code>POST /api/admin/learning/action</code>, <code>/api/admin/learning/summary</code></li><li><code>GET /api/admin/knowledge/library-docs</code>, <code>/api/library/docs</code>, <code>POST /api/admin/library/backfill</code> (indexes bucket files into <code>assets</code>; dry-run by default)</li></ul>
+<h3 id="forms-triage">Forms / Triage</h3>
+<ul><li><code>POST /api/leads</code> (submit consult) · <code>GET /api/leads</code> (triage, region-scoped) · <code>GET/PATCH/DELETE /api/leads/[id]</code> · <code>POST /api/leads/[id]/netsuite-sync</code></li><li><code>GET</code> also returns <code>netsuiteConfigured</code>. <code>PATCH</code> derives <code>status</code> from <code>assigned_rep_user_id</code>. <code>DELETE</code> is <strong>admin-only</strong> and removes the row plus its <code>lead-uploads</code> files.</li><li><code>netsuite-sync</code> returns <strong>503</strong> <code>{ error, missing[] }</code> when the <code>NETSUITE_*</code> credentials are absent.</li><li><code>GET /api/internal/assignees</code> — everyone a consult/intake can be assigned to (admin + anchor_rep). Readable by any internal user.</li><li><code>POST /api/commission</code></li><li><code>POST /api/notable-projects</code></li><li><code>GET/POST /api/marketing-orders</code> · <code>PATCH</code> (status) · <code>/api/marketing-orders/[id]/messages</code> · <code>/[id]/activity</code> · <code>/unread</code></li><li><code>POST /api/fm-intake</code> · <code>GET/PATCH/DELETE /api/fm-intake/[id]</code></li><li><code>GET</code> returns <code>netsuiteConfigured</code> + <code>assigned_rep_name</code>. <code>PATCH</code> accepts <code>assigned_rep_user_id</code> (derives <code>status</code>) and <code>review_notes</code>; admin-only. <code>DELETE</code> is admin-only and removes the row plus its <code>knowledge</code> files.</li><li><code>POST /api/support</code> · <code>/api/support/[id]</code> (reply)</li><li><code>POST /api/rooftop</code> — Rooftop Equipment Audit (service-role, config-driven prompt)</li></ul>
+<h3 id="inventory">Inventory</h3>
+<ul><li><code>GET/POST /api/inventory</code> · <code>/api/inventory/[id]/image</code> · <code>/api/inventory/checkouts</code> · <code>/api/inventory/grabs</code> · <code>/api/inventory/aisle-qr</code></li><li><code>GET/POST /api/public/grab</code> — the no-login aisle pickup (token-gated)</li></ul>
+<h3 id="assets-uploads">Assets / Uploads</h3>
+<ul><li><code>POST /api/assets/upload-images</code>, <code>/api/internal/asset-reviews/upload</code>, <code>/api/internal-assets/rep-agreements/upload</code></li><li><em>(<code>/api/internal-assets/revision</code> was <strong>removed</strong> 2026-07-29 along with the revision UI.)</em></li><li>Admin: <code>/api/admin/assets/upload|delete|rename-sheets</code> — <code>upload</code> with <code>replace:true</code> overwrites bytes in place (path unchanged) and fires the <strong><code>document_replaced</code></strong> notification, <code>/api/admin/products</code>, <code>/api/admin/asset-reviews</code>, <code>/api/admin/oem-matrix</code></li></ul>
+<h3 id="admin-config">Admin config</h3>
+<ul><li><code>GET/POST /api/admin/sales-reps</code>, <code>/api/admin/users</code>, <code>/api/admin/manufacturer-contacts[/[id]]</code>, <code>/api/admin/rooftop-logic</code>, <code>/api/admin/rooftop-reports</code>, <code>/api/admin/commission-claims</code>, <code>/api/admin/tools</code>, <code>/api/admin/user-activity</code>, <code>/api/admin/user-events</code></li><li><code>GET/PUT /api/admin/notification-settings</code>, <code>GET/PUT /api/admin/notification-tools</code></li><li><code>GET/POST/PATCH/DELETE /api/admin/portal-invites</code> — the shared authorized-emails list</li><li><code>GET /api/me/portal-access</code> — the caller's resolved portal level/team</li></ul>
+<h3 id="pitch-to-marketing-all-site_live-internal-deploy">Pitch to Marketing (all <code>site_live</code> + internal deploy)</h3>
+<ul><li><code>GET/POST /api/pitches</code> · <code>POST /api/pitches/[id]/comments</code></li><li><code>GET /api/marketing/submissions</code> — review queue. 403 carries <code>reason</code>: <code>not_live</code> | <code>not_signed_in</code> | <code>not_internal_deploy</code> | <code>not_marketing</code></li><li><code>PATCH /api/marketing/submissions/[id]</code> — approve / decline</li><li><code>GET/PUT /api/marketing/email-templates</code></li></ul>
+<h3 id="push">Push</h3>
+<ul><li><code>POST /api/push/subscribe</code>, <code>/api/push/unsubscribe</code>, <code>GET /api/push/status</code>, <code>POST /api/push/test</code></li></ul>
+<h3 id="analytics-system">Analytics / System</h3>
+<ul><li><code>POST /api/user-events</code>, <code>GET /api/user-events/most-used</code></li><li><code>GET /api/reports/weekly</code> — Friday cron (Resend + prune), guarded by <code>CRON_SECRET</code></li><li><code>GET /api/sales-reps/by-state</code>, <code>/api/health</code>, <code>/api/status</code>, <code>/api/geocode</code></li></ul></div></details>
+<details class="sm"><summary>9. Notifications</summary><div class="sm-body"><p>Two channels, unified by a <strong>&quot;tool&quot; (event category)</strong> registry (<code>src/lib/push/topics.ts</code>). Recipients per tool come from two tables — <code>notification_tool_assignments</code> (app users → <strong>email + push</strong>) and <code>notification_tool_emails</code> (raw addresses → <strong>email only</strong>). Managed at <strong><code>/admin/notifications</code></strong>.</p>
+<ul><li><strong>Email</strong> via <strong>Resend</strong>. Default from: <strong><code>Anchor Co-Pilot &lt;reports@anchorp.com&gt;</code></strong> (override <code>LEAD_NOTIFICATIONS_FROM</code>).</li><li><strong>Push</strong> via <strong>web-push</strong> (VAPID). Subject <code>mailto:notifications@anchorp.com</code>. Requires a <code>push_subscriptions</code> row per device.</li><li><strong>Recipient tables are NOT seeded</strong> — every tool ships with zero recipients; admins configure them. When empty, code falls back to <code>reports@anchorp.com</code> (or the tool-specific env var).</li></ul>
+<h3 id="notification-tools-event-categories">Notification tools (event categories)</h3>
+<div class='table-wrap'><table><thead><tr><th>Tool key</th><th>Label</th><th>Fires on</th></tr></thead><tbody><tr><td><code>new_consult</code></td><td>New consult</td><td>REC / opportunity submitted</td></tr><tr><td><code>marketing_order</code></td><td>Marketing order placed</td><td>Marketing order submitted</td></tr><tr><td><code>marketing_order_status</code></td><td>Order status change</td><td>Order phase changes</td></tr><tr><td><code>commission_claim</code></td><td>Commission claim</td><td>Commission claim submitted</td></tr><tr><td><code>notable_project</code></td><td>Notable project</td><td>Notable install submitted</td></tr><tr><td><code>support_request</code></td><td>Support request</td><td>Support ticket filed</td></tr><tr><td><code>asset_review</code></td><td>Photo for review</td><td>Rep uploads tackle-box photo</td></tr><tr><td><code>weekly_report</code></td><td>Weekly analytics</td><td>Friday summary (email + push)</td></tr><tr><td><code>document_replaced</code></td><td>Document replaced</td><td>A library file is overwritten in place via <code>/api/admin/assets/upload</code> (<code>replace:true</code>)</td></tr><tr><td><code>inventory_low_stock</code></td><td>Inventory low stock</td><td>Item hits low-stock threshold</td></tr><tr><td><code>inventory_grab</code></td><td>Marketing aisle pickup</td><td>Someone scans the aisle QR and takes stock</td></tr><tr><td><code>fm_intake</code></td><td>Rooftop Equipment Intake (FM)</td><td>FM intake submitted</td></tr><tr><td><code>marketing_order_region:&lt;repId&gt;</code></td><td>Per-region marketing (dynamic)</td><td>Outside-rep order routed to region's inside rep/manager</td></tr></tbody></table></div>
+<h3 id="emails-sent">Emails sent</h3>
+<div class='table-wrap'><table><thead><tr><th>#</th><th>Event</th><th>Recipients</th><th>Subject</th></tr></thead><tbody><tr><td>E1</td><td>New consult (REC)</td><td>Region-resolved reps (see roster below) <strong>+</strong> <code>new_consult</code> tool</td><td><code>New Opportunity Assigned - {company} ({id8})</code> / <code>New consult — …</code></td></tr><tr><td>E2</td><td>Commission claim</td><td><code>commission_claim</code> tool → fallback <code>reports@anchorp.com</code> (PDF attached)</td><td><code>Commission Claim - {company} ({id8})</code></td></tr><tr><td>E3</td><td>Marketing order placed</td><td><code>marketing_order</code> tool</td><td><code>Marketing Order - {category} ({id8})</code></td></tr><tr><td>E4</td><td>Marketing order — confirmation</td><td>Submitting rep</td><td><code>We got your marketing order - …</code></td></tr><tr><td>E5</td><td>Marketing order — regional manager</td><td><code>marketing_order_region:{repId}</code> tool</td><td><code>Marketing order from {who} — …</code></td></tr><tr><td>E6</td><td>Marketing order status change</td><td><code>marketing_order_status</code> tool (branded HTML)</td><td><code>Marketing order updated — {status}</code></td></tr><tr><td>E7</td><td>Marketing order chat</td><td>Team→rep: order submitter · Rep→team: <code>marketing_order</code> tool</td><td><code>New message about your marketing order …</code> / <code>New message on marketing order …</code></td></tr><tr><td>E8</td><td>Notable project</td><td><code>notable_project</code> tool</td><td><code>Notable Project - {name} ({id8})</code></td></tr><tr><td>E9</td><td>Support request (new)</td><td><code>support_request</code> tool</td><td><code>Support — {subject} ({id8})</code></td></tr><tr><td>E10</td><td>Support reply</td><td>Ticket requester</td><td><code>Re: {subject}</code></td></tr><tr><td>E11</td><td>FM intake</td><td><code>fm_intake</code> tool</td><td><code>Rooftop Equipment Intake — {name} ({id8})</code></td></tr><tr><td>E12</td><td>Inventory low stock</td><td><code>inventory_low_stock</code> tool</td><td><code>Low stock — {item}</code></td></tr><tr><td>E13</td><td>Weekly analytics (cron)</td><td><code>weekly_report</code> tool / <code>WEEKLY_REPORT_TO</code> (2 PDFs)</td><td><code>Anchor Sales Co-Pilot — Weekly Analytics …</code></td></tr><tr><td>E14</td><td>Document replaced</td><td><code>document_replaced</code> tool — sent from the API route, <strong>not</strong> a DB trigger</td><td><code>Document replaced — {file}</code></td></tr><tr><td>E15</td><td>Training digest (daily edge fn)</td><td>env <code>ADMIN_ALERT_EMAILS</code>; from <code>onboarding@resend.dev</code></td><td><code>Anchor Co-Pilot digest: {N} corrections, {M} low ratings</code></td></tr></tbody></table></div>
+<p><em>NetSuite lead sync sends no notification — it only writes sync status back to the lead.</em></p>
+<h3 id="push-notifications">Push notifications</h3>
+<p><code>new_consult</code> (P1), region reps (P2), <code>commission_claim</code> (P3), <code>marketing_order</code> (P4), order creator confirm (P5), regional manager (P6), <code>marketing_order_status</code> (P7), order chat both directions (P8/P9), <code>notable_project</code> (P10), <code>support_request</code> (P11), <code>fm_intake</code> (P12), <code>asset_review</code> (P13), <code>inventory_low_stock</code> (P14), <code>weekly_report</code> (P15), self-test (P16). <code>document_replaced</code> sends <strong>both</strong> email and push (P17).</p>
+<h3 id="seeded-lead-routing-roster-sales_reps-the-only-hardcoded-human-recipients">Seeded lead-routing roster (<code>sales_reps</code>) — the only hardcoded human recipients</h3>
+<p><strong>External / outside reps:</strong> | Name | Email | Territory | |---|---|---| | George Varney | george.varney@anchorp.com | Northeast (ME NH VT MA RI CT NY NJ) | | Robert J. Alvarez | robert@anchorp.com | South Central (TX OK NM CO KS MO AR LA) | | Justin Smith | justin@anchorp.com | West + Upper Midwest | | Harley Coleman | harley.coleman@anchorp.com | Southeast (AL FL GA MS NC SC TN) | | Brandon Reynolds | brandon.reynolds@anchorp.com | Mid-Atlantic / OH Valley (PA OH WV KY VA MD DE DC) | | Daymon Vargas | daymon@anchorp.com | Greater Houston &amp; TX Gulf (ZIP 770-777, 779) |</p>
+<p><strong>Internal / inside reps</strong> (also anchor the per-region marketing tools): | Name | Email | Region | |---|---|---| | Crystal Serrano | c.serrano@anchorp.com | West + Upper Midwest + Mid-Atlantic | | Nora Menendez | nora.mendez@anchorp.com | South Central (TX etc.) | | Katerina Little | katerina.little@anchorp.com | Southeast + Northeast | | Merry Garcia | merry.garcia@anchorp.com | Houston / Gulf TX |</p>
+<p><em>(Scott Carpenter, OEM director — intentionally not seeded.)</em> Role/system addresses referenced in code: <code>reports@anchorp.com</code>, <code>notifications@anchorp.com</code>, <code>marketing@anchorp.com</code>, <code>samples@anchorp.com</code>, <code>swag@anchorp.com</code>, <code>orders@anchorp.com</code>, <code>onboarding@resend.dev</code>.</p></div></details>
+<details class="sm"><summary>10. Database (Supabase Postgres, <code>public</code> schema)</summary><div class="sm-body"><p>Roles in RLS: <code>admin</code>, <code>anchor_rep</code>, <code>external_rep</code>. Most writes go through service-role API routes (bypass RLS). Base tables marked ⚠ predate the repo's migrations (columns reconstructed from ALTERs + code).</p>
+<h3 id="profiles-auth">Profiles / Auth</h3>
+<ul><li><strong><code>profiles</code></strong> ⚠ — 1:1 with <code>auth.users</code>. <code>role</code>, <code>email</code>, <code>full_name</code>, <code>company</code>, <code>phone</code>, <code>manufacturer_contact_id</code> FK, <code>anchor_commission</code> bool, <code>service_zip</code>, <code>service_state</code>, <code>service_states[]</code>, <code>netsuite_sync_mode</code> (<code>manual</code>|<code>automatic</code>).</li></ul>
+<h3 id="leads-consults">Leads / Consults</h3>
+<ul><li><strong><code>leads</code></strong> — REC submissions (largest table). <code>customer_company</code>, <code>details</code>, <code>location_text</code>, <code>region_code</code>, <code>created_by</code> FK, <code>attachments</code> jsonb, <code>status</code> (<strong><code>new|assigned</code> only</strong> since 20260729_000001 — derived from <code>assigned_rep_user_id</code>, never set independently), <code>assigned_rep_user_id</code> FK, meeting fields (<code>wants_video_call</code>, <code>meeting_link</code>, <code>meeting_request_type</code>), NetSuite sync (<code>netsuite_company_id/contact_id/deal_id</code>, <code>netsuite_sync_status</code>, <code>netsuite_sync_error</code>), project fields (<code>project_address</code>, <code>state</code>, <code>roof_type</code>, <code>roof_brand</code>, <code>needed_month/year</code>, <code>solution_requests</code> jsonb, <code>project_timeline</code>), contact prefs, inside/outside assignment, submitter snapshot. _(hubspot_* → netsuite_* renamed.)_ RLS: ext insert/select/update own (update gated <code>status='new'</code>); internal all.</li><li><strong><code>sales_regions</code></strong> — <code>region_code</code> PK → <code>rep_user_id</code> FK (early routing, superseded by <code>sales_reps</code>).</li></ul>
+<h3 id="sales-reps-contacts">Sales Reps / Contacts</h3>
+<ul><li><strong><code>sales_reps</code></strong> — per-person routing roster. <code>kind</code> (<code>internal|external</code>), <code>name</code>, <code>email</code>, <code>teams_link</code>, <code>states[]</code>, <code>zip_prefixes[]</code>. Seeded with 11 named reps.</li><li><strong><code>manufacturer_contacts</code></strong> — OEM rep + consultant directory (94KB seed). <code>manufacturer</code>, <code>contact_type</code>, <code>company</code>, <code>rep_kind</code> (<code>sales|tech</code>), <code>anchor_commission</code>, name/email/phone/cell/title/territory/region, <code>raw</code> jsonb.</li><li><strong><code>manufacturer_contact_manufacturers</code></strong> — M2M contact ↔ OEMs.</li><li><strong><code>profile_manufacturers</code></strong> — M2M profile ↔ OEMs.</li><li>_(<code>consultant_contacts</code> + <code>profiles.consultant_contact_id</code> — dropped, merged into manufacturer_contacts.)_</li></ul>
+<h3 id="commission">Commission</h3>
+<ul><li><strong><code>commission_claims</code></strong> — <code>created_by</code> FK, rep snapshot, certification fields, order details (<code>company_placing_order</code>, <code>u_anchors_ordered</code>, <code>qty</code>, <code>roof_brand</code>, <code>job_name</code>, <code>roof_type</code>), ship-to, <code>status</code>. RLS: ext insert/select own; internal all + update.</li></ul>
+<h3 id="notable-projects">Notable Projects</h3>
+<ul><li><strong><code>notable_projects</code></strong> — <code>created_by</code> FK, submitter snapshot, <code>name</code>, <code>location</code>, <code>description</code>, <code>photos</code> jsonb (in <code>lead-uploads</code>), <code>status</code>. RLS: ext own; internal all + update.</li></ul>
+<h3 id="assessment-rooftop">Assessment / Rooftop</h3>
+<ul><li><strong><code>assessment_reports</code></strong> — <code>user_id</code> FK, <code>contractor_name</code>, <code>company_name</code>, <code>access_type</code> (<code>ladder-audit|ladder-recommendation|hatch-audit|stairs-audit</code>), <code>flags_count</code>, <code>file_url</code>.</li><li><strong><code>rooftop_assessment_config</code></strong> — single row <code>id=1</code>, <code>system_prompt</code> override for the audit.</li></ul>
+<h3 id="fm-intake">FM Intake</h3>
+<ul><li><strong><code>fm_intake_submissions</code></strong> — Universal Rooftop Equipment Intake. Contact/project fields, <code>equipment[]</code>, <code>payload</code> jsonb (buildings, HVAC, pipe stacks), <code>attachments</code> jsonb (in <code>knowledge</code>), <code>review_notes</code>, <code>reviewed_by/at</code>, <code>state</code>/<code>region_code</code> (territory scoping). <code>status</code> is <strong><code>new|assigned</code></strong> and <code>assigned_rep_user_id</code> FK drives it (20260729_000001). Also carries the five <code>netsuite_*</code> columns mirroring <code>leads</code> (20260729_000002) — the push is <strong>not wired for intakes</strong>, the columns exist so the shared panel can show real state once it is. RLS: admin read.</li></ul>
+<h3 id="marketing-orders">Marketing Orders</h3>
+<ul><li><strong><code>marketing_orders</code></strong> — <code>created_by</code> FK, submitter snapshot, <code>categories[]</code>, <code>items</code>, <code>quantity</code>, <code>ship_to</code>, <code>needed_by</code>, <code>status</code> (<code>new|processing|shipped|fulfilled|delayed|cancelled</code>), <code>projected_ship_date</code>, <code>delay_notes</code>, <code>updated_by</code>, <code>last_message_at</code>.</li><li><strong><code>marketing_order_messages</code></strong> — per-order chat. <code>order_id</code> FK, <code>author_id</code>, <code>author_role</code>, <code>body</code>, <code>attachments</code> jsonb (in <code>knowledge</code>). Trigger bumps parent <code>last_message_at</code>.</li><li><strong><code>marketing_order_reads</code></strong> — per-user read state (unread badge).</li><li><strong><code>marketing_order_activity</code></strong> — attributed status-change audit log (admin/anchor_rep read).</li></ul>
+<h3 id="inventory">Inventory</h3>
+<ul><li><strong><code>marketing_inventory_items</code></strong> — <code>name</code>, <code>sku</code>, <code>location</code>, <code>image_path</code> (in <code>lead-uploads</code>), <code>unit_cost</code>, <code>quantity_available/out</code>, <code>low_stock_threshold</code>.</li><li><strong><code>marketing_item_checkouts</code></strong> — tradeshow loan log. <code>item_id</code> FK, <code>event_name</code>, <code>quantity</code>, <code>due_back_date</code>, <code>status</code> (<code>out|returned</code>), damaged/returned counts.</li><li><strong><code>marketing_order_item_usage</code></strong> — bridge: which inventory items a fulfilled order consumed.</li></ul>
+<h3 id="resource-library-products-assets">Resource Library — Products / Assets</h3>
+<ul><li><strong><code>products</code></strong> ⚠ — tackle boxes. <code>name</code>, <code>section</code>, <code>series</code>, <code>active</code>, <code>hidden</code>, <code>solution_group</code>.</li><li><strong><code>assets</code></strong> ⚠ — files on a product (bytes in <code>knowledge</code>). <code>product_id</code> FK, <code>title</code>, <code>type</code>, <code>category_key</code>, <code>path</code>, <code>visibility</code>, <code>revision</code> (QMS label), <code>last_updated</code>, <code>updated_by</code>. Triggers: touch <code>last_updated</code>; notify revision change (pg_net webhook).</li><li><strong><code>pending_uploads</code></strong> — rep photo review queue. <code>product_id</code> FK, uploader snapshot, <code>storage_path</code> (<code>pending/…</code>), <code>status</code> (<code>pending|approved|rejected</code>), review fields.</li></ul>
+<h3 id="knowledge-learning-rag">Knowledge / Learning (RAG)</h3>
+<ul><li><strong><code>knowledge_documents</code></strong> ⚠ — <code>title</code>, <code>status</code>, <code>allowed</code>, <code>audience</code>, <code>content</code>, <code>metadata</code>, <code>source_path</code>.</li><li><strong><code>knowledge_chunks</code></strong> ⚠ — <code>document_id</code> FK, <code>content</code>, <code>embedding</code> vector(1536), <code>product_tags[]</code>, <code>token_count</code>.</li><li><strong><code>knowledge_corrections</code></strong> ⚠ — teaching corrections. <code>correction</code>, <code>user_message</code>, <code>assistant_message</code>, <code>embedding</code> vector(1536), <code>active</code>. RPC <code>match_knowledge_corrections()</code>.</li><li><strong><code>knowledge_feedback</code></strong> ⚠ — thumbs/ratings. <code>rating</code> (1–5), <code>note</code>, message context.</li></ul>
+<h3 id="support">Support</h3>
+<ul><li><strong><code>support_requests</code></strong> — <code>created_by</code> FK, submitter snapshot, <code>subject</code>, <code>status</code> (<code>open|closed</code>), <code>last_message_at</code>.</li><li><strong><code>support_messages</code></strong> — <code>request_id</code> FK, <code>author_id</code>, <code>author_role</code>, <code>body</code>, <code>attachments</code> jsonb (in <code>knowledge</code>). Trigger bumps parent.</li></ul>
+<h3 id="pitch-to-marketing-portal-shared-with-the-anchor-internal-portal">Pitch to Marketing / Portal (shared with the Anchor Internal Portal)</h3>
+<ul><li><strong><code>mkt_idea</code></strong> — the Strategy Board. Pitch columns added by 20260727_000001: <code>source</code> (<code>internal|pitch</code>), <code>submitted_by</code> FK, <code>submitter_team</code>, <code>review_status</code> (<code>pending|approved|declined|needs_info</code>, null for internal ideas), <code>decline_reason</code>, <code>planned_timeline</code>, <code>reviewed_by/at</code>. RLS gated on <code>is_marketing()</code>.</li><li><strong><code>mkt_idea_comment</code></strong> — two-way pitch thread. <code>idea_id</code> FK, <code>author_id</code>, <code>author_team</code>, <code>kind</code> (<code>comment|info_request|info_response|decision</code>), <code>body</code>.</li><li><strong><code>mkt_email_template</code></strong> — editable pitch notification copy. <code>key</code> PK, <code>subject</code>, <code>heading</code>, <code>body</code>, <code>button_label</code>, <code>updated_by/at</code>.</li><li><strong><code>portal_invites</code></strong> ⚠ — the portal's authorized-emails allow-list. <code>email</code> PK, <code>role</code> (level <code>admin|internal</code>), <code>team</code>, <code>status</code>. <strong>Not</strong> this app's user list — see §1.</li></ul>
+<h3 id="marketing-aisle-grab">Marketing aisle grab</h3>
+<ul><li><strong><code>marketing_grab_config</code></strong> — single row. <code>token</code>, <code>enabled</code>, <code>updated_by/at</code>.</li><li><strong><code>marketing_item_grabs</code></strong> — public pickup log. <code>item_id</code> FK, <code>item_name</code>, <code>grabbed_by_name</code>, <code>grabbed_by_email</code>, <code>quantity</code>, <code>ip</code>.</li></ul>
+<h3 id="notifications-settings">Notifications &amp; Settings</h3>
+<ul><li><strong><code>notification_settings</code></strong> — single row <code>id=1</code>. <code>commission_recipient_email</code>, <code>weekly_report_emails[]</code>, <code>marketing_orders_recipients</code> jsonb, <code>notable_project_emails[]</code>, <code>support_emails[]</code>. <em>(Largely superseded by the tool system.)</em></li><li><strong><code>notification_tool_assignments</code></strong> — <code>(tool_key, user_id)</code> → email + push. Admin-only.</li><li><strong><code>notification_tool_emails</code></strong> — <code>(tool_key, email)</code> → email only. Admin-only.</li><li><strong><code>admin_tools</code></strong> — feature flags. <code>key</code> PK, <code>active</code> bool. Authenticated read, admin write.</li></ul>
+<h3 id="push">Push</h3>
+<ul><li><strong><code>push_subscriptions</code></strong> — one row per device. <code>user_id</code> FK, <code>endpoint</code> UNIQUE, <code>p256dh</code>, <code>auth</code>, <code>user_agent</code>. Own-row RLS.</li></ul>
+<h3 id="analytics">Analytics</h3>
+<ul><li><strong><code>user_events</code></strong> — <code>user_id</code> FK, <code>event_type</code>, <code>page_path</code>, <code>metadata</code> jsonb (indexed on <code>oem</code> / <code>state</code>). 90-day retention via cron. Own insert/read; admin read all.</li></ul>
+<h3 id="enums-all-text-check-no-native-enums">Enums (all <code>text</code> + CHECK, no native enums)</h3>
+<p><code>leads.status</code>, <code>leads.meeting_request_type</code>, <code>leads.preferred_contact_method</code>, <code>leads.netsuite_sync_status</code>, <code>assessment_reports.access_type</code>, <code>manufacturer_contacts.rep_kind</code>, <code>sales_reps.kind</code>, <code>marketing_orders.status</code>, <code>marketing_item_checkouts.status</code>, <code>support_requests.status</code>, <code>fm_intake_submissions.status</code>, <code>pending_uploads.status</code>, <code>profiles.netsuite_sync_mode</code>. Extensions: <code>vector</code>, <code>pg_net</code>.</p>
+<h3 id="triggers-functions">Triggers / functions</h3>
+<ul><li><code>bump_support_request_activity()</code>, <code>bump_marketing_order_activity()</code> — bump <code>last_message_at</code>.</li><li><code>assets_touch_last_updated()</code>. _(<code>assets_notify_revision_change()</code> and its trigger were <strong>dropped</strong> by 20260729_000003; <code>assets.revision</code> is now unused dead weight, deliberately not dropped because the portal shares this table.)_</li><li>RPC <code>match_knowledge_corrections(query_embedding, match_count)</code> — vector retrieval.</li></ul></div></details>
+<details class="sm"><summary>11. Storage buckets (Supabase Storage — both private, signed access only)</summary><div class="sm-body"><div class='table-wrap'><table><thead><tr><th>Bucket</th><th>Stores</th><th>Paths</th></tr></thead><tbody><tr><td><strong><code>knowledge</code></strong></td><td>Product docs / data sheets, library docs, FM-intake photos &amp; sheets, support attachments, marketing-order chat images, rep agreements, asset-review uploads, pending uploads</td><td><code>fm-intake/&lt;id&gt;/</code>, <code>support/&lt;id&gt;/</code>, <code>marketing-orders/&lt;id&gt;/</code>, <code>internal-assets/rep-agreements/</code>, <code>pending/&lt;product-id&gt;/</code>, <code>solutions/</code></td></tr><tr><td><strong><code>lead-uploads</code></strong></td><td>Notable-project photos, marketing-inventory images</td><td><code>notable-projects/&lt;id&gt;/</code>, <code>inventory/&lt;id&gt;/</code></td></tr></tbody></table></div>
+<p>No public buckets — all access via server-side <code>createSignedUrl</code> / <code>download</code> with the admin service client.</p></div></details>
+<details class="sm"><summary>12. External integrations &amp; background jobs</summary><div class="sm-body"><div class='table-wrap'><table><thead><tr><th>Service</th><th>Use</th></tr></thead><tbody><tr><td><strong>Supabase</strong></td><td>Postgres, auth, storage, edge functions, pgvector</td></tr><tr><td><strong>OpenAI</strong></td><td>Copilot chat + <code>text-embedding-3-small</code> embeddings</td></tr><tr><td><strong>Resend</strong></td><td>All transactional email</td></tr><tr><td><strong>web-push (VAPID)</strong></td><td>Browser push notifications</td></tr><tr><td><strong>NetSuite</strong></td><td>CRM sync (OAuth 1.0 TBA RESTlet) — per-rep manual/automatic. <strong>Not commissioned</strong>: gated on <code>isNetSuiteConfigured()</code> (all six <code>NETSUITE_*</code> vars). Unconfigured → greyed &quot;Coming soon&quot; panel + 503 from the sync route. Consults only; intakes render the panel read-only.</td></tr><tr><td><strong>Vercel</strong></td><td>Hosting + cron (Friday 17:00 UTC → <code>/api/reports/weekly</code>), two deploys (internal/external)</td></tr><tr><td><strong>PWA</strong></td><td><code>next-pwa</code> service worker (<code>public/sw.js</code>), separate internal/external icons + manifest</td></tr></tbody></table></div>
+<h3 id="supabase-edge-functions">Supabase edge functions</h3>
+<div class='table-wrap'><table><thead><tr><th>Function</th><th>Role</th></tr></thead><tbody><tr><td><code>netsuite-lead-sync</code></td><td>Push leads to NetSuite (writes sync status back; no notification)</td></tr><tr><td><code>revision-change-email</code></td><td><strong>Dead</strong> — its trigger was dropped by 20260729_000003. Still deployed; safe to delete. Superseded by the in-app <code>document_replaced</code> notification.</td></tr><tr><td><code>training-digest</code></td><td>Daily digest of corrections + low ratings (email to <code>ADMIN_ALERT_EMAILS</code>); also 90-day <code>user_events</code> prune / weekly report support. Guarded by <code>CRON_SECRET</code></td></tr></tbody></table></div>
+<h3 id="notable-env-vars">Notable env vars</h3>
+<p><code>RESEND_API_KEY</code>, <code>LEAD_NOTIFICATIONS_FROM</code>, <code>*_NOTIFICATIONS_EMAIL</code> (commission/marketing/notable/support/fm-intake fallbacks), <code>WEEKLY_REPORT_TO</code>, <code>ADMIN_ALERT_EMAILS</code>, <code>CRON_SECRET</code>, <code>REVISION_WEBHOOK_SECRET</code>, VAPID keys, <code>OPENAI_API_KEY</code>/<code>OPENAI_MODEL</code>, <code>NEXT_PUBLIC_APP_MODE</code>, NetSuite creds.</p></div></details>
+</div>
+
+
+<h2 id="screenshot-checklist">Appendix — Screenshot checklist</h2>
+<p>Every image slot in this document, in order. Save each as a PNG into <code>docs/images/</code> using the exact filename. No rebuild is needed — the page picks them up on next load.</p>
+<blockquote><p><strong>Before you shoot:</strong> the queue pages show live customer names, rep emails, and claim details. If this site is published to a public GitHub Pages URL, blur or crop that data, or capture with a test account.</p></blockquote>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>Filename</th><th>Where</th><th>What to capture</th></tr></thead>
+<tbody>
+  <tr>
+    <td>1</td>
+    <td><code>01-two-builds.png</code></td>
+    <td><code>Both login pages</code></td>
+    <td>The internal and external sign-in screens next to each other, so the branding difference is obvious.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><code>02-pwa-home-screen.png</code></td>
+    <td><code>Your phone home screen</code></td>
+    <td>The installed app icon alongside your other apps.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><code>03-login.png</code></td>
+    <td><code>/</code></td>
+    <td>The sign-in card with the email field and Send code button.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><code>04-users-set-role.png</code></td>
+    <td><code>/admin/users → click a person</code></td>
+    <td>The person editor with the Role dropdown open. Use a test account, not a real one.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><code>05-add-to-home-screen.png</code></td>
+    <td><code>Phone browser share sheet</code></td>
+    <td>The share sheet with Add to Home Screen highlighted.</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><code>06-enable-push.png</code></td>
+    <td><code>/dashboard/settings</code></td>
+    <td>The Notifications section with the Enable control and the browser permission prompt.</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td><code>07-assign-self.png</code></td>
+    <td><code>/admin/notifications</code></td>
+    <td>One category expanded with a person being added to the Users list.</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td><code>08-viewas-pill.png</code></td>
+    <td><code>Any page, as admin</code></td>
+    <td>The floating pill — top-center on mobile, bottom-right on desktop. Crop tight.</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td><code>09-viewas-menu.png</code></td>
+    <td><code>Tap the pill</code></td>
+    <td>All three options visible: Admin, Internal sales, External user.</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td><code>10-admin-console.png</code></td>
+    <td><code>/admin</code></td>
+    <td>The full tile grid. This is the launchpad for everything in Pages 5–10.</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td><code>11-notifications-page.png</code></td>
+    <td><code>/admin/notifications</code></td>
+    <td>The full list of event categories, collapsed.</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td><code>12-notifications-empty.png</code></td>
+    <td><code>/admin/notifications</code></td>
+    <td>A category with no recipients assigned, so Riley knows what the failure state looks like.</td>
+  </tr>
+  <tr>
+    <td>13</td>
+    <td><code>13-sales-reps.png</code></td>
+    <td><code>/admin/sales-reps</code></td>
+    <td>The rep table showing states and ZIP prefixes. Blur email addresses.</td>
+  </tr>
+  <tr>
+    <td>14</td>
+    <td><code>14-region-category.png</code></td>
+    <td><code>/admin/notifications</code></td>
+    <td>One of the marketing_order_region entries with its assigned manager.</td>
+  </tr>
+  <tr>
+    <td>15</td>
+    <td><code>15-consults-queue.png</code></td>
+    <td><code>/dashboard/opportunities</code></td>
+    <td>The queue with the status filter open, showing just New and Assigned. Blur customer names.</td>
+  </tr>
+  <tr>
+    <td>16</td>
+    <td><code>16-consult-detail.png</code></td>
+    <td><code>/dashboard/opportunities/[id]</code></td>
+    <td>The detail page — customer, address, roof type, requested solutions. Blur identifying data.</td>
+  </tr>
+  <tr>
+    <td>17</td>
+    <td><code>17-consult-assign.png</code></td>
+    <td><code>Consult detail</code></td>
+    <td>The Assignment panel with the Assigned to dropdown open, listing internal people.</td>
+  </tr>
+  <tr>
+    <td>18</td>
+    <td><code>18a-delete-danger-zone.png</code></td>
+    <td><code>Consult detail → Assignment panel</code></td>
+    <td>The Danger zone with its confirm step showing. Admins only — internal reps don't see it.</td>
+  </tr>
+  <tr>
+    <td>19</td>
+    <td><code>18-consult-netsuite.png</code></td>
+    <td><code>Consult detail</code></td>
+    <td>The greyed NetSuite card with its &quot;Coming soon&quot; badge — so Riley recognises it as expected, not broken.</td>
+  </tr>
+  <tr>
+    <td>20</td>
+    <td><code>19-marketing-orders.png</code></td>
+    <td><code>/admin/marketing?tab=orders</code></td>
+    <td>The order list with the Active/Archived tabs visible.</td>
+  </tr>
+  <tr>
+    <td>21</td>
+    <td><code>20-order-status.png</code></td>
+    <td><code>Marketing Admin Center → an order</code></td>
+    <td>The status selector open, showing all six statuses.</td>
+  </tr>
+  <tr>
+    <td>22</td>
+    <td><code>21-order-thread.png</code></td>
+    <td><code>An order detail</code></td>
+    <td>A thread with messages from both sides and the unread badge.</td>
+  </tr>
+  <tr>
+    <td>23</td>
+    <td><code>22-inventory.png</code></td>
+    <td><code>/admin/marketing?tab=inventory</code></td>
+    <td>The item list with quantities and any low-stock indicator.</td>
+  </tr>
+  <tr>
+    <td>24</td>
+    <td><code>23-checkouts.png</code></td>
+    <td><code>Inventory tab</code></td>
+    <td>The checkout log — event name, quantity, due-back date.</td>
+  </tr>
+  <tr>
+    <td>25</td>
+    <td><code>24-grab-qr.png</code></td>
+    <td><code>/grab/&lt;token&gt;</code></td>
+    <td>The scan-to-pick-up page as someone at the shelf sees it, plus the printed QR if you have one.</td>
+  </tr>
+  <tr>
+    <td>26</td>
+    <td><code>24a-marketing-submissions-tab.png</code></td>
+    <td><code>/admin/marketing?tab=submissions</code></td>
+    <td>The three tabs with Submissions selected, showing the pitch queue and its Awaiting decision / All pitches filters.</td>
+  </tr>
+  <tr>
+    <td>27</td>
+    <td><code>25-commission-claims.png</code></td>
+    <td><code>/admin/commission-claims</code></td>
+    <td>The claim list. Blur rep names and order details.</td>
+  </tr>
+  <tr>
+    <td>28</td>
+    <td><code>26-notable-projects.png</code></td>
+    <td><code>/admin/notable-projects</code></td>
+    <td>The submission list with photo thumbnails.</td>
+  </tr>
+  <tr>
+    <td>29</td>
+    <td><code>27-fm-intake.png</code></td>
+    <td><code>/admin/fm-intake</code></td>
+    <td>The intake list and the status control. Blur company names.</td>
+  </tr>
+  <tr>
+    <td>30</td>
+    <td><code>28-support-queue.png</code></td>
+    <td><code>/admin/support</code></td>
+    <td>The thread list plus one thread open with the reply box.</td>
+  </tr>
+  <tr>
+    <td>31</td>
+    <td><code>29-asset-reviews.png</code></td>
+    <td><code>/admin/asset-reviews</code></td>
+    <td>The pending filter with Approve and Reject buttons visible.</td>
+  </tr>
+  <tr>
+    <td>32</td>
+    <td><code>30-knowledge.png</code></td>
+    <td><code>/admin/knowledge</code></td>
+    <td>The document list showing indexed and allow-listed state.</td>
+  </tr>
+  <tr>
+    <td>33</td>
+    <td><code>31-corrections.png</code></td>
+    <td><code>/admin/knowledge → corrections</code></td>
+    <td>The correction console with an active correction.</td>
+  </tr>
+  <tr>
+    <td>34</td>
+    <td><code>32-resource-library.png</code></td>
+    <td><code>/assets</code></td>
+    <td>The product tackle-box browser.</td>
+  </tr>
+  <tr>
+    <td>35</td>
+    <td><code>34-users-page.png</code></td>
+    <td><code>/admin/users</code></td>
+    <td>The people list. Blur emails and phone numbers.</td>
+  </tr>
+  <tr>
+    <td>36</td>
+    <td><code>35-portal-access.png</code></td>
+    <td><code>/admin/portal-access</code></td>
+    <td>The shared authorized-email list with level and team badges. Blur addresses.</td>
+  </tr>
+  <tr>
+    <td>37</td>
+    <td><code>36-manage-tools.png</code></td>
+    <td><code>/admin/tools</code></td>
+    <td>The Admin Console tools section with one tool toggled off and marked Inactive.</td>
+  </tr>
+  <tr>
+    <td>38</td>
+    <td><code>37-rep-tools.png</code></td>
+    <td><code>/admin/tools</code></td>
+    <td>The rep tools section showing the separate internal and external toggles.</td>
+  </tr>
+  <tr>
+    <td>39</td>
+    <td><code>38-site-live.png</code></td>
+    <td><code>/admin/tools (top card)</code></td>
+    <td>The Site live card with its five listed surfaces and the Go live button.</td>
+  </tr>
+  <tr>
+    <td>40</td>
+    <td><code>39-pitch-submissions.png</code></td>
+    <td><code>/marketing/submissions</code></td>
+    <td>The review queue with the four review statuses.</td>
+  </tr>
+  <tr>
+    <td>41</td>
+    <td><code>40-wrong-build.png</code></td>
+    <td><code>Wrong build for your role</code></td>
+    <td>The bounce back to the login screen — the single most-reported 'bug'.</td>
+  </tr></tbody>
+</table></div>
+
+<hr>
+<p style="font-size:.83rem;color:var(--muted)">
+Generated from <code>SOP.md</code> and <code>SITEMAP.md</code> by <code>scripts/build-docs.mjs</code>.
+Edit the markdown and re-run <code>node scripts/build-docs.mjs</code> — do not hand-edit this file.
+</p>
+  </main>
+</div>
+<script>
+// Expand/collapse helpers for the site map, injected next to the first accordion.
+(function () {
+  var first = document.querySelector('details.sm');
+  if (!first) return;
+  var bar = document.createElement('div');
+  bar.className = 'sm-tools';
+  bar.innerHTML = '<button type="button" data-all="1">Expand all</button>' +
+                  '<button type="button" data-all="0">Collapse all</button>';
+  first.parentNode.insertBefore(bar, first);
+  bar.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var open = b.dataset.all === '1';
+    document.querySelectorAll('details.sm').forEach(function (d) { d.open = open; });
+  });
+  // Deep links into a collapsed section should open it.
+  function openTarget() {
+    if (!location.hash) return;
+    var el = document.querySelector(location.hash);
+    while (el) { if (el.tagName === 'DETAILS') el.open = true; el = el.parentElement; }
+  }
+  window.addEventListener('hashchange', openTarget);
+  openTarget();
+})();
+</script>
+</body>
+</html>

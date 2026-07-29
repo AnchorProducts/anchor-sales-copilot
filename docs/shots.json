@@ -1,0 +1,289 @@
+[
+  {
+    "after": "Branded \"Anchor App.\"",
+    "file": "01-two-builds.png",
+    "caption": "The two builds, side by side",
+    "where": "Both login pages",
+    "what": "The internal and external sign-in screens next to each other, so the branding difference is obvious."
+  },
+  {
+    "after": "### It's also a phone app",
+    "file": "02-pwa-home-screen.png",
+    "caption": "Installed on a phone home screen",
+    "where": "Your phone home screen",
+    "what": "The installed app icon alongside your other apps."
+  },
+  {
+    "after": "Go to the login page and sign in with your `@anchorp.com` email.",
+    "file": "03-login.png",
+    "caption": "The sign-in screen",
+    "where": "/",
+    "what": "The sign-in card with the email field and Send code button."
+  },
+  {
+    "after": "A current admin must open **Admin Console → Users**",
+    "file": "04-users-set-role.png",
+    "caption": "Changing someone's role",
+    "where": "/admin/users → click a person",
+    "what": "The person editor with the Role dropdown open. Use a test account, not a real one."
+  },
+  {
+    "after": "Open the internal site in Safari (iOS) or Chrome (Android)",
+    "file": "05-add-to-home-screen.png",
+    "caption": "Add to Home Screen",
+    "where": "Phone browser share sheet",
+    "what": "The share sheet with Add to Home Screen highlighted."
+  },
+  {
+    "after": "In the app: **Settings → Notifications → Enable**",
+    "file": "06-enable-push.png",
+    "caption": "Enabling push on your device",
+    "where": "/dashboard/settings",
+    "what": "The Notifications section with the Enable control and the browser permission prompt."
+  },
+  {
+    "after": "Go to **Admin Console → Notifications**. Add yourself as a *User*",
+    "file": "07-assign-self.png",
+    "caption": "Assigning yourself to a category",
+    "where": "/admin/notifications",
+    "what": "One category expanded with a person being added to the Users list."
+  },
+  {
+    "after": "floating role pill on **every** page",
+    "file": "08-viewas-pill.png",
+    "caption": "The View As pill",
+    "where": "Any page, as admin",
+    "what": "The floating pill — top-center on mobile, bottom-right on desktop. Crop tight."
+  },
+  {
+    "after": "the pill reads \"Viewing as …\"",
+    "file": "09-viewas-menu.png",
+    "caption": "The View As menu open",
+    "where": "Tap the pill",
+    "what": "All three options visible: Admin, Internal sales, External user."
+  },
+  {
+    "after": "## Page 4 — Your operating rhythm",
+    "file": "10-admin-console.png",
+    "caption": "The Admin Console",
+    "where": "/admin",
+    "what": "The full tile grid. This is the launchpad for everything in Pages 5–10."
+  },
+  {
+    "after": "For each category you assign two kinds of recipients",
+    "file": "11-notifications-page.png",
+    "caption": "The Notifications page",
+    "where": "/admin/notifications",
+    "what": "The full list of event categories, collapsed."
+  },
+  {
+    "after": "**1. Nothing is pre-assigned.**",
+    "file": "12-notifications-empty.png",
+    "caption": "An empty category — the silent failure",
+    "where": "/admin/notifications",
+    "what": "A category with no recipients assigned, so Riley knows what the failure state looks like."
+  },
+  {
+    "after": "That roster lives on the **Sales Reps** tile",
+    "file": "13-sales-reps.png",
+    "caption": "Territory routing",
+    "where": "/admin/sales-reps",
+    "what": "The rep table showing states and ZIP prefixes. Blur email addresses."
+  },
+  {
+    "after": "Each region has its own auto-created category named",
+    "file": "14-region-category.png",
+    "caption": "A per-region marketing category",
+    "where": "/admin/notifications",
+    "what": "One of the marketing_order_region entries with its assigned manager."
+  },
+  {
+    "after": "### Two states, and only two",
+    "file": "15-consults-queue.png",
+    "caption": "The Active Consults queue",
+    "where": "/dashboard/opportunities",
+    "what": "The queue with the status filter open, showing just New and Assigned. Blur customer names."
+  },
+  {
+    "after": "### Working one",
+    "file": "16-consult-detail.png",
+    "caption": "A consult detail view",
+    "where": "/dashboard/opportunities/[id]",
+    "what": "The detail page — customer, address, roof type, requested solutions. Blur identifying data."
+  },
+  {
+    "after": "choose the owner from the dropdown and press",
+    "file": "17-consult-assign.png",
+    "caption": "Assigning a rep",
+    "where": "Consult detail",
+    "what": "The Assignment panel with the Assigned to dropdown open, listing internal people."
+  },
+  {
+    "after": "### Deleting a submission",
+    "file": "18a-delete-danger-zone.png",
+    "caption": "The admin-only Danger zone",
+    "where": "Consult detail → Assignment panel",
+    "what": "The Danger zone with its confirm step showing. Admins only — internal reps don't see it."
+  },
+  {
+    "after": "### NetSuite sync — not live yet",
+    "file": "18-consult-netsuite.png",
+    "caption": "The NetSuite panel, greyed out until it's connected",
+    "where": "Consult detail",
+    "what": "The greyed NetSuite card with its \"Coming soon\" badge — so Riley recognises it as expected, not broken."
+  },
+  {
+    "after": "### Orders",
+    "file": "19-marketing-orders.png",
+    "caption": "The Orders tab",
+    "where": "/admin/marketing?tab=orders",
+    "what": "The order list with the Active/Archived tabs visible."
+  },
+  {
+    "after": "**Every status change emails and pushes the rep automatically.**",
+    "file": "20-order-status.png",
+    "caption": "Changing an order status",
+    "where": "Marketing Admin Center → an order",
+    "what": "The status selector open, showing all six statuses."
+  },
+  {
+    "after": "Each order has a **two-way message thread**",
+    "file": "21-order-thread.png",
+    "caption": "The order message thread",
+    "where": "An order detail",
+    "what": "A thread with messages from both sides and the unread badge."
+  },
+  {
+    "after": "### Inventory",
+    "file": "22-inventory.png",
+    "caption": "The Inventory tab",
+    "where": "/admin/marketing?tab=inventory",
+    "what": "The item list with quantities and any low-stock indicator."
+  },
+  {
+    "after": "**Tradeshow checkouts** log items loaned out",
+    "file": "23-checkouts.png",
+    "caption": "Tradeshow checkouts",
+    "where": "Inventory tab",
+    "what": "The checkout log — event name, quantity, due-back date."
+  },
+  {
+    "after": "### The QR pickup flow",
+    "file": "24-grab-qr.png",
+    "caption": "The public QR pickup page",
+    "where": "/grab/<token>",
+    "what": "The scan-to-pick-up page as someone at the shelf sees it, plus the printed QR if you have one."
+  },
+  {
+    "after": "### Submissions",
+    "file": "24a-marketing-submissions-tab.png",
+    "caption": "The Submissions tab in the Marketing Admin Center",
+    "where": "/admin/marketing?tab=submissions",
+    "what": "The three tabs with Submissions selected, showing the pitch queue and its Awaiting decision / All pitches filters."
+  },
+  {
+    "after": "### Commission Claims — `/admin/commission-claims`",
+    "file": "25-commission-claims.png",
+    "caption": "Commission Claims",
+    "where": "/admin/commission-claims",
+    "what": "The claim list. Blur rep names and order details."
+  },
+  {
+    "after": "### Notable Projects — `/admin/notable-projects`",
+    "file": "26-notable-projects.png",
+    "caption": "Notable Projects",
+    "where": "/admin/notable-projects",
+    "what": "The submission list with photo thumbnails."
+  },
+  {
+    "after": "### Project Intake / FM — `/admin/fm-intake`",
+    "file": "27-fm-intake.png",
+    "caption": "Project Intake",
+    "where": "/admin/fm-intake",
+    "what": "The intake list and the status control. Blur company names."
+  },
+  {
+    "after": "### Support Queue — `/admin/support`",
+    "file": "28-support-queue.png",
+    "caption": "The Support Queue",
+    "where": "/admin/support",
+    "what": "The thread list plus one thread open with the reply box."
+  },
+  {
+    "after": "### Asset Reviews — `/admin/asset-reviews`",
+    "file": "29-asset-reviews.png",
+    "caption": "Asset Reviews",
+    "where": "/admin/asset-reviews",
+    "what": "The pending filter with Approve and Reject buttons visible."
+  },
+  {
+    "after": "### Knowledge / the Copilot — `/admin/knowledge`",
+    "file": "30-knowledge.png",
+    "caption": "The Knowledge admin",
+    "where": "/admin/knowledge",
+    "what": "The document list showing indexed and allow-listed state."
+  },
+  {
+    "after": "When someone corrects a Copilot answer",
+    "file": "31-corrections.png",
+    "caption": "Copilot corrections",
+    "where": "/admin/knowledge → corrections",
+    "what": "The correction console with an active correction."
+  },
+  {
+    "after": "### Resource Library",
+    "file": "32-resource-library.png",
+    "caption": "The Resource Library",
+    "where": "/assets",
+    "what": "The product tackle-box browser."
+  },
+  {
+    "after": "### Users — `/admin/users`",
+    "file": "34-users-page.png",
+    "caption": "The Users page",
+    "where": "/admin/users",
+    "what": "The people list. Blur emails and phone numbers."
+  },
+  {
+    "after": "### Portal Access — `/admin/portal-access`",
+    "file": "35-portal-access.png",
+    "caption": "Portal Access",
+    "where": "/admin/portal-access",
+    "what": "The shared authorized-email list with level and team badges. Blur addresses."
+  },
+  {
+    "after": "**1. Admin Console tools.**",
+    "file": "36-manage-tools.png",
+    "caption": "Manage Tools",
+    "where": "/admin/tools",
+    "what": "The Admin Console tools section with one tool toggled off and marked Inactive."
+  },
+  {
+    "after": "**2. Sales rep tools.**",
+    "file": "37-rep-tools.png",
+    "caption": "Sales rep tool toggles",
+    "where": "/admin/tools",
+    "what": "The rep tools section showing the separate internal and external toggles."
+  },
+  {
+    "after": "### \"Site live\" — the master switch",
+    "file": "38-site-live.png",
+    "caption": "The Site live switch",
+    "where": "/admin/tools (top card)",
+    "what": "The Site live card with its five listed surfaces and the Go live button."
+  },
+  {
+    "after": "### The pitch workflow (once Site live is on)",
+    "file": "39-pitch-submissions.png",
+    "caption": "The pitch Submissions inbox",
+    "where": "/marketing/submissions",
+    "what": "The review queue with the four review statuses."
+  },
+  {
+    "after": "Work down this list before escalating.",
+    "file": "40-wrong-build.png",
+    "caption": "The wrong-build redirect",
+    "where": "Wrong build for your role",
+    "what": "The bounce back to the login screen — the single most-reported 'bug'."
+  }
+]
