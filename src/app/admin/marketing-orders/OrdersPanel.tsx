@@ -37,6 +37,12 @@ type MarketingOrder = {
   updated_at: string | null;
   updated_by_name: string | null;
   updated_by_email: string | null;
+<<<<<<< HEAD
+=======
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  assigned_to_email: string | null;
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   last_activity: {
     note: string;
     to_status: string | null;
@@ -85,7 +91,18 @@ export default function AdminMarketingOrdersPage({
   const [ready, setReady] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [role, setRole] = useState<string>("");
+<<<<<<< HEAD
   const [items, setItems] = useState<MarketingOrder[]>([]);
+=======
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [items, setItems] = useState<MarketingOrder[]>([]);
+  // Internal sales reps an admin can assign an order to (id + name), from the API.
+  const [assignees, setAssignees] = useState<
+    { id: string; full_name: string | null; email: string | null }[]
+  >([]);
+  // "Assigned to me" filter — narrows both tabs to the current user's own orders.
+  const [mineOnly, setMineOnly] = useState(false);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [updateErr, setUpdateErr] = useState<string | null>(null);
@@ -142,9 +159,26 @@ export default function AdminMarketingOrdersPage({
     return { active: items.length - archived, archived };
   }, [items]);
 
+<<<<<<< HEAD
   const filteredItems = useMemo(
     () => items.filter((o) => (activeTab === "archived" ? isArchived(o) : !isArchived(o))),
     [items, activeTab]
+=======
+  // How many of the loaded orders are assigned to me — drives the filter badge.
+  const mineCount = useMemo(
+    () => items.filter((o) => o.assigned_to && o.assigned_to === currentUserId).length,
+    [items, currentUserId]
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter((o) => {
+        if (activeTab === "archived" ? !isArchived(o) : isArchived(o)) return false;
+        if (mineOnly && o.assigned_to !== currentUserId) return false;
+        return true;
+      }),
+    [items, activeTab, mineOnly, currentUserId]
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   );
 
   async function loadOrders() {
@@ -156,6 +190,10 @@ export default function AdminMarketingOrdersPage({
     }
     setLoadErr(null);
     setItems(json?.items || []);
+<<<<<<< HEAD
+=======
+    setAssignees(json?.assignees || []);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   }
 
   // Inventory items for the fulfillment consumption picker. Best-effort: if it
@@ -310,6 +348,33 @@ export default function AdminMarketingOrdersPage({
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Admin-only: set (or clear) the internal rep who owns this order. The API
+  // notifies the new assignee and logs it to the activity trail.
+  async function assignOrder(id: string, assignedTo: string) {
+    setSavingId(id);
+    setUpdateErr(null);
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, assigned_to: assignedTo || null }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to assign order.");
+      } else {
+        await loadOrders();
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to assign order.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   async function deleteOrder(id: string) {
     if (!window.confirm("Delete this order from history? This can’t be undone.")) return;
     setSavingId(id);
@@ -357,6 +422,10 @@ export default function AdminMarketingOrdersPage({
         return;
       }
       setRole(userRole);
+<<<<<<< HEAD
+=======
+      setCurrentUserId(data.user.id);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
       await Promise.all([loadOrders(), loadInventory()]);
       if (!alive) return;
@@ -369,7 +438,11 @@ export default function AdminMarketingOrdersPage({
   }, [router, supabase]);
 
   const shell = (
+<<<<<<< HEAD
       <div className={embedded ? "pt-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
+=======
+      <div className={embedded ? "pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : accessError ? (
@@ -421,6 +494,30 @@ export default function AdminMarketingOrdersPage({
                     </button>
                   );
                 })}
+<<<<<<< HEAD
+=======
+
+                {/* Narrow to the orders this user personally owns. */}
+                <button
+                  type="button"
+                  onClick={() => setMineOnly((v) => !v)}
+                  aria-pressed={mineOnly}
+                  className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    mineOnly
+                      ? "bg-[var(--anchor-green)] text-white"
+                      : "bg-[var(--surface-soft)] text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/60"
+                  }`}
+                >
+                  Assigned to me
+                  <span
+                    className={`rounded-full px-1.5 text-[10px] ${
+                      mineOnly ? "bg-white/20" : "bg-black/10"
+                    }`}
+                  >
+                    {mineCount}
+                  </span>
+                </button>
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
               </div>
             )}
 
@@ -464,6 +561,17 @@ export default function AdminMarketingOrdersPage({
                             💬 {unread[o.id]} new
                           </span>
                         )}
+<<<<<<< HEAD
+=======
+                        {o.assigned_to_name && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-[var(--anchor-deep)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-deep)]"
+                            title={`Assigned to ${o.assigned_to_name}`}
+                          >
+                            👤 {o.assigned_to_name}
+                          </span>
+                        )}
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
                         <span
                           className={`ml-auto text-[var(--anchor-gray)] transition-transform ${
                             openOrderId === o.id ? "rotate-180" : ""
@@ -509,6 +617,41 @@ export default function AdminMarketingOrdersPage({
                         </Select>
                       </div>
 
+<<<<<<< HEAD
+=======
+                      {/* Owner: which internal rep is on this order. Only admins
+                          can set/change it; everyone sees who owns it. */}
+                      <div className="mt-4">
+                        <label
+                          htmlFor={`assignee-${o.id}`}
+                          className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
+                        >
+                          Assigned to
+                        </label>
+                        {role === "admin" ? (
+                          <Select
+                            id={`assignee-${o.id}`}
+                            value={o.assigned_to ?? ""}
+                            onChange={(e) => assignOrder(o.id, e.target.value)}
+                            disabled={savingId === o.id}
+                            className="mt-1 h-11 w-full text-sm sm:h-10 sm:w-60"
+                            aria-label="Assigned rep"
+                          >
+                            <option value="">Unassigned</option>
+                            {assignees.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.full_name || a.email || "Unnamed rep"}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <div className="mt-1 text-sm text-black">
+                            {o.assigned_to_name || o.assigned_to_email || "Unassigned"}
+                          </div>
+                        )}
+                      </div>
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
                       {/* Required note before a phase change can be saved, so every
                           admin sees who did what and no one duplicates the work. */}
                       {pendingStatus[o.id] && pendingStatus[o.id] !== (o.status || "new") && (

@@ -9,6 +9,10 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { CARDS, BADGE_STYLE, TileIcon } from "../cards";
 import { SALES_TOOLS, salesToolKey, type SalesAudience } from "@/lib/salesTools";
+<<<<<<< HEAD
+=======
+import { SITE_LIVE_KEY, SITE_LIVE_SURFACES, siteLiveFrom } from "@/lib/flags/siteLive";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +38,12 @@ export default function AdminToolsPage() {
   });
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+<<<<<<< HEAD
+=======
+  // The master switch for the unreleased feature set. Unlike every other key in
+  // admin_tools, a missing row means OFF — see src/lib/flags/siteLive.ts.
+  const [siteLive, setSiteLive] = useState(false);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   useEffect(() => {
     let alive = true;
@@ -71,6 +81,10 @@ export default function AdminToolsPage() {
           for (const row of rows) if (row.key in next) next[row.key] = row.active;
           return next;
         });
+<<<<<<< HEAD
+=======
+        setSiteLive(siteLiveFrom(rows));
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       }
       setReady(true);
     })();
@@ -104,6 +118,36 @@ export default function AdminToolsPage() {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Flip the master switch. Everything it controls reads the same flag, so this
+  // single write reveals (or re-hides) the whole feature set at once.
+  async function toggleSiteLive() {
+    const next = !siteLive;
+    if (!next && !confirm("Take these features back offline for everyone?")) return;
+
+    setSiteLive(next);
+    setSaving(SITE_LIVE_KEY);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/admin/tools", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: SITE_LIVE_KEY, active: next }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to save");
+      }
+    } catch (e) {
+      setSiteLive(!next);
+      setSaveError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   const activeCount = CARDS.filter((c) => active[c.key]).length;
 
   return (
@@ -132,6 +176,72 @@ export default function AdminToolsPage() {
               </Card>
             )}
 
+<<<<<<< HEAD
+=======
+            {/* Master switch for the unreleased feature set. Everything listed
+                here is hidden from every user — reps, marketing, and admins —
+                until this is turned on. */}
+            <Card
+              className={
+                "mb-6 border-t-4 p-5 sm:p-6 " +
+                (siteLive ? "border-t-[var(--anchor-green)]" : "border-t-[#d09a3c]")
+              }
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)]">Site live</h2>
+                    <span
+                      className={
+                        "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
+                        (siteLive ? "bg-[#e6f4ea] text-[#1e6b3a]" : "bg-[#fdf3e2] text-[#8a6d3b]")
+                      }
+                    >
+                      {siteLive ? "Live" : "Hidden"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--anchor-gray)]">
+                    {siteLive
+                      ? "These features are switched on and visible to everyone who has access to them."
+                      : "These features are built and deployed but hidden from everyone — including admins. Turn this on to release them all at once."}
+                  </p>
+
+                  <ul className="mt-3 space-y-1.5">
+                    {SITE_LIVE_SURFACES.map((s) => (
+                      <li key={s.label} className="flex gap-2 text-sm">
+                        <span
+                          className={
+                            "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full " +
+                            (siteLive ? "bg-[var(--anchor-green)]" : "bg-[var(--anchor-gray)]/50")
+                          }
+                          aria-hidden
+                        />
+                        <span>
+                          <b className="text-[var(--anchor-deep)]">{s.label}</b>
+                          <span className="text-[var(--anchor-gray)]"> — {s.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void toggleSiteLive()}
+                  disabled={saving === SITE_LIVE_KEY}
+                  className={
+                    "h-11 shrink-0 rounded-xl px-6 text-sm font-semibold transition-opacity disabled:opacity-50 " +
+                    (siteLive
+                      ? "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:bg-[var(--surface-soft)]"
+                      : "bg-[var(--anchor-green)] text-white hover:opacity-90")
+                  }
+                >
+                  {saving === SITE_LIVE_KEY ? "Saving…" : siteLive ? "Take offline" : "Go live"}
+                </button>
+              </div>
+            </Card>
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
             {/* Admin Console tools */}
             <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Admin Console tools</h2>
             <p className="mb-4 mt-1 text-sm text-[var(--anchor-gray)]">

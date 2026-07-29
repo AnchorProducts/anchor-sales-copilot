@@ -1,6 +1,12 @@
 # Anchor Sales Co-Pilot — Comprehensive Site Map
 
+<<<<<<< HEAD
 _Last updated: 2026-07-08. Covers routes (external / internal / admin), API surface, notifications (emails + push, with recipients & names), database tables, storage buckets, and integrations._
+=======
+_Last updated: 2026-07-29. Covers routes (external / internal / admin), API surface, notifications (emails + push, with recipients & names), database tables, storage buckets, and integrations._
+
+> **Changed 2026-07-29** — consults & Project Intakes moved to a two-state workflow (`new` | `assigned`) with an assignee picker and admin delete; NetSuite gated behind its own credentials; the document notification retargeted from a revision label to document *replacement*; the App↔Portal reconciliation surfaces (Pitch to Marketing, Portal Access, All Documents) documented for the first time, all behind the `site_live` flag.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ---
 
@@ -16,6 +22,13 @@ Roles live on `profiles` (`role` + `user_type`). Profiles auto-create on first d
 
 **View-As** (`src/lib/role/viewAs.ts`): admins preview the app as any role via a `localStorage` override. UI gating uses the *effective* role; data fetches/sign-out use the *real* session. Admin-as-admin cannot open submission forms — must View-As a sales role.
 
+<<<<<<< HEAD
+=======
+**`site_live` kill switch** (`src/lib/flags/`): one `admin_tools` row gates the whole App↔Portal reconciliation feature set (Pitch to Marketing, Submissions, Email templates, All Documents, Portal Access). It **inverts** the table's usual convention — everywhere else a missing row means ACTIVE; a missing `site_live` row means OFF. Enforced inside `requireInternalUser` / `requireMarketingUser` / `requireAdminUser` (`src/lib/portalAccess.ts`), so new routes using those guards inherit it. Server reads fail closed.
+
+**Portal access overlay** (`src/lib/portalAccess.ts`): the shared `portal_invites` allow-list (level `admin`|`internal` + team) overlays this app's `profiles.role`. `requireMarketingUser()` is deliberately stricter — it demands a real invite row **and** the internal deploy, because the shared `mkt_*` tables are gated on the portal's `is_marketing()`, which reads only `portal_invites`.
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 **Two-deploy split** (`src/lib/appMode.ts` + `src/middleware.ts`): `NEXT_PUBLIC_APP_MODE=internal` = internal build, unset = external build. Middleware cross-redirects by the `anchor-role` cookie (external reps kept out of internal build; Anchor staff kept out of external build). Middleware only enforces auth presence + the deploy split — page-level role gating is client-side + API 403s.
 
 ---
@@ -29,6 +42,10 @@ Roles live on `profiles` (`role` + `user_type`). Profiles auto-create on first d
 | `/reset` | Set new password |
 | `/signup` | Listed in middleware `PUBLIC_PATHS` — no `page.tsx` (handled on `/`) |
 | `/auth/callback` | Magic-link / OAuth callback (route handler) |
+<<<<<<< HEAD
+=======
+| `/grab/[token]` | **Public, no login** — marketing aisle QR pickup. Self-report items taken; decrements stock and notifies. |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ---
 
@@ -43,6 +60,11 @@ Roles live on `profiles` (`role` + `user_type`). Profiles auto-create on first d
 | `/docs/view` | Full-screen document viewer |
 | `/dashboard/settings` | Profile / service-state / NetSuite-sync-mode settings |
 | `/dashboard/faq` | FAQ |
+<<<<<<< HEAD
+=======
+| `/dashboard/get-started` | Onboarding / first-run guide |
+| `/assets/documents` | **All Documents** — flat searchable index over the library (`site_live`) |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 | `/dashboard/support` | Personal support-thread list (admins redirect → `/admin/support`) |
 | `/dashboard/support/[id]` | Support thread detail |
 
@@ -71,6 +93,12 @@ Anchor reps see all shared + sales-form routes, plus:
 | `/dashboard/opportunities/[id]` | Consult detail — status, assignment, meeting link, attachments, NetSuite sync | internal |
 | `/internal-assets/docs/[productId]` | Per-product internal docs | internal content |
 | `/internal-assets/contacts/[productId]` | Per-product manufacturer contacts | internal content |
+<<<<<<< HEAD
+=======
+| `/dashboard/project-intake/new` | Project Intake submission | internal |
+| `/dashboard/project-intake/[id]` | Intake detail — assignee, delete (admin), NetSuite panel | internal, territory-scoped |
+| `/dashboard/pitch` | **Pitch to Marketing** — pitch an idea, track the decision | internal (`site_live`) |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 Three "admin" pages also admit `anchor_rep`: `/admin/inventory`, `/admin/marketing-orders`, `/admin/knowledge`.
 
@@ -100,7 +128,14 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 | `/admin/asset-reviews` | Approve/reject rep photo uploads | admin |
 | `/admin/manufacturer-contacts` | Manage OEM/consultant contact directory | admin |
 | `/admin/walkthroughs` | Trigger in-app page tutorials | admin (via hub) |
+<<<<<<< HEAD
 | `/admin/tools` | Activate/deactivate tool tiles (`admin_tools`) | admin |
+=======
+| `/admin/tools` | Activate/deactivate tool tiles (`admin_tools`) + the **Site live** master switch | admin |
+| `/admin/portal-access` | Shared authorized-emails manager (`portal_invites`) | admin (`site_live`) |
+| `/marketing/submissions` | Pitch review queue — approve / request info / decline | marketing or admin, internal deploy, `site_live` |
+| `/marketing/email-templates` | Editable pitch notification emails | marketing or admin, internal deploy, `site_live` |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 | `/admin/rooftop-reports` | Assessment reports — `ComingSoon` | admin |
 | `/admin/rooftop-logic` | Rooftop audit logic — `ComingSoon` | admin |
 | `/api/admin/learning/page.tsx` | Learning admin (doc allow-list + correction console; page under an `/api/…` path) | no inline gate |
@@ -111,6 +146,10 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 
 - **Desktop sidebar** (`AppSidebar.tsx`): Dashboard, Copilot, Assets, Support, Settings, Sign out for all. Sales roles add REC / Notable / Marketing Orders / Commission. `anchor_rep` adds Active Consults. `admin` adds Admin + Reports.
 - **Mobile bottom nav** (`MobileBottomNav.tsx`): Dashboard + 2 recents + Settings, recents filtered per role.
+<<<<<<< HEAD
+=======
+- **Marketing Admin Center** (`/admin/marketing`): tabs **Orders**, **Inventory**, and **Submissions** — the last only when `site_live` **and** the internal build (`isInternal`); otherwise the tab is not rendered at all, and `?tab=submissions` falls back to Orders.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 - **Dashboard quick-action cards** (`dashboard/page.tsx`): sales personas see form cards; admin sees Copilot/Assets/Active Consults/Admin Console/Assessment Reports (forms hidden — must View-As). Deactivated `admin_tools` are stripped from sales viewers' hero + cards.
 
 ---
@@ -128,6 +167,7 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 - `GET /api/knowledge-counts`, `/api/knowledge-list`
 - `GET /api/public/doc`, `/api/public/library` — signed public doc access
 - `POST /api/admin/learning/action`, `/api/admin/learning/summary`
+<<<<<<< HEAD
 - `GET /api/admin/knowledge/library-docs`
 
 ### Forms / Triage
@@ -136,19 +176,54 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 - `POST /api/notable-projects`
 - `GET/POST /api/marketing-orders` · `PATCH` (status) · `/api/marketing-orders/[id]/messages` · `/[id]/activity` · `/unread`
 - `POST /api/fm-intake` · `GET /api/fm-intake/[id]`
+=======
+- `GET /api/admin/knowledge/library-docs`, `/api/library/docs`, `POST /api/admin/library/backfill` (indexes bucket files into `assets`; dry-run by default)
+
+### Forms / Triage
+- `POST /api/leads` (submit consult) · `GET /api/leads` (triage, region-scoped) · `GET/PATCH/DELETE /api/leads/[id]` · `POST /api/leads/[id]/netsuite-sync`
+  - `GET` also returns `netsuiteConfigured`. `PATCH` derives `status` from `assigned_rep_user_id`. `DELETE` is **admin-only** and removes the row plus its `lead-uploads` files.
+  - `netsuite-sync` returns **503** `{ error, missing[] }` when the `NETSUITE_*` credentials are absent.
+- `GET /api/internal/assignees` — everyone a consult/intake can be assigned to (admin + anchor_rep). Readable by any internal user.
+- `POST /api/commission`
+- `POST /api/notable-projects`
+- `GET/POST /api/marketing-orders` · `PATCH` (status) · `/api/marketing-orders/[id]/messages` · `/[id]/activity` · `/unread`
+- `POST /api/fm-intake` · `GET/PATCH/DELETE /api/fm-intake/[id]`
+  - `GET` returns `netsuiteConfigured` + `assigned_rep_name`. `PATCH` accepts `assigned_rep_user_id` (derives `status`) and `review_notes`; admin-only. `DELETE` is admin-only and removes the row plus its `knowledge` files.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 - `POST /api/support` · `/api/support/[id]` (reply)
 - `POST /api/rooftop` — Rooftop Equipment Audit (service-role, config-driven prompt)
 
 ### Inventory
+<<<<<<< HEAD
 - `GET/POST /api/inventory` · `/api/inventory/[id]/image` · `/api/inventory/checkouts`
 
 ### Assets / Uploads
 - `POST /api/assets/upload-images`, `/api/internal/asset-reviews/upload`, `/api/internal-assets/rep-agreements/upload`, `/api/internal-assets/revision`
 - Admin: `/api/admin/assets/upload|delete|rename-sheets`, `/api/admin/products`, `/api/admin/asset-reviews`, `/api/admin/oem-matrix`
+=======
+- `GET/POST /api/inventory` · `/api/inventory/[id]/image` · `/api/inventory/checkouts` · `/api/inventory/grabs` · `/api/inventory/aisle-qr`
+- `GET/POST /api/public/grab` — the no-login aisle pickup (token-gated)
+
+### Assets / Uploads
+- `POST /api/assets/upload-images`, `/api/internal/asset-reviews/upload`, `/api/internal-assets/rep-agreements/upload`
+  - _(`/api/internal-assets/revision` was **removed** 2026-07-29 along with the revision UI.)_
+- Admin: `/api/admin/assets/upload|delete|rename-sheets` — `upload` with `replace:true` overwrites bytes in place (path unchanged) and fires the **`document_replaced`** notification, `/api/admin/products`, `/api/admin/asset-reviews`, `/api/admin/oem-matrix`
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ### Admin config
 - `GET/POST /api/admin/sales-reps`, `/api/admin/users`, `/api/admin/manufacturer-contacts[/[id]]`, `/api/admin/rooftop-logic`, `/api/admin/rooftop-reports`, `/api/admin/commission-claims`, `/api/admin/tools`, `/api/admin/user-activity`, `/api/admin/user-events`
 - `GET/PUT /api/admin/notification-settings`, `GET/PUT /api/admin/notification-tools`
+<<<<<<< HEAD
+=======
+- `GET/POST/PATCH/DELETE /api/admin/portal-invites` — the shared authorized-emails list
+- `GET /api/me/portal-access` — the caller's resolved portal level/team
+
+### Pitch to Marketing (all `site_live` + internal deploy)
+- `GET/POST /api/pitches` · `POST /api/pitches/[id]/comments`
+- `GET /api/marketing/submissions` — review queue. 403 carries `reason`: `not_live` | `not_signed_in` | `not_internal_deploy` | `not_marketing`
+- `PATCH /api/marketing/submissions/[id]` — approve / decline
+- `GET/PUT /api/marketing/email-templates`
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ### Push
 - `POST /api/push/subscribe`, `/api/push/unsubscribe`, `GET /api/push/status`, `POST /api/push/test`
@@ -156,7 +231,11 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 ### Analytics / System
 - `POST /api/user-events`, `GET /api/user-events/most-used`
 - `GET /api/reports/weekly` — Friday cron (Resend + prune), guarded by `CRON_SECRET`
+<<<<<<< HEAD
 - `GET /api/sales-reps/by-state`, `/api/health`, `/api/status`
+=======
+- `GET /api/sales-reps/by-state`, `/api/health`, `/api/status`, `/api/geocode`
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ---
 
@@ -180,8 +259,14 @@ Two channels, unified by a **"tool" (event category)** registry (`src/lib/push/t
 | `support_request` | Support request | Support ticket filed |
 | `asset_review` | Photo for review | Rep uploads tackle-box photo |
 | `weekly_report` | Weekly analytics | Friday summary (email + push) |
+<<<<<<< HEAD
 | `document_revision` | Document revision change | `assets.revision` label updated (QMS) |
 | `inventory_low_stock` | Inventory low stock | Item hits low-stock threshold |
+=======
+| `document_replaced` | Document replaced | A library file is overwritten in place via `/api/admin/assets/upload` (`replace:true`) |
+| `inventory_low_stock` | Inventory low stock | Item hits low-stock threshold |
+| `inventory_grab` | Marketing aisle pickup | Someone scans the aisle QR and takes stock |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 | `fm_intake` | Rooftop Equipment Intake (FM) | FM intake submitted |
 | `marketing_order_region:<repId>` | Per-region marketing (dynamic) | Outside-rep order routed to region's inside rep/manager |
 
@@ -202,14 +287,22 @@ Two channels, unified by a **"tool" (event category)** registry (`src/lib/push/t
 | E11 | FM intake | `fm_intake` tool | `Rooftop Equipment Intake — {name} ({id8})` |
 | E12 | Inventory low stock | `inventory_low_stock` tool | `Low stock — {item}` |
 | E13 | Weekly analytics (cron) | `weekly_report` tool / `WEEKLY_REPORT_TO` (2 PDFs) | `Anchor Sales Co-Pilot — Weekly Analytics …` |
+<<<<<<< HEAD
 | E14 | Document revision change | `document_revision` tool (via `assets` DB webhook → `revision-change-email` edge fn) | `Revision update: {doc} → {rev}` |
+=======
+| E14 | Document replaced | `document_replaced` tool — sent from the API route, **not** a DB trigger | `Document replaced — {file}` |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 | E15 | Training digest (daily edge fn) | env `ADMIN_ALERT_EMAILS`; from `onboarding@resend.dev` | `Anchor Co-Pilot digest: {N} corrections, {M} low ratings` |
 
 _NetSuite lead sync sends no notification — it only writes sync status back to the lead._
 
 ### Push notifications
 
+<<<<<<< HEAD
 `new_consult` (P1), region reps (P2), `commission_claim` (P3), `marketing_order` (P4), order creator confirm (P5), regional manager (P6), `marketing_order_status` (P7), order chat both directions (P8/P9), `notable_project` (P10), `support_request` (P11), `fm_intake` (P12), `asset_review` (P13), `inventory_low_stock` (P14), `weekly_report` (P15), self-test (P16). `document_revision` is email-only (no push).
+=======
+`new_consult` (P1), region reps (P2), `commission_claim` (P3), `marketing_order` (P4), order creator confirm (P5), regional manager (P6), `marketing_order_status` (P7), order chat both directions (P8/P9), `notable_project` (P10), `support_request` (P11), `fm_intake` (P12), `asset_review` (P13), `inventory_low_stock` (P14), `weekly_report` (P15), self-test (P16). `document_replaced` sends **both** email and push (P17).
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ### Seeded lead-routing roster (`sales_reps`) — the only hardcoded human recipients
 
@@ -243,7 +336,11 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 - **`profiles`** ⚠ — 1:1 with `auth.users`. `role`, `email`, `full_name`, `company`, `phone`, `manufacturer_contact_id` FK, `anchor_commission` bool, `service_zip`, `service_state`, `service_states[]`, `netsuite_sync_mode` (`manual`|`automatic`).
 
 ### Leads / Consults
+<<<<<<< HEAD
 - **`leads`** — REC submissions (largest table). `customer_company`, `details`, `location_text`, `region_code`, `created_by` FK, `attachments` jsonb, `status` (`new|assigned|contacted|qualified|closed_won|closed_lost`), `assigned_rep_user_id` FK, meeting fields (`wants_video_call`, `meeting_link`, `meeting_request_type`), NetSuite sync (`netsuite_company_id/contact_id/deal_id`, `netsuite_sync_status`, `netsuite_sync_error`), project fields (`project_address`, `state`, `roof_type`, `roof_brand`, `needed_month/year`, `solution_requests` jsonb, `project_timeline`), contact prefs, inside/outside assignment, submitter snapshot. _(hubspot_* → netsuite_* renamed.)_ RLS: ext insert/select/update own (update gated `status='new'`); internal all.
+=======
+- **`leads`** — REC submissions (largest table). `customer_company`, `details`, `location_text`, `region_code`, `created_by` FK, `attachments` jsonb, `status` (**`new|assigned` only** since 20260729_000001 — derived from `assigned_rep_user_id`, never set independently), `assigned_rep_user_id` FK, meeting fields (`wants_video_call`, `meeting_link`, `meeting_request_type`), NetSuite sync (`netsuite_company_id/contact_id/deal_id`, `netsuite_sync_status`, `netsuite_sync_error`), project fields (`project_address`, `state`, `roof_type`, `roof_brand`, `needed_month/year`, `solution_requests` jsonb, `project_timeline`), contact prefs, inside/outside assignment, submitter snapshot. _(hubspot_* → netsuite_* renamed.)_ RLS: ext insert/select/update own (update gated `status='new'`); internal all.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 - **`sales_regions`** — `region_code` PK → `rep_user_id` FK (early routing, superseded by `sales_reps`).
 
 ### Sales Reps / Contacts
@@ -264,7 +361,11 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 - **`rooftop_assessment_config`** — single row `id=1`, `system_prompt` override for the audit.
 
 ### FM Intake
+<<<<<<< HEAD
 - **`fm_intake_submissions`** — Universal Rooftop Equipment Intake. Contact/project fields, `equipment[]`, `payload` jsonb (buildings, HVAC, pipe stacks), `attachments` jsonb (in `knowledge`), review workflow (`status` `new|in_review|recommended|closed`, `review_notes`, `reviewed_by/at`). RLS: admin read.
+=======
+- **`fm_intake_submissions`** — Universal Rooftop Equipment Intake. Contact/project fields, `equipment[]`, `payload` jsonb (buildings, HVAC, pipe stacks), `attachments` jsonb (in `knowledge`), `review_notes`, `reviewed_by/at`, `state`/`region_code` (territory scoping). `status` is **`new|assigned`** and `assigned_rep_user_id` FK drives it (20260729_000001). Also carries the five `netsuite_*` columns mirroring `leads` (20260729_000002) — the push is **not wired for intakes**, the columns exist so the shared panel can show real state once it is. RLS: admin read.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 ### Marketing Orders
 - **`marketing_orders`** — `created_by` FK, submitter snapshot, `categories[]`, `items`, `quantity`, `ship_to`, `needed_by`, `status` (`new|processing|shipped|fulfilled|delayed|cancelled`), `projected_ship_date`, `delay_notes`, `updated_by`, `last_message_at`.
@@ -292,6 +393,19 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 - **`support_requests`** — `created_by` FK, submitter snapshot, `subject`, `status` (`open|closed`), `last_message_at`.
 - **`support_messages`** — `request_id` FK, `author_id`, `author_role`, `body`, `attachments` jsonb (in `knowledge`). Trigger bumps parent.
 
+<<<<<<< HEAD
+=======
+### Pitch to Marketing / Portal (shared with the Anchor Internal Portal)
+- **`mkt_idea`** — the Strategy Board. Pitch columns added by 20260727_000001: `source` (`internal|pitch`), `submitted_by` FK, `submitter_team`, `review_status` (`pending|approved|declined|needs_info`, null for internal ideas), `decline_reason`, `planned_timeline`, `reviewed_by/at`. RLS gated on `is_marketing()`.
+- **`mkt_idea_comment`** — two-way pitch thread. `idea_id` FK, `author_id`, `author_team`, `kind` (`comment|info_request|info_response|decision`), `body`.
+- **`mkt_email_template`** — editable pitch notification copy. `key` PK, `subject`, `heading`, `body`, `button_label`, `updated_by/at`.
+- **`portal_invites`** ⚠ — the portal's authorized-emails allow-list. `email` PK, `role` (level `admin|internal`), `team`, `status`. **Not** this app's user list — see §1.
+
+### Marketing aisle grab
+- **`marketing_grab_config`** — single row. `token`, `enabled`, `updated_by/at`.
+- **`marketing_item_grabs`** — public pickup log. `item_id` FK, `item_name`, `grabbed_by_name`, `grabbed_by_email`, `quantity`, `ip`.
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 ### Notifications & Settings
 - **`notification_settings`** — single row `id=1`. `commission_recipient_email`, `weekly_report_emails[]`, `marketing_orders_recipients` jsonb, `notable_project_emails[]`, `support_emails[]`. _(Largely superseded by the tool system.)_
 - **`notification_tool_assignments`** — `(tool_key, user_id)` → email + push. Admin-only.
@@ -309,7 +423,11 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 
 ### Triggers / functions
 - `bump_support_request_activity()`, `bump_marketing_order_activity()` — bump `last_message_at`.
+<<<<<<< HEAD
 - `assets_touch_last_updated()`, `assets_notify_revision_change()` (pg_net webhook → `revision-change-email`).
+=======
+- `assets_touch_last_updated()`. _(`assets_notify_revision_change()` and its trigger were **dropped** by 20260729_000003; `assets.revision` is now unused dead weight, deliberately not dropped because the portal shares this table.)_
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 - RPC `match_knowledge_corrections(query_embedding, match_count)` — vector retrieval.
 
 ---
@@ -333,7 +451,11 @@ No public buckets — all access via server-side `createSignedUrl` / `download` 
 | **OpenAI** | Copilot chat + `text-embedding-3-small` embeddings |
 | **Resend** | All transactional email |
 | **web-push (VAPID)** | Browser push notifications |
+<<<<<<< HEAD
 | **NetSuite** | CRM sync (OAuth 1.0 TBA RESTlet) — per-rep manual/automatic |
+=======
+| **NetSuite** | CRM sync (OAuth 1.0 TBA RESTlet) — per-rep manual/automatic. **Not commissioned**: gated on `isNetSuiteConfigured()` (all six `NETSUITE_*` vars). Unconfigured → greyed "Coming soon" panel + 503 from the sync route. Consults only; intakes render the panel read-only. |
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 | **Vercel** | Hosting + cron (Friday 17:00 UTC → `/api/reports/weekly`), two deploys (internal/external) |
 | **PWA** | `next-pwa` service worker (`public/sw.js`), separate internal/external icons + manifest |
 
@@ -341,8 +463,16 @@ No public buckets — all access via server-side `createSignedUrl` / `download` 
 | Function | Role |
 |---|---|
 | `netsuite-lead-sync` | Push leads to NetSuite (writes sync status back; no notification) |
+<<<<<<< HEAD
 | `revision-change-email` | Target of the `assets` revision webhook → Resend email to `document_revision` tool |
 | `training-digest` | Daily digest of corrections + low ratings (email to `ADMIN_ALERT_EMAILS`); also 90-day `user_events` prune / weekly report support. Guarded by `CRON_SECRET` |
 
 ### Notable env vars
 `RESEND_API_KEY`, `LEAD_NOTIFICATIONS_FROM`, `*_NOTIFICATIONS_EMAIL` (commission/marketing/notable/support/fm-intake fallbacks), `WEEKLY_REPORT_TO`, `REVISION_NOTIFICATION_EMAIL`, `ADMIN_ALERT_EMAILS`, `CRON_SECRET`, `REVISION_WEBHOOK_SECRET`, VAPID keys, `OPENAI_API_KEY`/`OPENAI_MODEL`, `NEXT_PUBLIC_APP_MODE`, NetSuite creds.
+=======
+| `revision-change-email` | **Dead** — its trigger was dropped by 20260729_000003. Still deployed; safe to delete. Superseded by the in-app `document_replaced` notification. |
+| `training-digest` | Daily digest of corrections + low ratings (email to `ADMIN_ALERT_EMAILS`); also 90-day `user_events` prune / weekly report support. Guarded by `CRON_SECRET` |
+
+### Notable env vars
+`RESEND_API_KEY`, `LEAD_NOTIFICATIONS_FROM`, `*_NOTIFICATIONS_EMAIL` (commission/marketing/notable/support/fm-intake fallbacks), `WEEKLY_REPORT_TO`, `ADMIN_ALERT_EMAILS`, `CRON_SECRET`, `REVISION_WEBHOOK_SECRET`, VAPID keys, `OPENAI_API_KEY`/`OPENAI_MODEL`, `NEXT_PUBLIC_APP_MODE`, NetSuite creds.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e

@@ -8,7 +8,12 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
+<<<<<<< HEAD
 import { CARDS, BADGE_STYLE, TileIcon, type AdminCard } from "./cards";
+=======
+import { CARDS, BADGE_STYLE, TileIcon, SITE_LIVE_CARD_KEYS, type AdminCard } from "./cards";
+import { useSiteLive } from "@/lib/flags/useSiteLive";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +26,10 @@ export default function AdminHubPage() {
   // Keys an admin has switched off in /admin/tools. A tool with no row is
   // active, so we only track the deactivated set and hide those tiles.
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+<<<<<<< HEAD
+=======
+  const { live: siteLive } = useSiteLive();
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   useEffect(() => {
     let alive = true;
@@ -57,11 +66,24 @@ export default function AdminHubPage() {
   // admins but are marked "Inactive" — they're still hidden from everyone else,
   // since only admins can reach /admin at all. This lets an admin preview a tool
   // that hasn't been released yet.
+<<<<<<< HEAD
   const orderedCards = useMemo(() => {
     const active = CARDS.filter((c) => !hiddenKeys.has(c.key));
     const inactive = CARDS.filter((c) => hiddenKeys.has(c.key));
     return [...active, ...inactive];
   }, [hiddenKeys]);
+=======
+  //
+  // The one exception is the unreleased feature set behind "Site live": those
+  // cards are removed outright rather than shown as Inactive, so nothing is
+  // reachable — not even for an admin — until the switch is flipped.
+  const orderedCards = useMemo(() => {
+    const catalog = siteLive ? CARDS : CARDS.filter((c) => !SITE_LIVE_CARD_KEYS.has(c.key));
+    const active = catalog.filter((c) => !hiddenKeys.has(c.key));
+    const inactive = catalog.filter((c) => hiddenKeys.has(c.key));
+    return [...active, ...inactive];
+  }, [hiddenKeys, siteLive]);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   return (
     <main className="ds-page">

@@ -23,6 +23,11 @@ type MarketingOrder = {
   updated_at: string | null;
   updated_by_name: string | null;
   updated_by_email: string | null;
+<<<<<<< HEAD
+=======
+  assigned_to_name: string | null;
+  assigned_to_email: string | null;
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 };
 
 function formatDate(s: string | null) {
@@ -131,6 +136,29 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                 </span>
               </div>
 
+<<<<<<< HEAD
+=======
+              {/* Who at Anchor owns this order — the rep's point of contact once
+                  an admin has assigned it. */}
+              {o.assigned_to_name && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--anchor-deep)]/15 bg-[var(--anchor-mint)]/30 px-3 py-2 text-xs text-[var(--anchor-gray)]">
+                  <span aria-hidden>👤</span>
+                  <span>
+                    Handled by{" "}
+                    <span className="font-semibold text-[var(--anchor-deep)]">{o.assigned_to_name}</span>
+                  </span>
+                  {o.assigned_to_email && (
+                    <a
+                      href={`mailto:${o.assigned_to_email}`}
+                      className="font-semibold text-[var(--anchor-green)] underline"
+                    >
+                      {o.assigned_to_email}
+                    </a>
+                  )}
+                </div>
+              )}
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
               <div className="mt-4">
                 {o.status === "delayed" ? (
                   <OrderDelayBanner

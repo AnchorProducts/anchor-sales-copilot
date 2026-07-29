@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+<<<<<<< HEAD
 import { isFmIntakeStatus } from "@/lib/fmIntake";
+=======
+import { isFmIntakeStatus, statusForAssignee } from "@/lib/fmIntake";
+import { isNetSuiteConfigured } from "@/lib/netsuite/config";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 import { resolveStatesForUser } from "@/lib/sales/regions";
 
 export const runtime = "nodejs";
@@ -70,6 +75,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       })
     );
 
+<<<<<<< HEAD
     let reviewer: string | null = null;
     if (row.reviewed_by) {
       const { data: p } = await supabaseAdmin
@@ -81,6 +87,34 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     return NextResponse.json({ submission: { ...row, attachments, reviewed_by_name: reviewer } });
+=======
+    const nameFor = async (userId: unknown): Promise<string | null> => {
+      if (!userId) return null;
+      const { data: p } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name,email")
+        .eq("id", userId as string)
+        .maybeSingle();
+      return clean((p as any)?.full_name) || clean((p as any)?.email) || null;
+    };
+
+    const [reviewer, assignee] = await Promise.all([
+      nameFor(row.reviewed_by),
+      nameFor(row.assigned_rep_user_id),
+    ]);
+
+    return NextResponse.json({
+      submission: {
+        ...row,
+        attachments,
+        reviewed_by_name: reviewer,
+        assigned_rep_name: assignee,
+      },
+      // Tells the client whether to render the live NetSuite panel or the
+      // "Coming soon" placeholder. Only the boolean crosses the wire.
+      netsuiteConfigured: isNetSuiteConfigured(),
+    });
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load submission." }, { status: 500 });
   }
@@ -105,7 +139,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       reviewed_at: new Date().toISOString(),
     };
 
+<<<<<<< HEAD
     if (body.status !== undefined) {
+=======
+    // Assignment is the source of truth: setting or clearing the assignee moves
+    // the status with it. A client-sent status is only honoured when assignment
+    // isn't part of the same request, so the two can never end up disagreeing.
+    if (body.assigned_rep_user_id !== undefined) {
+      const assignee = clean(body.assigned_rep_user_id) || null;
+      updates.assigned_rep_user_id = assignee;
+      updates.status = statusForAssignee(assignee);
+    } else if (body.status !== undefined) {
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       const status = clean(body.status);
       if (!isFmIntakeStatus(status)) {
         return NextResponse.json({ error: "Invalid status." }, { status: 400 });
@@ -115,7 +160,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.review_notes !== undefined) {
       updates.review_notes = clean(body.review_notes) || null;
     }
+<<<<<<< HEAD
     if (body.status === undefined && body.review_notes === undefined) {
+=======
+    if (
+      body.status === undefined &&
+      body.review_notes === undefined &&
+      body.assigned_rep_user_id === undefined
+    ) {
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -123,7 +176,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       .from("fm_intake_submissions")
       .update(updates)
       .eq("id", clean(id))
+<<<<<<< HEAD
       .select("id,status,review_notes,reviewed_at")
+=======
+      .select("id,status,review_notes,reviewed_at,assigned_rep_user_id")
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Submission not found." }, { status: 404 });
@@ -133,3 +190,62 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: e?.message || "Failed to update submission." }, { status: 500 });
   }
 }
+<<<<<<< HEAD
+=======
+
+/* ----------------------------------------------------------------------------
+ * DELETE — permanently remove a Project Intake and its uploaded files. Admin
+ * only, matching the consult side.
+ *
+ * No undo, no soft-delete column, so the UI confirms first. Files go before the
+ * row, since the row is the only record of where they live.
+ * --------------------------------------------------------------------------*/
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await ctx.params;
+    const supabase = await supabaseRoute();
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if ((await getRole(auth.user.id)) !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const intakeId = clean(id);
+    if (!intakeId) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const { data: row, error: readErr } = await supabaseAdmin
+      .from("fm_intake_submissions")
+      .select("id, attachments")
+      .eq("id", intakeId)
+      .maybeSingle();
+
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 });
+    if (!row) return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+
+    const paths = (Array.isArray((row as any).attachments) ? (row as any).attachments : [])
+      .map((a: any) => clean(a?.path))
+      .filter(Boolean);
+
+    // A storage failure must not block the delete — report leftovers instead.
+    let orphanedFiles = 0;
+    if (paths.length > 0) {
+      const { error: rmErr } = await supabaseAdmin.storage.from(BUCKET).remove(paths);
+      if (rmErr) orphanedFiles = paths.length;
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from("fm_intake_submissions")
+      .delete()
+      .eq("id", intakeId);
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+    return NextResponse.json({
+      ok: true,
+      deletedFiles: paths.length - orphanedFiles,
+      orphanedFiles,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Failed to delete submission." }, { status: 500 });
+  }
+}
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e

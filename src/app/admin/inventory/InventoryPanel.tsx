@@ -437,7 +437,11 @@ export default function AdminInventoryPage({
 
   const shell = (
     <>
+<<<<<<< HEAD
       <div className={embedded ? "pt-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
+=======
+      <div className={embedded ? "pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : accessError ? (

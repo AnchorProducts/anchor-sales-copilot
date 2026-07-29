@@ -14,7 +14,10 @@ type AssetRow = {
   path: string;
   visibility: "public" | "internal";
   created_at: string;
+<<<<<<< HEAD
   revision: string | null;
+=======
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   last_updated: string | null;
 };
 
@@ -47,7 +50,11 @@ function isDocxPath(path: string) {
   return p.endsWith(".docx");
 }
 
+<<<<<<< HEAD
 // "May 12, 2026" — used for the revision / last-updated badge.
+=======
+// "May 12, 2026" — used for the last-updated badge.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 function formatDocDate(s: string | null) {
   if (!s) return "—";
   try {
@@ -105,9 +112,12 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   const [docxFile, setDocxFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
 
+<<<<<<< HEAD
   // Per-card revision editor (internal users only).
   const [revDrafts, setRevDrafts] = useState<Record<string, string>>({});
   const [savingRevId, setSavingRevId] = useState<string | null>(null);
+=======
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   async function load() {
     setLoading(true);
@@ -162,7 +172,11 @@ export default function InternalDocsList({ productId }: { productId: string }) {
       // docs for this internal list
       const { data: a, error: aErr } = await supabase
         .from("assets")
+<<<<<<< HEAD
         .select("id,title,category_key,type,path,visibility,created_at,revision,last_updated")
+=======
+        .select("id,title,category_key,type,path,visibility,created_at,last_updated")
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         .eq("product_id", productId)
         .eq("visibility", "internal")
         .order("created_at", { ascending: false });
@@ -366,12 +380,16 @@ export default function InternalDocsList({ productId }: { productId: string }) {
             <div className="mt-1 text-[12px] text-[#76777B] truncate">
               {a.category_key || a.type} • {a.visibility}
             </div>
+<<<<<<< HEAD
             {/* Revision label — subtle, muted. Confirms the portal copy matches
                 the QMS master. Shows just the date when no revision is set. */}
             <div className="mt-1 text-[11px] text-[#76777B]">
               {a.revision ? (
                 <span className="font-semibold text-[#11500F]">{a.revision} · </span>
               ) : null}
+=======
+            <div className="mt-1 text-[11px] text-[#76777B]">
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
               Updated {formatDocDate(a.last_updated ?? a.created_at)}
             </div>
           </div>
@@ -384,6 +402,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
         </div>
       </a>
 
+<<<<<<< HEAD
       {isInternalUser && (
         <div className="flex flex-wrap items-center gap-2 border-t border-black/5 px-4 py-2.5">
           <label className="text-[11px] font-semibold text-[#76777B]" htmlFor={`rev-${a.id}`}>
@@ -412,6 +431,8 @@ export default function InternalDocsList({ productId }: { productId: string }) {
           </span>
         </div>
       )}
+=======
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
     </div>
   );
 })}

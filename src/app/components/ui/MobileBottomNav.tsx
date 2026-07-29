@@ -2,9 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
+=======
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useEffectiveRole } from "@/lib/role/viewAs";
+import {
+  useHideWhenOverlapping,
+  HIDE_WHEN_OVERLAPPING_CLASS,
+  SHOW_WHEN_CLEAR_CLASS,
+} from "@/app/components/ui/useHideWhenOverlapping";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 // /docs/* is the full-screen document viewer — keep the nav out of the way.
@@ -116,6 +127,14 @@ function NavItem({ href, active, ariaLabel, kind, tutorialKey }: { href: string;
 export function MobileBottomNav() {
   const pathname = usePathname() || "";
   const supabase = useMemo(() => supabaseBrowser(), []);
+<<<<<<< HEAD
+=======
+  // The nav bar sits over page content on mobile. When a page button ends up
+  // underneath the pill it becomes unreachable, so step aside until it doesn't.
+  const pillRef = useRef<HTMLDivElement | null>(null);
+  const covering = useHideWhenOverlapping(pillRef);
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   const [recents, setRecents] = useState<Recent[]>([]);
   const [actualRole, setActualRole] = useState<string | null>(null);
 
@@ -205,7 +224,17 @@ export function MobileBottomNav() {
       // in className instead of the style prop.
       className="flex lg:hidden"
     >
+<<<<<<< HEAD
       <div className="pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--anchor-deep)] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+=======
+      <div
+        ref={pillRef}
+        className={
+          "pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--anchor-deep)] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)] " +
+          (covering ? HIDE_WHEN_OVERLAPPING_CLASS : SHOW_WHEN_CLEAR_CLASS)
+        }
+      >
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         <NavItem href="/dashboard" kind="grid" ariaLabel="Dashboard" active={dashboardActive} tutorialKey="nav-dashboard" />
         {keys.map((k) => {
           const s = SECTION_BY_KEY.get(k)!;

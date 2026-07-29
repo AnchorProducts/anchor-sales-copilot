@@ -62,7 +62,11 @@ export default function MarketingInventoryPage() {
         menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
+<<<<<<< HEAD
       <div className="mx-auto max-w-5xl px-5 py-6">
+=======
+      <div className="mx-auto max-w-5xl px-5 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6">
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
           <div className="ds-caption">Marketing Inventory</div>
           <h1 className="mt-2 text-2xl">Available marketing stock</h1>

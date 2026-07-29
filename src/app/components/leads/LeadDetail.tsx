@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+<<<<<<< HEAD
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
+=======
+import { useRouter } from "next/navigation";
+import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { Card } from "@/app/components/ui/Card";
+import AssignmentPanel from "@/app/components/leads/AssignmentPanel";
+import NetSuitePanel from "@/app/components/netsuite/NetSuitePanel";
+import { leadStatusLabel, leadStatusPill } from "@/lib/leads/status";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 type Attachment = {
   path: string;
@@ -86,18 +96,33 @@ function formatProjectTimeline(value: string | null): string {
 export default function LeadDetail({ id }: { id: string }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
+<<<<<<< HEAD
+=======
+  const router = useRouter();
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   const [lead, setLead] = useState<LeadRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+<<<<<<< HEAD
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const [assignRepExpanded, setAssignRepExpanded] = useState(false);
+=======
+  // Only admins may delete; the API enforces this again server-side.
+  const [role, setRole] = useState<string>("");
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   const [attachments, setAttachments] = useState<SignedAttachment[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncMode, setSyncMode] = useState<"manual" | "automatic">("manual");
+<<<<<<< HEAD
+=======
+  // Server-reported: are the NETSUITE_* credentials present? Until they are, the
+  // NetSuite card is greyed out and nothing tries to sync.
+  const [netsuiteConfigured, setNetsuiteConfigured] = useState(false);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   // Tracks the lead id we've already auto-synced so automatic mode fires once.
   const autoSyncedRef = useRef<string | null>(null);
 
@@ -120,6 +145,7 @@ export default function LeadDetail({ id }: { id: string }) {
       const row = json?.lead as LeadRow;
       const urlMap = (json?.attachmentUrls ?? {}) as Record<string, string>;
       setLead(row);
+<<<<<<< HEAD
 
       // The assigned rep is always the current user.
       const { data: auth } = await supabase.auth.getUser();
@@ -133,6 +159,19 @@ export default function LeadDetail({ id }: { id: string }) {
           .eq("id", uid)
           .maybeSingle();
         setCurrentUserName(String((prof as any)?.full_name || ""));
+=======
+      setNetsuiteConfigured(json?.netsuiteConfigured === true);
+
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id || "";
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        setRole(String((prof as any)?.role || ""));
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
         // Fetched separately so a missing column (un-migrated DB) can't break
         // the lead load. Defaults to manual on error.
@@ -177,6 +216,11 @@ export default function LeadDetail({ id }: { id: string }) {
   // on its own once it's loaded (and not already synced). Fires once per lead.
   useEffect(() => {
     if (syncMode !== "automatic") return;
+<<<<<<< HEAD
+=======
+    // Nothing to sync to until NetSuite is connected.
+    if (!netsuiteConfigured) return;
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
     if (loading || syncing || !lead) return;
     if ((lead.netsuite_sync_status || "pending") === "synced") return;
     if (autoSyncedRef.current === lead.id) return;
@@ -184,6 +228,7 @@ export default function LeadDetail({ id }: { id: string }) {
     setSyncMsg("Auto-syncing to NetSuite…");
     syncNetSuite();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+<<<<<<< HEAD
   }, [syncMode, loading, syncing, lead]);
 
   // Persist the current form state to the lead. Status stays "new" and the
@@ -210,6 +255,9 @@ export default function LeadDetail({ id }: { id: string }) {
     setLead(updated);
     return updated;
   }
+=======
+  }, [syncMode, loading, syncing, lead, netsuiteConfigured]);
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   async function syncNetSuite() {
     setSyncing(true);
@@ -217,6 +265,7 @@ export default function LeadDetail({ id }: { id: string }) {
     setError(null);
 
     try {
+<<<<<<< HEAD
       // Push the latest status + rep assignment first so NetSuite gets current state.
       const saved = await persist();
       if (!saved) {
@@ -224,6 +273,12 @@ export default function LeadDetail({ id }: { id: string }) {
         return;
       }
 
+=======
+      // No pre-write here. Assignment saves itself the moment it's changed in
+      // AssignmentPanel, so the row is already current — and the PATCH that used
+      // to run first hardcoded status:'new', silently un-assigning every consult
+      // it touched on the way to NetSuite.
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       const res = await fetch(`/api/leads/${encodeURIComponent(id)}/netsuite-sync`, {
         method: "POST",
       });
@@ -378,6 +433,7 @@ export default function LeadDetail({ id }: { id: string }) {
             )}
           </Card>
 
+<<<<<<< HEAD
           <Card className="relative p-5 sm:p-6">
             <div className="pointer-events-none select-none opacity-40">
             <div className="ds-caption mb-4">{t("leadActions")}</div>
@@ -446,6 +502,38 @@ export default function LeadDetail({ id }: { id: string }) {
               </span>
             </div>
           </Card>
+=======
+          <AssignmentPanel
+            endpoint={`/api/leads/${encodeURIComponent(id)}`}
+            assigneeId={lead.assigned_rep_user_id}
+            noun="consult"
+            canDelete={role === "admin"}
+            onSaved={(next) =>
+              setLead((prev) => (prev ? { ...prev, ...next } : prev))
+            }
+            onDeleted={() => router.push("/dashboard/opportunities")}
+          />
+
+          <NetSuitePanel
+            configured={netsuiteConfigured}
+            syncMode={syncMode}
+            syncStatus={lead.netsuite_sync_status}
+            companyId={lead.netsuite_company_id}
+            contactId={lead.netsuite_contact_id}
+            onSync={syncNetSuite}
+            syncing={syncing}
+            syncMsg={syncMsg}
+            labels={{
+              heading: "NetSuite",
+              syncButton: t("syncToNetSuite"),
+              syncing: t("syncing"),
+              syncMode: t("syncMode"),
+              syncModeManual: t("syncModeManual"),
+              syncModeAutomatic: t("syncModeAutomatic"),
+              syncStatus: t("syncStatus"),
+            }}
+          />
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
         </div>
       </div>
     </div>
@@ -482,6 +570,7 @@ function Field({
   );
 }
 
+<<<<<<< HEAD
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -507,6 +596,12 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${cls}`}>
       {status.replace("_", " ")}
+=======
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${leadStatusPill(status)}`}>
+      {leadStatusLabel(status)}
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
     </span>
   );
 }

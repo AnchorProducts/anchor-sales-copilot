@@ -9,6 +9,12 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { FeatureGraphic, ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { salesToolKey, HERO_FEATURE_TO_TOOL_KEY, type SalesAudience } from "@/lib/salesTools";
+<<<<<<< HEAD
+=======
+import { usePitchBadge } from "@/lib/pitches/seen";
+import { usePortalAccess } from "@/lib/role/usePortalAccess";
+import { useSiteLive } from "@/lib/flags/useSiteLive";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 type SearchProductRow = {
   id: string;
@@ -567,6 +573,18 @@ export default function DashboardPage() {
   const isAdmin = effectiveRole === "admin";
   const isInternal = effectiveRole === "admin" || effectiveRole === "anchor_rep";
 
+<<<<<<< HEAD
+=======
+  // Portal level/team drives the shared-surface tiles (Pitch to Marketing, and
+  // the Submissions inbox for marketing reviewers). `hasPitchNews` badges the
+  // tile when marketing has decided on, or asked about, one of this user's
+  // pitches since they last opened the page.
+  const { access: portalAccess } = usePortalAccess();
+  const { live: siteLive } = useSiteLive();
+  // Only poll for pitch activity once the feature is actually live.
+  const hasPitchNews = usePitchBadge(siteLive);
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   // Search suggestions are filtered by role (internal sees internal_assets).
   // When an admin flips "View app as", drop the cache and clear the in-flight
   // guard so the next focus refetches with the correct filter.
@@ -697,6 +715,37 @@ export default function DashboardPage() {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Pitch to Marketing — open to every internal user, whatever their team
+  // (§5.6 B). External reps don't pitch, so they never see it. Both of these
+  // tiles stay hidden from everyone until an admin flips "Site live".
+  if (siteLive && roleReady && isInternal) {
+    actions.push({
+      key: "pitch",
+      href: "/dashboard/pitch",
+      label: "Pitch to Marketing",
+      desc: "Send marketing a campaign, event, or content idea — and track what they decide.",
+      icon: "sparkles",
+      badge: hasPitchNews ? "New reply" : "Marketing",
+    });
+  }
+
+  // The reviewer side of the same workflow, for marketing and admins.
+  // portalAccess.marketing is already false while the site is dark, but the
+  // explicit check keeps the gate obvious at the call site.
+  if (siteLive && portalAccess.marketing) {
+    actions.push({
+      key: "submissions",
+      href: "/marketing/submissions",
+      label: "Submissions",
+      desc: "Review marketing pitches from the rest of the company — approve, decline, or ask for more.",
+      icon: "clipboard",
+      badge: "Marketing",
+    });
+  }
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
   // Hide any sales tool an admin deactivated for this audience. Admin-only
   // tiles (admin/reports) are never sales tools, so they pass through.
   if (viewerIsSales) {

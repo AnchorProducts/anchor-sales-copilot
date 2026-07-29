@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { ingestStorageFile } from "@/lib/knowledge/ingestStorageFile";
+<<<<<<< HEAD
+=======
+import { sendPushToTool } from "@/lib/push/send";
+import { emailToolUsers } from "@/lib/push/recipients";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,7 +126,11 @@ export async function POST(req: NextRequest) {
 
     const { data: prof } = await supabaseAdmin
       .from("profiles")
+<<<<<<< HEAD
       .select("role")
+=======
+      .select("role, full_name")
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       .eq("id", user.id)
       .maybeSingle();
 
@@ -199,6 +208,34 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.warn("[admin/assets/upload] replace ingestion threw:", err);
       }
+<<<<<<< HEAD
+=======
+
+      // Tell whoever is assigned to "Document replaced". Fired here rather than
+      // from a DB trigger so it goes exactly once per completed replace, and can
+      // name the file and the person who did it. Best-effort: a notification
+      // failure must never fail the replace, which has already happened.
+      try {
+        const name = basename(replacePath);
+        const who = String((prof as any)?.full_name || "").trim() || user.email || "Someone";
+        void sendPushToTool("document_replaced", {
+          title: "Document replaced",
+          body: `${who} replaced ${name}.`,
+          url: "/admin/knowledge",
+          tag: `doc-replaced-${replacePath}`,
+        });
+        void emailToolUsers("document_replaced", {
+          subject: `Document replaced — ${name}`,
+          text:
+            `${who} replaced a document in the resource library.\n\n` +
+            `File: ${name}\nPath: ${replacePath}\n\n` +
+            `The link is unchanged — anyone opening it now gets the new version.`,
+        });
+      } catch (err) {
+        console.warn("[admin/assets/upload] replace notify failed:", err);
+      }
+
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
       return NextResponse.json({ path: replacePath, name: basename(replacePath), replaced: true });
     }
 

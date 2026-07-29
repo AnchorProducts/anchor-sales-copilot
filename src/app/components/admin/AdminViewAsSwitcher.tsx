@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppRole, getViewAs, setViewAs, useViewAs } from "@/lib/role/viewAs";
+<<<<<<< HEAD
+=======
+import {
+  useHideWhenOverlapping,
+  HIDE_WHEN_OVERLAPPING_CLASS,
+  SHOW_WHEN_CLEAR_CLASS,
+} from "@/app/components/ui/useHideWhenOverlapping";
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 import { startTutorial, tutorialDoneKey, TUTORIAL_PENDING_KEY } from "@/app/components/tutorial/AppTutorial";
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
@@ -31,6 +39,12 @@ export function AdminViewAsSwitcher() {
   const [open, setOpen] = useState(false);
   const override = useViewAs();
   const popoverRef = useRef<HTMLDivElement | null>(null);
+<<<<<<< HEAD
+=======
+  // Step out of the way when a page button ends up underneath this pill.
+  // Never while the menu is open — that would yank it out from under the user.
+  const covering = useHideWhenOverlapping(popoverRef, { enabled: !open });
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
 
   // Pull the user's actual role once.
   useEffect(() => {
@@ -102,7 +116,14 @@ export function AdminViewAsSwitcher() {
       // avatar on the right — clear of the bottom nav, the dashboard's
       // stat circles, and the page header.
       // Desktop (lg+): bottom-right pill — the layout already signed off on.
+<<<<<<< HEAD
       className="fixed z-[60] flex flex-col items-center gap-2 left-1/2 -translate-x-1/2 top-[calc(env(safe-area-inset-top)+10px)] lg:left-auto lg:translate-x-0 lg:right-[calc(env(safe-area-inset-right)+10px)] lg:bottom-[calc(env(safe-area-inset-bottom)+92px)] lg:top-auto lg:flex-col-reverse lg:items-end"
+=======
+      className={
+        "fixed z-[60] flex flex-col items-center gap-2 left-1/2 -translate-x-1/2 top-[calc(env(safe-area-inset-top)+10px)] lg:left-auto lg:translate-x-0 lg:right-[calc(env(safe-area-inset-right)+10px)] lg:bottom-[calc(env(safe-area-inset-bottom)+92px)] lg:top-auto lg:flex-col-reverse lg:items-end " +
+        (covering ? HIDE_WHEN_OVERLAPPING_CLASS : SHOW_WHEN_CLEAR_CLASS)
+      }
+>>>>>>> a793af67077ac9a21d787700dec76bb40baeba7e
     >
       <button
         type="button"
