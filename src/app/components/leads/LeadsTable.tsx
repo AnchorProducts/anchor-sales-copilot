@@ -7,8 +7,11 @@ import { Input, Select } from "@/app/components/ui/Field";
 import { Alert } from "@/app/components/ui/Alert";
 import { Table, TableWrapper } from "@/app/components/ui/Table";
 import { fmIntakeStatusLabel } from "@/lib/fmIntake";
+import { LEAD_STATUS_KEYS, leadStatusLabel } from "@/lib/leads/status";
 
-const STATUSES = ["new", "assigned", "contacted", "qualified", "closed_won", "closed_lost"];
+// Consults and intakes share the same two-state vocabulary, so one filter
+// covers both kinds of row in this merged queue.
+const STATUSES = LEAD_STATUS_KEYS;
 
 type LeadRow = {
   id: string;
@@ -37,7 +40,10 @@ type UnifiedRow = {
   kind: "rec" | "intake";
   title: string;
   region: string;
+  /** Display label ("New" / "Assigned"). */
   status: string;
+  /** Raw key, kept alongside the label so the filter can match either kind. */
+  statusKey: string;
   created_at: string;
   assignment: string;
   href: string;
@@ -103,7 +109,8 @@ export default function LeadsTable() {
         kind: "rec",
         title: l.customer_company || "—",
         region: l.region_code || "—",
-        status: l.status,
+        status: leadStatusLabel(l.status),
+        statusKey: l.status,
         created_at: l.created_at,
         assignment: l.assigned_rep_user_id ? "Assigned" : "Unassigned",
         href: `/dashboard/opportunities/${encodeURIComponent(l.id)}`,
@@ -119,6 +126,7 @@ export default function LeadsTable() {
           "—",
         region: r.region_code || "—",
         status: fmIntakeStatusLabel(r.status),
+        statusKey: r.status,
         created_at: r.created_at,
         assignment: r.reviewed_by_name ? `Reviewed by ${r.reviewed_by_name}` : "—",
         href: `/dashboard/project-intake/${encodeURIComponent(r.id)}`,
@@ -143,11 +151,12 @@ export default function LeadsTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, region]);
 
-  // A selected status is a REC-only concept; hide intakes so the filter reads
-  // consistently. The Type filter otherwise controls what's shown.
+  // Consults and intakes now share one vocabulary, so the status filter applies
+  // to both. The leads request is filtered server-side; intakes aren't, so they
+  // are matched here.
   const visibleRows = rows.filter((r) => {
     if (typeFilter !== "all" && r.kind !== typeFilter) return false;
-    if (status && r.kind === "intake") return false;
+    if (status && r.kind === "intake" && r.statusKey !== status) return false;
     return true;
   });
 
@@ -183,7 +192,7 @@ export default function LeadsTable() {
             <option value="">All statuses</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {leadStatusLabel(s)}
               </option>
             ))}
           </Select>

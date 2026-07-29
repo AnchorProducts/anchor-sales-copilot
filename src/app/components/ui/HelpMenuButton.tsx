@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { pageTourForPath, startPageTutorial, startTutorial } from "@/app/components/tutorial/AppTutorial";
+import {
+  useHideWhenOverlapping,
+  HIDE_WHEN_OVERLAPPING_CLASS,
+  SHOW_WHEN_CLEAR_CLASS,
+} from "@/app/components/ui/useHideWhenOverlapping";
 
 // Single floating Help button (bottom-right). Opens a small menu with:
 //   • Page walkthrough — the guided tour for the current page (when one exists)
@@ -23,6 +28,10 @@ export function HelpMenuButton() {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [actualRole, setActualRole] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  // Step out of the way when a page button ends up underneath this pill.
+  // Never while the menu is open — that would yank it out from under the user.
+  const floatRef = useRef<HTMLDivElement | null>(null);
+  const covering = useHideWhenOverlapping(floatRef, { enabled: !open });
 
   useEffect(() => {
     let alive = true;
@@ -76,7 +85,13 @@ export function HelpMenuButton() {
         />
       )}
 
-      <div className="fixed right-4 bottom-24 z-[90] lg:bottom-6">
+      <div
+        ref={floatRef}
+        className={
+          "fixed right-4 bottom-24 z-[90] lg:bottom-6 " +
+          (covering ? HIDE_WHEN_OVERLAPPING_CLASS : SHOW_WHEN_CLEAR_CLASS)
+        }
+      >
         {open && (
           <div
             role="menu"

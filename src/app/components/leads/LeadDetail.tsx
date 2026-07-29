@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Card } from "@/app/components/ui/Card";
-import Button from "@/app/components/ui/Button";
+import AssignmentPanel from "@/app/components/leads/AssignmentPanel";
+import NetSuitePanel from "@/app/components/netsuite/NetSuitePanel";
+import { leadStatusLabel, leadStatusPill } from "@/lib/leads/status";
 
 type Attachment = {
   path: string;
@@ -86,18 +89,20 @@ function formatProjectTimeline(value: string | null): string {
 export default function LeadDetail({ id }: { id: string }) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
+  const router = useRouter();
 
   const [lead, setLead] = useState<LeadRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
-  const [currentUserName, setCurrentUserName] = useState<string>("");
-  const [assignRepExpanded, setAssignRepExpanded] = useState(false);
+  // Only admins may delete; the API enforces this again server-side.
+  const [role, setRole] = useState<string>("");
   const [attachments, setAttachments] = useState<SignedAttachment[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncMode, setSyncMode] = useState<"manual" | "automatic">("manual");
+  // Server-reported: are the NETSUITE_* credentials present? Until they are, the
+  // NetSuite card is greyed out and nothing tries to sync.
+  const [netsuiteConfigured, setNetsuiteConfigured] = useState(false);
   // Tracks the lead id we've already auto-synced so automatic mode fires once.
   const autoSyncedRef = useRef<string | null>(null);
 
@@ -120,19 +125,17 @@ export default function LeadDetail({ id }: { id: string }) {
       const row = json?.lead as LeadRow;
       const urlMap = (json?.attachmentUrls ?? {}) as Record<string, string>;
       setLead(row);
+      setNetsuiteConfigured(json?.netsuiteConfigured === true);
 
-      // The assigned rep is always the current user.
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id || "";
-      setCurrentUserId(uid);
-      setCurrentUserEmail(auth?.user?.email || "");
       if (uid) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("full_name")
+          .select("role")
           .eq("id", uid)
           .maybeSingle();
-        setCurrentUserName(String((prof as any)?.full_name || ""));
+        setRole(String((prof as any)?.role || ""));
 
         // Fetched separately so a missing column (un-migrated DB) can't break
         // the lead load. Defaults to manual on error.
@@ -177,6 +180,8 @@ export default function LeadDetail({ id }: { id: string }) {
   // on its own once it's loaded (and not already synced). Fires once per lead.
   useEffect(() => {
     if (syncMode !== "automatic") return;
+    // Nothing to sync to until NetSuite is connected.
+    if (!netsuiteConfigured) return;
     if (loading || syncing || !lead) return;
     if ((lead.netsuite_sync_status || "pending") === "synced") return;
     if (autoSyncedRef.current === lead.id) return;
@@ -184,32 +189,7 @@ export default function LeadDetail({ id }: { id: string }) {
     setSyncMsg("Auto-syncing to NetSuite…");
     syncNetSuite();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncMode, loading, syncing, lead]);
-
-  // Persist the current form state to the lead. Status stays "new" and the
-  // assigned rep is always the current user. Returns the updated row, or null.
-  async function persist(): Promise<LeadRow | null> {
-    const res = await fetch(`/api/leads/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        status: "new",
-        assigned_rep_user_id: currentUserId || null,
-      }),
-    });
-
-    const text = await res.text();
-    const json = text ? JSON.parse(text) : {};
-
-    if (!res.ok) {
-      setError(json?.error || "Failed to update opportunity.");
-      return null;
-    }
-
-    const updated = (json?.lead || lead) as LeadRow;
-    setLead(updated);
-    return updated;
-  }
+  }, [syncMode, loading, syncing, lead, netsuiteConfigured]);
 
   async function syncNetSuite() {
     setSyncing(true);
@@ -217,13 +197,10 @@ export default function LeadDetail({ id }: { id: string }) {
     setError(null);
 
     try {
-      // Push the latest status + rep assignment first so NetSuite gets current state.
-      const saved = await persist();
-      if (!saved) {
-        setSyncing(false);
-        return;
-      }
-
+      // No pre-write here. Assignment saves itself the moment it's changed in
+      // AssignmentPanel, so the row is already current — and the PATCH that used
+      // to run first hardcoded status:'new', silently un-assigning every consult
+      // it touched on the way to NetSuite.
       const res = await fetch(`/api/leads/${encodeURIComponent(id)}/netsuite-sync`, {
         method: "POST",
       });
@@ -378,74 +355,36 @@ export default function LeadDetail({ id }: { id: string }) {
             )}
           </Card>
 
-          <Card className="relative p-5 sm:p-6">
-            <div className="pointer-events-none select-none opacity-40">
-            <div className="ds-caption mb-4">{t("leadActions")}</div>
-            <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
-              <button
-                type="button"
-                onClick={() => setAssignRepExpanded((v) => !v)}
-                aria-expanded={assignRepExpanded}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-              >
-                <span className="text-sm font-semibold text-black">{t("assignRep")}</span>
-                <span className="shrink-0 text-[11px] text-black/40">{assignRepExpanded ? "▴" : "▾"}</span>
-              </button>
-              {assignRepExpanded && (
-                <div className="px-4 pb-4">
-                  <div className="grid gap-1 text-sm text-[var(--anchor-gray)]">
-                    {currentUserName && (
-                      <div><span className="font-medium text-black">{currentUserName}</span></div>
-                    )}
-                    {currentUserEmail ? <div>{currentUserEmail}</div> : <div>{t("unknown")}</div>}
-                  </div>
-                </div>
-              )}
-            </div>
+          <AssignmentPanel
+            endpoint={`/api/leads/${encodeURIComponent(id)}`}
+            assigneeId={lead.assigned_rep_user_id}
+            noun="consult"
+            canDelete={role === "admin"}
+            onSaved={(next) =>
+              setLead((prev) => (prev ? { ...prev, ...next } : prev))
+            }
+            onDeleted={() => router.push("/dashboard/opportunities")}
+          />
 
-            {error && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            {/* Manual sync button only shows when the rep is in manual mode.
-                In automatic mode their leads sync on their own, so the button
-                disappears. */}
-            {syncMode === "manual" && (
-              <div className="mt-5 grid gap-2">
-                <Button
-                  onClick={syncNetSuite}
-                  disabled={syncing}
-                  className="w-full"
-                >
-                  {syncing ? t("syncing") : t("syncToNetSuite")}
-                </Button>
-              </div>
-            )}
-            {syncMsg && (
-              <div className="mt-3 text-xs text-[var(--anchor-gray)]">{syncMsg}</div>
-            )}
-
-            {/* NetSuite sync status — merged into the actions card */}
-            <div className="mt-6 border-t border-[var(--border-default)] pt-5">
-              <div className="ds-caption mb-3">NetSuite</div>
-              <dl className="grid gap-2 text-xs">
-                <Row label={t("syncMode")} value={syncMode === "automatic" ? t("syncModeAutomatic") : t("syncModeManual")} />
-                <Row label={t("syncStatus")} value={lead.netsuite_sync_status || "pending"} />
-                <Row label="Company" value={lead.netsuite_company_id || "—"} />
-                <Row label="Contact" value={lead.netsuite_contact_id || "—"} />
-              </dl>
-            </div>
-            </div>
-
-            {/* Whole section is not live yet */}
-            <div className="absolute inset-0 flex items-start justify-center pt-16">
-              <span className="rounded-full bg-[var(--surface-strong)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                Coming soon
-              </span>
-            </div>
-          </Card>
+          <NetSuitePanel
+            configured={netsuiteConfigured}
+            syncMode={syncMode}
+            syncStatus={lead.netsuite_sync_status}
+            companyId={lead.netsuite_company_id}
+            contactId={lead.netsuite_contact_id}
+            onSync={syncNetSuite}
+            syncing={syncing}
+            syncMsg={syncMsg}
+            labels={{
+              heading: "NetSuite",
+              syncButton: t("syncToNetSuite"),
+              syncing: t("syncing"),
+              syncMode: t("syncMode"),
+              syncModeManual: t("syncModeManual"),
+              syncModeAutomatic: t("syncModeAutomatic"),
+              syncStatus: t("syncStatus"),
+            }}
+          />
         </div>
       </div>
     </div>
@@ -482,31 +421,10 @@ function Field({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-[var(--anchor-gray)]">{label}</dt>
-      <dd className="min-w-0 truncate text-right font-medium text-[var(--text-primary)]" title={value}>
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  new: "bg-[var(--anchor-mint)] text-[var(--anchor-deep)]",
-  assigned: "bg-amber-100 text-amber-800",
-  contacted: "bg-blue-100 text-blue-800",
-  qualified: "bg-indigo-100 text-indigo-800",
-  closed_won: "bg-[var(--anchor-green)] text-white",
-  closed_lost: "bg-[var(--surface-strong)] text-[var(--anchor-gray)]",
-};
-
 function StatusBadge({ status }: { status: string }) {
-  const cls = STATUS_STYLES[status] ?? "bg-[var(--surface-soft)] text-[var(--anchor-deep)]";
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${cls}`}>
-      {status.replace("_", " ")}
+    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${leadStatusPill(status)}`}>
+      {leadStatusLabel(status)}
     </span>
   );
 }

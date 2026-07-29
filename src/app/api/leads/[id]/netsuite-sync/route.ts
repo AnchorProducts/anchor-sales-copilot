@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { isNetSuiteConfigured, missingNetSuiteEnvVars } from "@/lib/netsuite/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const leadId = clean(id);
     if (!leadId) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    // NetSuite isn't commissioned until its credentials exist. The UI already
+    // hides the button in that state; this is the backstop for anything that
+    // calls the endpoint anyway (automatic sync mode, a stale tab, curl).
+    if (!isNetSuiteConfigured()) {
+      return NextResponse.json(
+        {
+          error: "NetSuite isn't connected yet.",
+          missing: missingNetSuiteEnvVars(),
+        },
+        { status: 503 }
+      );
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

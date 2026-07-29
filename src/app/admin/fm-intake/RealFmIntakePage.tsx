@@ -9,11 +9,8 @@ import Button from "@/app/components/ui/Button";
 import { Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import FMIntakeForm from "@/app/components/fm-intake/FMIntakeForm";
-import {
-  FM_INTAKE_STATUSES,
-  fmIntakeStatusLabel,
-  fmIntakeStatusPill,
-} from "@/lib/fmIntake";
+import NetSuitePanel from "@/app/components/netsuite/NetSuitePanel";
+import { fmIntakeStatusLabel, fmIntakeStatusPill } from "@/lib/fmIntake";
 
 export const dynamic = "force-dynamic";
 
@@ -137,9 +134,17 @@ export default function AdminFMIntakePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailErr, setDetailErr] = useState<string | null>(null);
-  const [statusDraft, setStatusDraft] = useState<string>("new");
+  // Status is derived from the assignee, so this panel picks a person, not a
+  // status. "" means unassigned, which the API turns back into status 'new'.
+  const [assigneeDraft, setAssigneeDraft] = useState<string>("");
+  const [assignees, setAssignees] = useState<{ id: string; name: string; role: string }[]>([]);
   const [notesDraft, setNotesDraft] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Server-reported: are the NETSUITE_* credentials present? Until they are, the
+  // NetSuite card is greyed out under a "Coming soon" badge.
+  const [netsuiteConfigured, setNetsuiteConfigured] = useState(false);
 
   const loadList = useCallback(async () => {
     const res = await fetch("/api/fm-intake", { cache: "no-store" });
@@ -174,6 +179,11 @@ export default function AdminFMIntakePage() {
       }
       await loadList();
       if (!alive) return;
+      // Everyone an intake can be handed to.
+      const aRes = await fetch("/api/internal/assignees", { cache: "no-store" });
+      const aJson = await aRes.json().catch(() => null);
+      if (alive && aRes.ok) setAssignees(aJson?.assignees ?? []);
+      if (!alive) return;
       setReady(true);
     })();
     return () => {
@@ -193,8 +203,10 @@ export default function AdminFMIntakePage() {
     }
     const s = json.submission;
     setDetail(s);
-    setStatusDraft(s.status || "new");
+    setNetsuiteConfigured(json?.netsuiteConfigured === true);
+    setAssigneeDraft(s.assigned_rep_user_id || "");
     setNotesDraft(s.review_notes || "");
+    setConfirmingDelete(false);
   }
 
   async function saveDecision() {
@@ -204,7 +216,10 @@ export default function AdminFMIntakePage() {
       const res = await fetch(`/api/fm-intake/${encodeURIComponent(selectedId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: statusDraft, review_notes: notesDraft }),
+        body: JSON.stringify({
+          assigned_rep_user_id: assigneeDraft || null,
+          review_notes: notesDraft,
+        }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
@@ -215,6 +230,27 @@ export default function AdminFMIntakePage() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteIntake() {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/fm-intake/${encodeURIComponent(selectedId)}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setDetailErr(json?.error || "Failed to delete.");
+        setConfirmingDelete(false);
+        return;
+      }
+      setSelectedId(null);
+      setDetail(null);
+      await loadList();
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -278,12 +314,18 @@ export default function AdminFMIntakePage() {
                 row={selectedRow}
                 detail={detail}
                 detailErr={detailErr}
-                statusDraft={statusDraft}
+                assigneeDraft={assigneeDraft}
+                assignees={assignees}
                 notesDraft={notesDraft}
-                onStatus={setStatusDraft}
+                onAssignee={setAssigneeDraft}
                 onNotes={setNotesDraft}
                 onSave={saveDecision}
                 saving={saving}
+                deleting={deleting}
+                confirmingDelete={confirmingDelete}
+                onConfirmDelete={setConfirmingDelete}
+                onDelete={deleteIntake}
+                netsuiteConfigured={netsuiteConfigured}
                 onBack={() => setSelectedId(null)}
               />
             ) : (
@@ -356,23 +398,35 @@ function Detail({
   row,
   detail,
   detailErr,
-  statusDraft,
+  assigneeDraft,
+  assignees,
   notesDraft,
-  onStatus,
+  onAssignee,
   onNotes,
   onSave,
   saving,
+  deleting,
+  confirmingDelete,
+  onConfirmDelete,
+  onDelete,
+  netsuiteConfigured,
   onBack,
 }: {
   row: IntakeRow | null;
   detail: any | null;
   detailErr: string | null;
-  statusDraft: string;
+  assigneeDraft: string;
+  assignees: { id: string; name: string; role: string }[];
   notesDraft: string;
-  onStatus: (v: string) => void;
+  onAssignee: (v: string) => void;
   onNotes: (v: string) => void;
   onSave: () => void;
   saving: boolean;
+  deleting: boolean;
+  confirmingDelete: boolean;
+  onConfirmDelete: (v: boolean) => void;
+  onDelete: () => void;
+  netsuiteConfigured: boolean;
   onBack: () => void;
 }) {
   const name = row ? [row.first_name, row.last_name].filter(Boolean).join(" ") || "—" : "—";
@@ -483,18 +537,23 @@ function Detail({
                 Review &amp; decide
               </h3>
               <label className="mt-3 block text-sm">
-                <span className="font-medium">Status</span>
+                <span className="font-medium">Assigned to</span>
                 <Select
-                  value={statusDraft}
-                  onChange={(e) => onStatus(e.target.value)}
+                  value={assigneeDraft}
+                  onChange={(e) => onAssignee(e.target.value)}
                   className="mt-1 h-10 w-full text-sm"
                 >
-                  {FM_INTAKE_STATUSES.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
+                  <option value="">Unassigned (New)</option>
+                  {assignees.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.role === "admin" ? " · Admin" : ""}
                     </option>
                   ))}
                 </Select>
+                <span className="mt-1 block text-[11px] text-[var(--anchor-gray)]">
+                  Picking someone marks this Assigned. Clearing it puts it back in New.
+                </span>
               </label>
               <label className="mt-3 block text-sm">
                 <span className="font-medium">Review notes / recommendation</span>
@@ -515,7 +574,71 @@ function Detail({
                   {detail.reviewed_at ? ` · ${fmtDateTime(detail.reviewed_at)}` : ""}
                 </p>
               )}
+
+              <div className="mt-5 border-t border-[var(--border-default)] pt-4">
+                {!confirmingDelete ? (
+                  <>
+                    <p className="mb-2 text-[11px] text-[var(--anchor-gray)]">
+                      Deleting removes this intake and every file uploaded with it. There is no
+                      undo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onConfirmDelete(true)}
+                      className="w-full rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                    >
+                      Delete this intake
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="mb-2 text-sm font-semibold text-red-700">
+                      Permanently delete this intake and its files?
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={onDelete}
+                        disabled={deleting}
+                        className="rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                      >
+                        {deleting ? "Deleting…" : "Yes, delete"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onConfirmDelete(false)}
+                        disabled={deleting}
+                        className="rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm font-semibold text-[var(--anchor-deep)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </Card>
+
+            {/* Read-only: the push isn't wired for intakes yet, and NetSuite
+                isn't connected at all — so no button, and the card sits greyed
+                under "Coming soon" until the credentials land. */}
+            <div className="mt-4">
+              <NetSuitePanel
+                configured={netsuiteConfigured}
+                syncMode="manual"
+                syncStatus={detail.netsuite_sync_status}
+                companyId={detail.netsuite_company_id}
+                contactId={detail.netsuite_contact_id}
+                labels={{
+                  heading: "NetSuite",
+                  syncButton: "Sync to NetSuite",
+                  syncing: "Syncing…",
+                  syncMode: "Sync mode",
+                  syncModeManual: "Manual",
+                  syncModeAutomatic: "Automatic",
+                  syncStatus: "Sync status",
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

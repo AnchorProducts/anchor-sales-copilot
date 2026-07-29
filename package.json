@@ -5,7 +5,11 @@
     "dev": "next dev",
     "build": "next build  --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "docs": "node scripts/build-docs.mjs",
+    "docs:serve": "node scripts/serve-docs.mjs",
+    "docs:docx": "python3 scripts/build_docx.py",
+    "docs:all": "node scripts/build-docs.mjs && python3 scripts/build_docx.py"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",

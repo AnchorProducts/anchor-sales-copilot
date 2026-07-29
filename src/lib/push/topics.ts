@@ -53,9 +53,10 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
     description: "The Friday analytics summary — email + push.",
   },
   {
-    key: "document_revision",
-    label: "Document revision change",
-    description: "A controlled document's revision label is updated (update the QMS master).",
+    key: "document_replaced",
+    label: "Document replaced",
+    description:
+      "A library document is replaced with a new file — same link, new contents. (Renamed from document_revision in 20260729_000003; existing recipients were carried over.)",
   },
   {
     key: "inventory_low_stock",
