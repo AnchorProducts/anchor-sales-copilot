@@ -39,15 +39,29 @@ function repCoversState(rep: SalesRep, normalizedState: string): boolean {
 
 // When reps overlap a state via ZIP sub-territories, narrow to the rep(s) whose
 // zip_prefixes claim the given ZIP. Reps with no zip_prefixes are the state-wide
-// default and are used when the ZIP isn't claimed by a sub-territory rep.
-// With no ZIP (or no sub-territories in play) the list is returned unchanged.
+// default, and own anything a sub-territory doesn't claim.
+//
+// Sub-territories are EXCLUSIVE in both directions: a ZIP inside 770–779 goes to
+// the Houston pair and not to the state-wide reps, and — just as important — a
+// rep is never reached by a ZIP outside their patch, including the case where
+// there is no ZIP at all. Without a ZIP there's nothing to prove the order is
+// theirs, so it falls to whoever covers the state generally. Returning every
+// rep there (the old behaviour) meant a missing ZIP quietly notified both camps.
+//
+// With no sub-territories in play the list is returned unchanged.
 export function narrowRepsByZip(reps: SalesRep[], zip?: string | null): SalesRep[] {
-  const z3 = String(zip || "").replace(/\D/g, "").slice(0, 3);
-  if (!z3) return reps;
   const specifics = reps.filter((r) => (r.zip_prefixes?.length ?? 0) > 0);
   if (specifics.length === 0) return reps;
-  const matching = specifics.filter((r) => r.zip_prefixes.includes(z3));
-  if (matching.length > 0) return matching;
+
+  const z3 = String(zip || "").replace(/\D/g, "").slice(0, 3);
+  if (z3) {
+    const matching = specifics.filter((r) => r.zip_prefixes.includes(z3));
+    if (matching.length > 0) return matching;
+  }
+
+  // No ZIP to judge by, or a ZIP no sub-territory claims. Fall back to every rep
+  // only when the state has no state-wide cover at all, so an order can never
+  // route to nobody.
   const defaults = reps.filter((r) => (r.zip_prefixes?.length ?? 0) === 0);
   return defaults.length > 0 ? defaults : reps;
 }
