@@ -87,6 +87,108 @@ function formatDate(s: string | null) {
   }
 }
 
+function escapeHtml(s: string) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// One printable sheet per order, so the pick list doesn't have to be copied out
+// by hand. Opens a window carrying its own styles and prints itself — the same
+// approach the inventory QR sheet uses, and it needs no server route.
+//
+// The ship-to block is boxed with a cut line under it: fold or cut there and the
+// address goes straight on the carton, so this doubles as the label.
+function printOrder(o: MarketingOrder) {
+  const w = window.open("", "_blank", "width=800,height=1000");
+  if (!w) return; // popup blocked — nothing to clean up
+
+  const shortId = o.id.slice(0, 8);
+  // `items` is the newline-separated text the API composed. Each line becomes a
+  // row with a tick box to check off while packing.
+  const itemRows = (o.items || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => `<div class="item"><span class="box"></span><span>${escapeHtml(l)}</span></div>`)
+    .join("");
+
+  const shipLines = (o.ship_to || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => `<div>${escapeHtml(l)}</div>`)
+    .join("");
+
+  const meta = [
+    ["Needed by", formatDate(o.needed_by)],
+    ["Ordered", o.created_at ? new Date(o.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"],
+    ["Status", marketingOrderStatusLabel(o.status)],
+    ["Type", marketingCategoriesLabel(o.categories)],
+    ...(o.overlay_units ? [["Plastic overlays", String(o.overlay_units)]] : []),
+    ...(o.assigned_to_name ? [["Assigned to", o.assigned_to_name]] : []),
+  ]
+    .map(
+      ([k, v]) =>
+        `<div class="metaRow"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`
+    )
+    .join("");
+
+  const from = [o.submitter_name, o.submitter_company, o.submitter_phone, o.submitter_email]
+    .filter(Boolean)
+    .map((v) => escapeHtml(String(v)))
+    .join(" · ");
+
+  w.document.write(
+    `<!doctype html><html><head><title>Marketing order ${escapeHtml(shortId)}</title>` +
+      `<style>` +
+      `@page{size:letter;margin:0.5in}` +
+      `*{box-sizing:border-box}` +
+      `body{font-family:system-ui,-apple-system,sans-serif;margin:0;color:#0f2e2a;font-size:13px}` +
+      `h1{font-size:22px;margin:0}` +
+      `.sub{color:#76777B;font-size:12px;margin-top:2px}` +
+      `.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #11500F;padding-bottom:8px}` +
+      `.flag{display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;` +
+      `border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;text-transform:uppercase}` +
+      `.ship{border:2px solid #0f2e2a;border-radius:10px;padding:14px 16px;margin-top:14px}` +
+      `.ship .lbl{font-size:10px;font-weight:700;letter-spacing:.14em;color:#76777B;text-transform:uppercase}` +
+      `.ship .addr{font-size:19px;line-height:1.35;font-weight:600;margin-top:6px}` +
+      `.cut{border-top:1px dashed #9aa0a6;margin:12px 0 16px;position:relative}` +
+      `.cut span{position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:#fff;` +
+      `padding:0 8px;font-size:9px;letter-spacing:.1em;color:#9aa0a6;text-transform:uppercase}` +
+      `.sec{font-size:10px;font-weight:700;letter-spacing:.14em;color:#76777B;text-transform:uppercase;margin:0 0 6px}` +
+      `.item{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #eef2f5;` +
+      `font-size:15px;break-inside:avoid}` +
+      `.box{width:14px;height:14px;border:1.5px solid #0f2e2a;border-radius:3px;flex:0 0 auto;margin-top:2px}` +
+      `.metaRow{display:flex;gap:10px;padding:3px 0}` +
+      `.k{color:#76777B;min-width:110px}` +
+      `.v{font-weight:600}` +
+      `.cols{display:flex;gap:28px;margin-top:16px}` +
+      `.col{flex:1;min-width:0}` +
+      `.notes{white-space:pre-line;border:1px solid #eef2f5;border-radius:8px;padding:10px;background:#fafbfa}` +
+      `.foot{margin-top:22px;border-top:1px solid #eef2f5;padding-top:8px;color:#9aa0a6;font-size:10px}` +
+      `</style></head><body>` +
+      `<div class="hdr"><div><h1>Marketing Order</h1>` +
+      `<div class="sub">#${escapeHtml(shortId)}</div></div>` +
+      (o.needs_custom_order ? `<div class="flag">Custom order</div>` : "") +
+      `</div>` +
+      `<div class="ship"><div class="lbl">Ship to</div>` +
+      `<div class="addr">${shipLines || "—"}</div></div>` +
+      `<div class="cut"><span>cut here for the carton</span></div>` +
+      `<div class="cols"><div class="col"><div class="sec">Items — tick as you pack</div>` +
+      (itemRows || `<div class="item"><span class="box"></span><span>—</span></div>`) +
+      `</div><div class="col" style="flex:0 0 265px"><div class="sec">Details</div>${meta}` +
+      (from ? `<div class="sec" style="margin-top:14px">Requested by</div><div>${from}</div>` : "") +
+      `</div></div>` +
+      (o.notes ? `<div style="margin-top:16px"><div class="sec">Notes</div><div class="notes">${escapeHtml(o.notes)}</div></div>` : "") +
+      `<div class="foot">Anchor Co-Pilot · printed ${escapeHtml(new Date().toLocaleString("en-US"))}</div>` +
+      `<script>window.onload=function(){window.print()}</script></body></html>`
+  );
+  w.document.close();
+}
+
 export default function AdminMarketingOrdersPage({
   embedded = false,
 }: { embedded?: boolean } = {}) {
@@ -1034,6 +1136,16 @@ export default function AdminMarketingOrdersPage({
                             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
                           >
                             🧾 {openActivityId === o.id ? "Hide activity" : "Activity log"}
+                          </button>
+                          {/* The pick sheet — ship-to block up top to cut out and
+                              tape to the carton, tick boxes for the items. */}
+                          <button
+                            type="button"
+                            onClick={() => printOrder(o)}
+                            title="Print this request as a pick sheet + ship-to label"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                          >
+                            🖨️ Print request
                           </button>
                         </div>
                         {role === "admin" && (
