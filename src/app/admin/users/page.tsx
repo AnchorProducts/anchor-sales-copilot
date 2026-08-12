@@ -7,6 +7,7 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { PersonEditorModal, type Person } from "@/app/components/admin/PersonEditorModal";
+import DeleteUserModal from "@/app/components/admin/DeleteUserModal";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,8 @@ export default function AdminUsersPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<Person | null>(null);
+  // Which app user is queued for deletion (contacts without a login can't be).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Close the filter menu on outside click / Escape.
   useEffect(() => {
@@ -321,11 +324,11 @@ export default function AdminUsersPage() {
                     const cat = categoryOf(p);
                     const detail = p.contactType ? p.manufacturers.join(", ") || p.company : null;
                     return (
-                      <li key={p.key}>
+                      <li key={p.key} className="flex items-stretch">
                         <button
                           type="button"
                           onClick={() => setEditing(p)}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-soft)] sm:px-6"
+                          className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-soft)] sm:px-6"
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -345,6 +348,22 @@ export default function AdminUsersPage() {
                             <polyline points="9 6 15 12 9 18" />
                           </svg>
                         </button>
+                        {/* Only app users can be deleted — a contact with no
+                            login has no account to remove — and never yourself. */}
+                        {p.profileId && p.profileId !== me && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingId(p.profileId!)}
+                            title={`Delete ${p.fullName || p.email || "this user"}`}
+                            aria-label={`Delete ${p.fullName || p.email || "this user"}`}
+                            className="flex shrink-0 items-center border-l border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--anchor-gray)] transition hover:bg-red-50 hover:text-red-600"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                            </svg>
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -352,6 +371,17 @@ export default function AdminUsersPage() {
               )}
             </Card>
           </>
+        )}
+
+        {deletingId && (
+          <DeleteUserModal
+            userId={deletingId}
+            onClose={() => setDeletingId(null)}
+            onDeleted={() => {
+              setDeletingId(null);
+              void load();
+            }}
+          />
         )}
 
         {editing && (
