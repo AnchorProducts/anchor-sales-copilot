@@ -146,7 +146,7 @@ export default function AddressAutocomplete({
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
-      setLocateErr("This device can't share its location.");
+      setLocateErr("This device can't share its location — type the address instead.");
       return;
     }
     setLocating(true);
@@ -166,20 +166,22 @@ export default function AddressAutocomplete({
             // matched address, and the intake form records lat/long directly.
             choose({ ...first, latitude, longitude });
           } else {
-            setLocateErr("Couldn't find an address at your location — type it in.");
+            setLocateErr("No address found at your location — type it instead.");
           }
         } catch {
-          setLocateErr("Couldn't look up your location — type the address in.");
+          setLocateErr("Couldn't look up your location — type the address instead.");
         } finally {
           setLocating(false);
         }
       },
       (err) => {
         setLocating(false);
+        // Not the rep's mistake and not something the app can fix, so this
+        // reads as a hint with a route out, not a red error.
         setLocateErr(
           err.code === err.PERMISSION_DENIED
-            ? "Location is blocked for this site — allow it in your browser settings, or type the address."
-            : "Couldn't get your location — type the address in."
+            ? "Location is blocked for this site. Allow it from the icon in your browser's address bar — or just type the address."
+            : "Couldn't get your location just now — type the address instead."
         );
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -197,6 +199,9 @@ export default function AddressAutocomplete({
 
   return (
     <div ref={wrapRef} className="relative">
+      {/* Inner wrapper is exactly the input's height, so the trailing button
+          stays vertically centred even when the hint below is showing. */}
+      <div className="relative">
       <Input
         ref={inputRef}
         id={id}
@@ -239,6 +244,7 @@ export default function AddressAutocomplete({
           )}
         </button>
       )}
+      </div>
 
       {open && rowCount > 0 && (
         <ul
@@ -317,7 +323,14 @@ export default function AddressAutocomplete({
         </ul>
       )}
 
-      {locateErr && <p className="mt-1.5 text-[13px] leading-snug text-amber-700">{locateErr}</p>}
+      {locateErr && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-[13px] leading-snug text-[var(--anchor-gray)]">
+          <svg viewBox="0 0 24 24" className="mt-[2px] h-3.5 w-3.5 shrink-0 text-amber-500" fill="currentColor" aria-hidden>
+            <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 5a1.25 1.25 0 110 2.5A1.25 1.25 0 0112 7zm1 10.5h-2v-6h2v6z" />
+          </svg>
+          <span>{locateErr}</span>
+        </p>
+      )}
     </div>
   );
 }
