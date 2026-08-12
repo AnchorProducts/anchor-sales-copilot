@@ -13,8 +13,85 @@ export const INVENTORY_CATEGORIES = MARKETING_CATEGORIES;
 export const isInventoryCategory = isMarketingCategory;
 export const inventoryCategoryLabel = marketingCategoryLabel;
 
+// ────────────────────────────────────────────────────────────────────────────
+// Tradeshow stock
+//
+// The Tradeshow category exists for stock that goes out on loan and comes back —
+// booth kit, displays, banners. The checkout flow IS that round trip, so a
+// tradeshow item is always checkout-eligible; an item filed there with checkout
+// off could be sent out and never booked back in, which is the one thing the
+// category is meant to prevent.
+//
+// Enforced on every write in the API, not merely defaulted in the editor, so the
+// rule holds no matter which path sets the category.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const TRADESHOW_CATEGORY = "tradeshow";
+
+export function isTradeshowCategory(category: string | null | undefined): boolean {
+  return category === TRADESHOW_CATEGORY;
+}
+
+// The checkout flag an item ends up with: forced on for tradeshow stock,
+// otherwise whatever was asked for.
+export function resolveCheckoutEnabled(
+  category: string | null | undefined,
+  requested: boolean
+): boolean {
+  return isTradeshowCategory(category) ? true : requested;
+}
+
 // Which inventory item, if any, is a packaging stock pool.
 export type PackagingRole = "pizza_box" | "overlay";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Overlays
+//
+// A plastic overlay reaches a customer two ways: on its own (the pool item is
+// picked straight from the catalog — how inside sales ships overlays and nothing
+// else), or paired one-for-one with an anchor sample that offers one. Both come
+// off the SAME inventory row, the item tagged packaging_role = 'overlay', so the
+// two paths can't drift into separate counts.
+//
+// One function computes the total, used by the order form to preview it and by
+// the API to record it. Server-side is authoritative: the client's flags are
+// honored only for items that actually offer an overlay.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const OVERLAY_ROLE: PackagingRole = "overlay";
+
+export function isOverlayPool(item: { packaging_role?: string | null } | null | undefined): boolean {
+  return item?.packaging_role === OVERLAY_ROLE;
+}
+
+export type OverlayLine = {
+  quantity: number;
+  // The item being ordered, as far as overlays are concerned.
+  offersOverlay: boolean;
+  isOverlayPool: boolean;
+  // Whether an overlay was asked for alongside this item.
+  wantsOverlay: boolean;
+};
+
+// Overlays an order consumes, split by where they came from. `paired` counts one
+// overlay per unit of an anchor sample ordered with one — matching how the aisle
+// QR already decrements the pool. A request for an overlay on an item that
+// doesn't offer one is ignored rather than trusted.
+export function overlayUnits(lines: OverlayLine[]): {
+  paired: number;
+  standalone: number;
+  total: number;
+} {
+  let paired = 0;
+  let standalone = 0;
+  for (const l of lines) {
+    const qty = Math.max(0, Math.floor(l.quantity) || 0);
+    if (qty <= 0) continue;
+    if (l.isOverlayPool) standalone += qty;
+    else if (l.wantsOverlay && l.offersOverlay) paired += qty;
+  }
+  return { paired, standalone, total: paired + standalone };
+}
 
 export type InventoryItem = {
   id: string;

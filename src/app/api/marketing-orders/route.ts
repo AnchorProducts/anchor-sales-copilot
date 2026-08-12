@@ -23,6 +23,7 @@ import {
   resolveInsideRepsFor,
 } from "@/lib/marketing/territory";
 import { consumeStock, notifyLowStockIfCrossed } from "@/lib/inventory/server";
+import { isOverlayPool, overlayUnits } from "@/lib/inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -376,17 +377,25 @@ export async function POST(req: Request) {
     // the order; tagging it as needing a custom run is a human call made later
     // from the queue.
     const unitsByCategory: Record<string, number> = {};
+    // Overlays the order consumes, from both routes, against the one pool item.
+    // Recorded on the order so fulfillment can pre-fill it rather than re-derive
+    // it from the item text.
+    let overlay_units = 0;
 
     if (body.requested_items !== undefined) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
       const otherRequest = clean(body.other_request);
 
-      const picks: { item_id: string; quantity: number }[] = [];
+      const picks: { item_id: string; quantity: number; plastic_overlay: boolean }[] = [];
       for (const raw of rawPicks) {
         const id = clean((raw as any)?.item_id);
         const q = Math.floor(Number((raw as any)?.quantity));
         if (!id || !Number.isFinite(q) || q <= 0) continue;
-        picks.push({ item_id: id, quantity: q });
+        picks.push({
+          item_id: id,
+          quantity: q,
+          plastic_overlay: (raw as any)?.plastic_overlay === true,
+        });
       }
 
       const lines: string[] = [];
@@ -394,7 +403,7 @@ export async function POST(req: Request) {
       if (picks.length) {
         const { data: invRows, error: invErr } = await supabaseAdmin
           .from("marketing_inventory_items")
-          .select("id,name,category,quantity_available")
+          .select("id,name,category,quantity_available,plastic_overlay,packaging_role")
           .in("id", picks.map((p) => p.item_id));
         if (invErr) {
           return NextResponse.json({ error: invErr.message }, { status: 500 });
@@ -411,15 +420,43 @@ export async function POST(req: Request) {
           // Asking for more than we have on the shelf doesn't reject the order —
           // it's a normal thing to want. Note the shortfall on the line so the
           // team sees at a glance that it can't be filled from stock alone.
+          // An overlay rides along only if this item actually offers one — the
+          // client's flag is a request, not a fact.
+          const paired = p.plastic_overlay && !!row.plastic_overlay;
           const short = p.quantity - row.quantity_available;
           lines.push(
-            short > 0
-              ? `${p.quantity} × ${row.name} (only ${row.quantity_available} in stock)`
-              : `${p.quantity} × ${row.name}`
+            [
+              `${p.quantity} × ${row.name}`,
+              paired ? " + plastic overlay" : "",
+              short > 0 ? ` (only ${row.quantity_available} in stock)` : "",
+            ].join("")
           );
           total += p.quantity;
           const cat = clean(row.category) || "other";
           unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
+        }
+
+        // Overlays off the shared pool: those paired with a sample plus any
+        // ordered on their own. Recomputed here from live item data so the count
+        // recorded on the order is the server's, not the browser's.
+        const overlays = overlayUnits(
+          picks.map((p) => {
+            const row: any = byId.get(p.item_id);
+            return {
+              quantity: p.quantity,
+              offersOverlay: !!row?.plastic_overlay,
+              isOverlayPool: isOverlayPool(row),
+              wantsOverlay: p.plastic_overlay,
+            };
+          })
+        );
+        overlay_units = overlays.total;
+        // Spell the shared total out on the order, since it's the number the
+        // fulfiller pulls and it isn't obvious from the lines alone.
+        if (overlays.paired > 0 && overlays.standalone > 0) {
+          lines.push(
+            `Plastic overlays: ${overlays.total} total (${overlays.paired} with samples, ${overlays.standalone} on their own)`
+          );
         }
       }
 
@@ -481,6 +518,7 @@ export async function POST(req: Request) {
         ship_to,
         notes,
         status: "new",
+        overlay_units,
       })
       .select("id")
       .single();
@@ -648,7 +686,7 @@ export async function GET() {
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
+        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,overlay_units,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);

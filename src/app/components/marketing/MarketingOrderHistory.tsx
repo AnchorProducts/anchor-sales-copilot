@@ -20,6 +20,8 @@ type MarketingOrder = {
   // Inside sales tagged this one as ordered in specially rather than pulled from
   // stock — the reason it takes longer, called out on the card below.
   needs_custom_order: boolean | null;
+  // Overlays on this order — paired with samples and ordered alone, combined.
+  overlay_units: number | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   created_at: string | null;
@@ -229,6 +231,12 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                   <dt className="inline font-semibold text-[var(--anchor-deep)]">Needed by: </dt>
                   <dd className="inline">{formatDate(o.needed_by)}</dd>
                 </div>
+                {(o.overlay_units || 0) > 0 && (
+                  <div>
+                    <dt className="inline font-semibold text-[var(--anchor-deep)]">Plastic overlays: </dt>
+                    <dd className="inline">{o.overlay_units}</dd>
+                  </div>
+                )}
                 <div className="sm:col-span-2">
                   <dt className="inline font-semibold text-[var(--anchor-deep)]">Ship to: </dt>
                   <dd className="inline whitespace-pre-line">{o.ship_to || "—"}</dd>

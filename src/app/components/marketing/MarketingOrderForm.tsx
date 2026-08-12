@@ -9,8 +9,9 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
-import { inventoryCategoryLabel } from "@/lib/inventory";
+import { inventoryCategoryLabel, isOverlayPool, overlayUnits } from "@/lib/inventory";
 import { US_STATES } from "@/lib/sales/states";
+import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 
 type UserProfile = {
   full_name: string | null;
@@ -25,10 +26,16 @@ type InvItem = {
   category: string | null;
   quantity_available: number;
   image_url?: string | null;
+  // Whether this sample can be ordered with a plastic overlay alongside it.
+  plastic_overlay?: boolean;
+  // Set on the one item that IS the overlay stock — orderable on its own.
+  packaging_role?: string | null;
 };
 
 // Order the catalog's category groups in the picker; unknown keys sort last.
-const CATEGORY_ORDER = ["swag", "brochures", "samples", "other"];
+// "tradeshow" is here for completeness only — it isn't orderable, so its items
+// never reach this grid.
+const CATEGORY_ORDER = ["swag", "brochures", "samples", "tradeshow", "other"];
 
 // Quantities aren't capped at stock on hand — asking for more than we have is a
 // legitimate request, which inside sales fills by having more made. This ceiling
@@ -48,6 +55,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const [invError, setInvError] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, number>>({});
+  // Which picked items should ship with a plastic overlay alongside them. One
+  // overlay per unit; both these and the standalone overlay item come off the
+  // same stock count.
+  const [withOverlay, setWithOverlay] = useState<Record<string, boolean>>({});
   const [otherRequest, setOtherRequest] = useState("");
 
   const [neededBy, setNeededBy] = useState("");
@@ -135,6 +146,14 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         }
         return next;
       });
+      setWithOverlay((prev) => {
+        const next = { ...prev };
+        for (const id of Object.keys(next)) {
+          const it = inventory.find((x) => x.id === id);
+          if ((it?.category || "other") === key) delete next[id];
+        }
+        return next;
+      });
     } else {
       setCategories((prev) => [...prev, key]);
     }
@@ -148,6 +167,20 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       else next[id] = clamped;
       return next;
     });
+    // Removing an item takes its overlay with it, so a stale flag can't ride
+    // along on the next order.
+    if (clamped <= 0) {
+      setWithOverlay((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  }
+
+  function toggleOverlay(id: string) {
+    setWithOverlay((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   // Show only items in the collateral types selected above, then apply the
@@ -172,6 +205,29 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const selectedEntries = Object.entries(selected);
   const totalUnits = selectedEntries.reduce((sum, [, q]) => sum + q, 0);
 
+  // The overlay stock item, if one is set up. Its count is what BOTH the paired
+  // overlays and a standalone overlay order draw down.
+  const overlayPool = useMemo(() => inventory.find(isOverlayPool) || null, [inventory]);
+
+  // Overlays this order needs, split by where they came from. Computed with the
+  // same helper the API uses, so the preview can't disagree with what's recorded.
+  const overlays = useMemo(
+    () =>
+      overlayUnits(
+        selectedEntries.map(([id, quantity]) => {
+          const it = inventory.find((x) => x.id === id);
+          return {
+            quantity,
+            offersOverlay: !!it?.plastic_overlay,
+            isOverlayPool: isOverlayPool(it),
+            wantsOverlay: !!withOverlay[id],
+          };
+        })
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, withOverlay, inventory]
+  );
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -194,7 +250,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       `${shipCity.trim()}, ${shipState.trim()} ${shipZip.trim()}`,
     ].join("\n");
 
-    const requested_items = selectedEntries.map(([item_id, quantity]) => ({ item_id, quantity }));
+    const requested_items = selectedEntries.map(([item_id, quantity]) => ({
+      item_id,
+      quantity,
+      plastic_overlay: !!withOverlay[item_id],
+    }));
 
     setSubmitting(true);
     try {
@@ -223,6 +283,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       setSuccess("Order submitted. The marketing team will be in touch.");
       setCategories([]);
       setSelected({});
+      setWithOverlay({});
       setItemSearch("");
       setOtherRequest("");
       setNeededBy("");
@@ -275,7 +336,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
               What do you need? <span className="font-normal text-[var(--anchor-gray)]">(select all that apply)</span>
             </span>
             <div className="grid grid-cols-3 gap-2">
-              {MARKETING_CATEGORIES.filter((cat) => cat.key !== "other").map((cat) => {
+              {MARKETING_CATEGORIES.filter((cat) => cat.orderable).map((cat) => {
                 const selectedCat = categories.includes(cat.key);
                 return (
                   <button
@@ -370,10 +431,32 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                               <div className="text-xs text-[var(--anchor-gray)]">
                                 {out ? "None in stock" : `${avail} in stock`}
                               </div>
+                              {isOverlayPool(it) && (
+                                <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+                                  Overlays on their own. Same stock as the ones added to a sample.
+                                </div>
+                              )}
                               {overStock && (
                                 <div className="text-xs font-medium text-amber-700">
                                   {qty - avail} more than in stock
                                 </div>
+                              )}
+
+                              {/* Pair an overlay with this sample — one per unit,
+                                  off the same count as ordering overlays alone. */}
+                              {picked && it.plastic_overlay && (
+                                <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--surface-soft)] px-2 py-1.5 text-[11px] font-medium text-[var(--anchor-deep)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!withOverlay[it.id]}
+                                    onChange={() => toggleOverlay(it.id)}
+                                    className="h-3.5 w-3.5 shrink-0 accent-[var(--anchor-green)]"
+                                  />
+                                  <span>
+                                    + plastic overlay
+                                    {withOverlay[it.id] && qty > 1 ? ` (${qty})` : ""}
+                                  </span>
+                                </label>
                               )}
 
                               <div className="mt-auto pt-1">
@@ -434,13 +517,33 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                 <ul className="mt-1 grid gap-0.5 text-[var(--anchor-gray)]">
                   {selectedEntries.map(([id, q]) => {
                     const it = inventory.find((x) => x.id === id);
+                    const paired = !!withOverlay[id] && !!it?.plastic_overlay;
                     return (
                       <li key={id}>
                         {q} × {it?.name || "item"}
+                        {paired && <span className="text-[var(--anchor-deep)]"> + overlay</span>}
                       </li>
                     );
                   })}
                 </ul>
+
+                {/* Overlays come off one count however they were added, so show
+                    the single total rather than leaving it to be added up. */}
+                {overlays.total > 0 && (
+                  <div className="mt-2 border-t border-black/10 pt-2 text-xs text-[var(--anchor-gray)]">
+                    <span className="font-semibold text-[var(--anchor-deep)]">
+                      {overlays.total} plastic overlay{overlays.total !== 1 ? "s" : ""}
+                    </span>
+                    {overlays.paired > 0 && overlays.standalone > 0 && (
+                      <> — {overlays.paired} with samples, {overlays.standalone} on their own</>
+                    )}
+                    {overlayPool && overlays.total > overlayPool.quantity_available && (
+                      <span className="mt-0.5 block font-medium text-amber-700">
+                        Only {overlayPool.quantity_available} in stock — the rest have to be ordered in.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -480,16 +583,23 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
             />
           </label>
 
-          <label className="grid gap-1.5 text-sm">
+          <div className="grid gap-1.5 text-sm">
             <span className="font-semibold">Ship-to Address</span>
-            <Input
+            {/* No current-location button: orders ship to a customer, not to
+                wherever the rep happens to be standing. */}
+            <AddressAutocomplete
               value={shipStreet}
-              onChange={(e) => setShipStreet(e.target.value)}
+              onChange={setShipStreet}
+              onSelect={(a) => {
+                setShipStreet(a.line1 || a.formatted);
+                if (a.city) setShipCity(a.city);
+                if (a.state) setShipState(a.state);
+                if (a.postalCode) setShipZip(a.postalCode);
+              }}
               className="h-11 px-3 text-sm"
               placeholder="Street address"
-              autoComplete="street-address"
             />
-          </label>
+          </div>
 
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">City</span>
