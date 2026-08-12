@@ -10,6 +10,7 @@ import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
+import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
 import { trackEvent } from "@/lib/analytics/track";
@@ -400,10 +401,21 @@ export default function CommissionForm() {
             <MultiSelect options={OTHER_ITEMS} sections={OTHER_ITEMS_SECTIONS} value={form.other_items} onChange={(v) => update("other_items", v)} placeholder={t("selectSolutions")} />
           </label>
 
-          <label className="grid gap-1 text-sm">
+          <div className="grid gap-1 text-sm">
             <span className="font-semibold">{t("shipToAddress")}</span>
-            <Input value={form.ship_to_address} onChange={(e) => update("ship_to_address", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("streetAddress")} />
-          </label>
+            <AddressAutocomplete
+              value={form.ship_to_address}
+              onChange={(v) => update("ship_to_address", v)}
+              onSelect={(a) => {
+                update("ship_to_address", a.line1 || a.formatted);
+                if (a.city) update("ship_city", a.city);
+                if (a.state) update("ship_state", a.state);
+                if (a.postalCode) update("ship_zip", a.postalCode);
+              }}
+              className="h-10 px-3 text-sm"
+              placeholder={t("streetAddress")}
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="col-span-2 grid gap-1 text-sm">

@@ -4,15 +4,19 @@ import { useEffect, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import Button from "@/app/components/ui/Button";
+import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 
 // ── Field-config driven rendering ───────────────────────────────────────────
 type FieldDef = {
   key: string;
   label: string;
-  kind?: "text" | "date" | "yesno";
+  kind?: "text" | "date" | "yesno" | "address";
   placeholder?: string;
   full?: boolean;
   required?: boolean;
+  // Address fields only: also write the chosen coordinates into this field, so
+  // picking a suggestion fills the lat/long the form asks for separately.
+  latLongKey?: string;
 };
 
 type Values = Record<string, string>;
@@ -47,6 +51,23 @@ function FieldGrid({
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </Select>
+          ) : f.kind === "address" ? (
+            /* The rep is usually standing at the building, so this one offers
+               current location — and fills the lat/long field from whatever is
+               picked, which is more precise than geocoding the text after. */
+            <AddressAutocomplete
+              value={values[f.key] ?? ""}
+              onChange={(v) => onChange(f.key, v)}
+              onSelect={(a) => {
+                onChange(f.key, a.formatted);
+                if (f.latLongKey && a.latitude !== null && a.longitude !== null) {
+                  onChange(f.latLongKey, `${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}`);
+                }
+              }}
+              showCurrentLocation
+              placeholder={f.placeholder}
+              className="mt-1 h-11 w-full text-sm"
+            />
           ) : (
             <Input
               type={f.kind === "date" ? "date" : "text"}
@@ -437,7 +458,7 @@ export default function FMIntakeForm() {
     { key: "email", label: "Email", required: true },
     { key: "companyName", label: "Company Name" },
     { key: "projectName", label: "Project Name / Building Name or #", full: true },
-    { key: "projectAddress", label: "Project / Building Address", full: true },
+    { key: "projectAddress", label: "Project / Building Address", full: true, kind: "address", latLongKey: "latLong" },
     { key: "latLong", label: "Project Latitude and Longitude", full: true },
     { key: "requestedDeliveryDate", label: "Requested Delivery Date", kind: "date" },
     { key: "engineeringStampNeeded", label: "Engineering Stamp Needed?", kind: "yesno" },

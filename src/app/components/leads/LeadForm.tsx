@@ -11,6 +11,7 @@ import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
 import { US_STATES } from "@/lib/sales/states";
+import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import {
   SOLUTION_CATALOG,
   SOLUTION_CATEGORIES,
@@ -697,15 +698,24 @@ export default function LeadForm() {
             />
           </label>
 
-          <label className="grid gap-1.5 text-sm">
+          <div className="grid gap-1.5 text-sm">
             <span className="font-semibold">Project Site Address *</span>
-            <Input
+            {/* Typeahead fills city/state/ZIP too, and the rep is usually
+                standing on the roof, so current location is offered here. */}
+            <AddressAutocomplete
               value={form.project_address}
-              onChange={(e) => update("project_address", e.target.value)}
+              onChange={(v) => update("project_address", v)}
+              onSelect={(a) => {
+                update("project_address", a.line1 || a.formatted);
+                if (a.city) update("city", a.city);
+                if (a.state) update("state", a.state);
+                if (a.postalCode) update("zip", a.postalCode);
+              }}
+              showCurrentLocation
               className="h-11 px-3 text-sm"
               placeholder={t("jobSiteStreetAddress")}
             />
-          </label>
+          </div>
 
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">{t("city")}</span>

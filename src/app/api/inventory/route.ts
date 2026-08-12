@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { isInventoryCategory } from "@/lib/inventory";
+import { isInventoryCategory, isTradeshowCategory, resolveCheckoutEnabled } from "@/lib/inventory";
 import {
   clean,
   getInventoryProfile,
@@ -133,7 +133,8 @@ export async function POST(req: Request) {
         quantity_available: available,
         quantity_out: 0,
         low_stock_threshold: threshold,
-        checkout_enabled: parseBool(body.checkout_enabled),
+        // Tradeshow stock is loaned and returned, so it's always checkout-eligible.
+        checkout_enabled: resolveCheckoutEnabled(category, parseBool(body.checkout_enabled)),
         pizza_box: parseBool(body.pizza_box),
         plastic_overlay: parseBool(body.plastic_overlay),
         packaging_role: packagingRole ?? null,
@@ -184,7 +185,7 @@ export async function PATCH(req: Request) {
 
     const { data: current, error: curErr } = await supabaseAdmin
       .from("marketing_inventory_items")
-      .select("quantity_available,low_stock_threshold,name,quantity_out")
+      .select("quantity_available,low_stock_threshold,name,quantity_out,category")
       .eq("id", id)
       .maybeSingle();
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
@@ -224,6 +225,13 @@ export async function PATCH(req: Request) {
       updates.quantity_available = available ?? 0;
     }
     if (body?.checkout_enabled !== undefined) updates.checkout_enabled = parseBool(body.checkout_enabled);
+    // Re-apply the tradeshow rule against the category the item will HAVE after
+    // this update, not the one it had before — so moving an item into Tradeshow
+    // turns checkout on even when the request never mentions the flag, and an
+    // item moved out of Tradeshow keeps whatever was explicitly asked for.
+    const effectiveCategory =
+      body?.category !== undefined ? (updates.category as string | null) : ((current as any).category ?? null);
+    if (isTradeshowCategory(effectiveCategory)) updates.checkout_enabled = true;
     if (body?.pizza_box !== undefined) updates.pizza_box = parseBool(body.pizza_box);
     if (body?.plastic_overlay !== undefined) updates.plastic_overlay = parseBool(body.plastic_overlay);
     if (body?.packaging_role !== undefined) {

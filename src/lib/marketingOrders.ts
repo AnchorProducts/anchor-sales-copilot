@@ -9,13 +9,38 @@ export type MarketingCategory = {
   key: string;
   label: string;
   description: string;
+  // Whether a rep can request this type on a marketing order. The inventory tool
+  // shares this list, so a category can exist purely to organize stock without
+  // being something anyone orders — see "tradeshow" below.
+  orderable: boolean;
 };
 
 export const MARKETING_CATEGORIES: MarketingCategory[] = [
-  { key: "samples", label: "Samples", description: "Product samples and demo units." },
-  { key: "brochures", label: "Brochures", description: "Spec sheets, catalogs, and printed collateral." },
-  { key: "swag", label: "Swag", description: "Branded apparel, giveaways, and promotional items." },
-  { key: "other", label: "Other", description: "Anything else — describe it below." },
+  { key: "samples", label: "Samples", description: "Product samples and demo units.", orderable: true },
+  {
+    key: "brochures",
+    label: "Brochures",
+    description: "Spec sheets, catalogs, and printed collateral.",
+    orderable: true,
+  },
+  {
+    key: "swag",
+    label: "Swag",
+    description: "Branded apparel, giveaways, and promotional items.",
+    orderable: true,
+  },
+  {
+    key: "tradeshow",
+    label: "Tradeshow",
+    description: "Booth kit, displays, banners — loaned out for an event and returned.",
+    // Not orderable: this stock is borrowed and comes back, so it moves through
+    // the tradeshow checkout flow rather than a marketing order that ships it
+    // away and decrements it for good.
+    orderable: false,
+  },
+  // Keep "other" last — it's the catch-all, and the order form pairs it with a
+  // free-text box rather than a picker button.
+  { key: "other", label: "Other", description: "Anything else — describe it below.", orderable: false },
 ];
 
 export const MARKETING_CATEGORY_KEYS = MARKETING_CATEGORIES.map((c) => c.key);

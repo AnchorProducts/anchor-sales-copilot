@@ -33,6 +33,9 @@ type MarketingOrder = {
   // the outside rep that this one takes longer.
   needs_custom_order: boolean | null;
   custom_order_tagged_at: string | null;
+  // Plastic overlays this order needs, paired + standalone combined. Both draw
+  // from the one overlay stock item, so this is a single number.
+  overlay_units: number | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   submitter_name: string | null;
@@ -127,7 +130,7 @@ export default function AdminMarketingOrdersPage({
   // Inventory items for the "what stock did this order consume?" picker shown
   // when fulfilling an order, plus the per-order draft rows {item_id, quantity}.
   const [inventory, setInventory] = useState<
-    { id: string; name: string; quantity_available: number }[]
+    { id: string; name: string; quantity_available: number; packaging_role?: string | null }[]
   >([]);
   const [consumeDrafts, setConsumeDrafts] = useState<
     Record<string, Array<{ item_id: string; quantity: string }>>
@@ -206,6 +209,7 @@ export default function AdminMarketingOrdersPage({
             id: it.id,
             name: it.name,
             quantity_available: it.quantity_available,
+            packaging_role: it.packaging_role ?? null,
           }))
         );
       }
@@ -233,6 +237,13 @@ export default function AdminMarketingOrdersPage({
     });
   }
 
+  // The item that IS the overlay stock. Both the overlays paired with a sample
+  // and any ordered on their own come off this one row.
+  const overlayPool = useMemo(
+    () => inventory.find((it) => it.packaging_role === "overlay") || null,
+    [inventory]
+  );
+
   // Stage a phase change: the admin picks a new status, but nothing is saved until
   // they describe what they did. Re-selecting the current status cancels.
   function stageStatus(o: MarketingOrder, status: string) {
@@ -243,6 +254,19 @@ export default function AdminMarketingOrdersPage({
       return;
     }
     setPendingStatus((d) => ({ ...d, [o.id]: status }));
+
+    // Fulfilling an order that carries overlays: pre-fill the overlay line so the
+    // count is confirmed rather than worked out by hand. The order already knows
+    // the total across both routes. A custom order consumes no stock at all, so
+    // it gets nothing.
+    const overlays = o.overlay_units || 0;
+    if (status === "fulfilled" && overlays > 0 && overlayPool && !o.needs_custom_order) {
+      setConsumeDrafts((d) => {
+        const rows = d[o.id] || [];
+        if (rows.some((r) => r.item_id === overlayPool.id)) return d;
+        return { ...d, [o.id]: [...rows, { item_id: overlayPool.id, quantity: String(overlays) }] };
+      });
+    }
   }
 
   function cancelPhaseChange(id: string) {
@@ -572,7 +596,7 @@ export default function AdminMarketingOrdersPage({
                   <Card
                     key={o.id}
                     className={`overflow-hidden p-0 ${
-                      openOrderId === o.id ? "col-span-2 lg:col-span-3 xl:col-span-4" : ""
+                      openOrderId === o.id ? "col-span-full" : ""
                     }`}
                   >
                     {/* Header — click to open/close the full order. Shows
@@ -731,6 +755,13 @@ export default function AdminMarketingOrdersPage({
                               <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
                                 Pick the stock item(s) this order consumed to decrement inventory.
                               </p>
+                              {(o.overlay_units || 0) > 0 && (
+                                <p className="mt-1 text-[11px] font-medium text-[var(--anchor-deep)]">
+                                  {overlayPool
+                                    ? `Overlays pre-filled: ${o.overlay_units} (paired + ordered on their own come off the same stock).`
+                                    : `This order needs ${o.overlay_units} overlay(s), but no item is tagged as the overlay stock — set one in Marketing Inventory.`}
+                                </p>
+                              )}
                               {(consumeDrafts[o.id] || []).map((row, idx) => {
                                 const picked = inventory.find((it) => it.id === row.item_id);
                                 return (
@@ -925,6 +956,14 @@ export default function AdminMarketingOrdersPage({
                           </dt>
                           <dd className="mt-0.5 text-sm text-black">{formatDate(o.needed_by)}</dd>
                         </div>
+                        {(o.overlay_units || 0) > 0 && (
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                              Plastic overlays
+                            </dt>
+                            <dd className="mt-0.5 text-sm text-black">{o.overlay_units}</dd>
+                          </div>
+                        )}
                         <div className="sm:col-span-2">
                           <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
                             Ship to

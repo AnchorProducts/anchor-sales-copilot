@@ -12,6 +12,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   INVENTORY_CATEGORIES,
+  isTradeshowCategory,
   inventoryCategoryLabel,
   formatUnitCost,
   type InventoryItem,
@@ -653,13 +654,22 @@ export default function AdminInventoryPage({
                 <div className="text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
                   Options
                 </div>
+                {/* Tradeshow stock is loaned out and booked back in, so checkout
+                    is on and locked there — the API enforces it either way, and
+                    showing it locked beats silently overriding the tick. */}
                 <label className="mt-2 flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={itemModal.checkout_enabled}
+                    checked={itemModal.checkout_enabled || isTradeshowCategory(itemModal.category)}
+                    disabled={isTradeshowCategory(itemModal.category)}
                     onChange={(e) => setItemModal({ ...itemModal, checkout_enabled: e.target.checked })}
                   />
-                  <span>Can be checked out (tradeshow loan)</span>
+                  <span className={isTradeshowCategory(itemModal.category) ? "text-[var(--anchor-gray)]" : ""}>
+                    Can be checked out (tradeshow loan)
+                    {isTradeshowCategory(itemModal.category) && (
+                      <span className="ml-1 text-xs">— always on for Tradeshow items</span>
+                    )}
+                  </span>
                 </label>
                 <label className="mt-1.5 flex items-center gap-2 text-sm">
                   <input
@@ -927,7 +937,12 @@ function ItemsList({
         return (
           <Card
             key={it.id}
-            className={`overflow-hidden p-0 ${open ? "col-span-2 lg:col-span-3 xl:col-span-4" : ""}`}
+            // An open card takes the full row. `col-span-full` rather than a
+            // per-breakpoint span: the grid is 1 column on phones, and asking for
+            // col-span-2 there makes the browser invent a second, unsized column
+            // — which knocks every tile out of alignment. This spans whatever the
+            // current column count is, so it can't drift when breakpoints change.
+            className={`overflow-hidden p-0 ${open ? "col-span-full" : ""}`}
           >
             {/* Compact tile — click the main area to open details + actions, or
                 the Edit button to jump straight into editing this item. */}
