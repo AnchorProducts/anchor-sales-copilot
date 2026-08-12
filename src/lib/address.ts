@@ -8,8 +8,11 @@
 export type AddressSuggestion = {
   // Stable enough for a React key within one result set.
   id: string;
-  // One-line text shown in the dropdown.
+  // Street line shown as the first line of a suggestion row.
   label: string;
+  // "San Leandro, CA 94577" — the muted second line, the way Maps splits a
+  // result into title and subtitle instead of one long wrapping string.
+  secondary: string;
   // Street line only — "1200 Marina Blvd" — for forms with separate city/state/
   // ZIP inputs. Forms with a single address box use `formatted` instead.
   line1: string;
@@ -48,6 +51,13 @@ function streetLine(r: GeoapifyResult): string {
   return [str(r.housenumber), str(r.street)].filter(Boolean).join(" ");
 }
 
+// Geoapify tacks the country onto every formatted address. It's noise in a
+// US-only app — it wraps the row onto a second line and would be pasted into
+// the single-box address fields verbatim.
+function stripCountry(formatted: string): string {
+  return formatted.replace(/,\s*United States(\s+of\s+America)?\s*$/i, "").trim();
+}
+
 export function normalizeGeoapifyResult(r: GeoapifyResult, index: number): AddressSuggestion {
   const line1 = streetLine(r);
   const city = str(r.city);
@@ -55,13 +65,18 @@ export function normalizeGeoapifyResult(r: GeoapifyResult, index: number): Addre
   // full name, which wouldn't match an <option value>.
   const state = str(r.state_code).toUpperCase();
   const postalCode = str(r.postcode);
+  const secondary = [[city, state].filter(Boolean).join(", "), postalCode]
+    .filter(Boolean)
+    .join(" ");
   const formatted =
-    str(r.formatted) ||
-    [line1, [city, state].filter(Boolean).join(", "), postalCode].filter(Boolean).join(" ");
+    stripCountry(str(r.formatted)) || [line1, secondary].filter(Boolean).join(", ");
 
   return {
     id: str(r.place_id) || `${line1}|${city}|${state}|${postalCode}|${index}`,
-    label: formatted,
+    // Street on top, place underneath. Fall back to the full string when a
+    // result has no street line of its own.
+    label: line1 || formatted,
+    secondary,
     line1,
     city,
     state,
