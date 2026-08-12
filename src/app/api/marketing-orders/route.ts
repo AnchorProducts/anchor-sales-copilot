@@ -7,6 +7,9 @@ import {
   isMarketingOrderStatus,
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
+  typesOverThreshold,
+  CUSTOM_ORDER_REP_NOTICE,
+  MARKETING_LARGE_TYPE_THRESHOLD,
 } from "@/lib/marketingOrders";
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
@@ -127,6 +130,22 @@ function renderStatusEmail(opts: {
 </body></html>`;
 }
 
+// Advisory note on the internal order emails when an order carries more than the
+// per-type threshold of any one collateral type: an order that size is better
+// placed through NetSuite than pulled from marketing stock. A recommendation to
+// the team, not a rule — nothing is blocked, flagged, or auto-tagged. Returns []
+// (no note at all) for the ordinary small order.
+function netsuiteRecommendationLines(largeTypes: { label: string; units: number }[]): string[] {
+  if (largeTypes.length === 0) return [];
+  const detail = largeTypes.map((t) => `${t.units} ${t.label.toLowerCase()}`).join(", ");
+  return [
+    `NOTE: this order includes ${detail} — more than ${MARKETING_LARGE_TYPE_THRESHOLD} of a single type.`,
+    "Recommendation: place it as a new samples order through NetSuite rather than filling it",
+    "from marketing stock.",
+    "",
+  ];
+}
+
 async function getProfile(userId: string) {
   const { data, error } = await supabaseAdmin
     .from("profiles")
@@ -162,6 +181,7 @@ async function sendMarketingOrderEmail(params: {
   submitterCompany: string | null;
   submitterPhone: string | null;
   submitterEmail: string | null;
+  largeTypes: { label: string; units: number }[];
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
@@ -173,6 +193,7 @@ async function sendMarketingOrderEmail(params: {
   const lines: string[] = [];
   lines.push(`New Marketing Order submitted (ID: ${params.orderId.slice(0, 8)})`);
   lines.push("");
+  lines.push(...netsuiteRecommendationLines(params.largeTypes));
   lines.push(`Categories: ${categoryLabel}`);
   lines.push(`Item(s): ${params.items}`);
   lines.push(`Quantity: ${params.quantity || "—"}`);
@@ -231,6 +252,44 @@ async function sendMarketingOrderCreatorEmail(params: {
   lines.push("You can track its status from the Marketing Orders tab in Anchor Co-Pilot.");
 
   const subject = `We got your marketing order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+
+  const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
+// Tell the outside rep who placed the order that it's been tagged a custom
+// order — the heads-up that it takes longer than a stock pull. This is half the
+// reason the tag exists, so it goes out the moment someone ticks the box.
+async function sendCustomOrderTaggedEmail(params: {
+  orderId: string;
+  to: string;
+  taggedByName: string | null;
+  categories: string[];
+  items: string;
+  neededBy: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+  const by = params.taggedByName ? ` by ${params.taggedByName}` : "";
+
+  const lines: string[] = [];
+  lines.push(`Your marketing order (ID: ${params.orderId.slice(0, 8)}) is a custom order.`);
+  lines.push("");
+  lines.push(CUSTOM_ORDER_REP_NOTICE);
+  lines.push("");
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push(`Needed by: ${params.neededBy || "—"}`);
+  lines.push("");
+  lines.push(`Marked a custom order${by}.`);
+  lines.push("Track it from the Marketing Orders tab in Anchor Co-Pilot.");
+
+  const subject = `Your marketing order is a custom order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
 
   const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
@@ -306,11 +365,17 @@ export async function POST(req: Request) {
 
     // Items: new clients send a structured `requested_items` array of inventory
     // picks (plus an optional `other_request` for things not in the catalog). We
-    // validate each pick against live stock and compose the human-readable
-    // `items`/`quantity` strings the admin + rep views already render. Legacy
-    // callers that still send free-text `items`/`quantity` keep working.
+    // compose the human-readable `items`/`quantity` strings the admin + rep views
+    // already render. Legacy callers that still send free-text `items`/`quantity`
+    // keep working.
     let items = "";
     let quantity: string | null = null;
+    // Units per collateral type, for the "this is big enough to order through
+    // NetSuite" note on the notification emails. Counted PER TYPE — a 6-sample,
+    // 6-brochure order isn't a large samples order. Nothing here flags or blocks
+    // the order; tagging it as needing a custom run is a human call made later
+    // from the queue.
+    const unitsByCategory: Record<string, number> = {};
 
     if (body.requested_items !== undefined) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
@@ -329,7 +394,7 @@ export async function POST(req: Request) {
       if (picks.length) {
         const { data: invRows, error: invErr } = await supabaseAdmin
           .from("marketing_inventory_items")
-          .select("id,name,quantity_available")
+          .select("id,name,category,quantity_available")
           .in("id", picks.map((p) => p.item_id));
         if (invErr) {
           return NextResponse.json({ error: invErr.message }, { status: 500 });
@@ -343,20 +408,18 @@ export async function POST(req: Request) {
               { status: 400 }
             );
           }
-          // Enforce the "cap at available stock" rule server-side (the picker
-          // also caps, but stock may have changed since the form loaded).
-          if (p.quantity > row.quantity_available) {
-            return NextResponse.json(
-              {
-                error: `Only ${row.quantity_available} of "${row.name}" ${
-                  row.quantity_available === 1 ? "is" : "are"
-                } in stock.`,
-              },
-              { status: 400 }
-            );
-          }
-          lines.push(`${p.quantity} × ${row.name}`);
+          // Asking for more than we have on the shelf doesn't reject the order —
+          // it's a normal thing to want. Note the shortfall on the line so the
+          // team sees at a glance that it can't be filled from stock alone.
+          const short = p.quantity - row.quantity_available;
+          lines.push(
+            short > 0
+              ? `${p.quantity} × ${row.name} (only ${row.quantity_available} in stock)`
+              : `${p.quantity} × ${row.name}`
+          );
           total += p.quantity;
+          const cat = clean(row.category) || "other";
+          unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
         }
       }
 
@@ -372,10 +435,14 @@ export async function POST(req: Request) {
       items = lines.join("\n");
       quantity = total > 0 ? String(total) : null;
     } else {
-      // Legacy free-text path.
+      // Legacy free-text path — no per-item breakdown to count by type, so the
+      // large-order note never fires for these.
       items = clean(body.items);
       quantity = clean(body.quantity) || null;
     }
+
+    // Types over the per-type threshold, for the email note. Usually empty.
+    const largeTypes = typesOverThreshold(unitsByCategory);
 
     if (categories.length === 0) {
       return NextResponse.json({ error: "Pick at least one category." }, { status: 400 });
@@ -447,6 +514,7 @@ export async function POST(req: Request) {
         submitterCompany: submitter_company,
         submitterPhone: submitter_phone,
         submitterEmail: submitter_email,
+        largeTypes,
       });
       emailNotification.sent = true;
     } catch (emailErr: any) {
@@ -520,6 +588,7 @@ export async function POST(req: Request) {
         const text = [
           `${who} submitted a marketing order (ID: ${orderId.slice(0, 8)}).`,
           "",
+          ...netsuiteRecommendationLines(largeTypes),
           `Submitted by: ${submitter_name || "—"}${submitter_company ? ` (${submitter_company})` : ""}`,
           `Categories: ${categoryLabel}`,
           `Item(s): ${items}`,
@@ -579,7 +648,7 @@ export async function GET() {
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
+        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -749,7 +818,7 @@ export async function PATCH(req: Request) {
     // "from" status in the activity log.
     const { data: current, error: curErr } = await supabaseAdmin
       .from("marketing_orders")
-      .select("status,created_by,assigned_to,categories,items,needed_by")
+      .select("status,created_by,assigned_to,categories,items,needed_by,needs_custom_order")
       .eq("id", id)
       .maybeSingle();
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
@@ -782,6 +851,20 @@ export async function PATCH(req: Request) {
     const hasProjected = body?.projected_ship_date !== undefined;
     const hasDelayNotes = body?.delay_notes !== undefined;
     const hasAssignment = body?.assigned_to !== undefined;
+
+    // The custom-order tag: a human saying these samples are being ordered in
+    // rather than pulled from stock. Deliberately NOT derived from quantity — the
+    // marketing admin or the inside rep working the order decides, and either may
+    // set or clear it (unlike assignment, which is admin-only). Tagging keeps
+    // inventory unchanged on fulfillment and warns the rep it'll take longer.
+    const hasCustomTag = body?.needs_custom_order !== undefined;
+    const needsCustomOrder = hasCustomTag ? body?.needs_custom_order === true : false;
+    const customTagChanged = hasCustomTag && needsCustomOrder !== !!(current as any).needs_custom_order;
+    if (customTagChanged) {
+      updates.needs_custom_order = needsCustomOrder;
+      updates.custom_order_tagged_by = needsCustomOrder ? auth.user.id : null;
+      updates.custom_order_tagged_at = needsCustomOrder ? now : null;
+    }
 
     // Assigning (or clearing) an order's owner is an admin-only action. Validate
     // the target is an internal sales rep before writing it, so an order can't be
@@ -859,7 +942,7 @@ export async function PATCH(req: Request) {
       if (hasDelayNotes) updates.delay_notes = delayNotes;
     }
 
-    if (!hasStatus && !hasProjected && !hasDelayNotes && !hasAssignment) {
+    if (!hasStatus && !hasProjected && !hasDelayNotes && !hasAssignment && !customTagChanged) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -867,7 +950,9 @@ export async function PATCH(req: Request) {
       .from("marketing_orders")
       .update(updates)
       .eq("id", id)
-      .select("id,status,projected_ship_date,delay_notes,updated_at,assigned_to,assigned_at")
+      .select(
+        "id,status,projected_ship_date,delay_notes,updated_at,assigned_to,assigned_at,needs_custom_order,custom_order_tagged_at"
+      )
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -880,8 +965,27 @@ export async function PATCH(req: Request) {
     // "fulfilled". Best-effort per item — a stock issue logs a warning but never
     // un-fulfills the order; the per-item outcomes are returned to the caller.
     const effectiveStatus = hasStatus ? status : fromStatus;
+    // A custom order was ordered in specially, not pulled off the shelf, so
+    // fulfilling it must leave marketing stock untouched. That's the point of the
+    // tag — the UI hides the consumption picker, and this makes it a guarantee
+    // rather than a convention, including for an order tagged in the same PATCH.
+    const isCustomOrder = hasCustomTag
+      ? needsCustomOrder
+      : !!(current as any).needs_custom_order;
     let consumption: Array<{ item_id: string; quantity: number; ok: boolean; reason?: string }> = [];
-    if (effectiveStatus === "fulfilled" && Array.isArray(body?.consumed) && body.consumed.length) {
+    if (isCustomOrder && Array.isArray(body?.consumed) && body.consumed.length) {
+      consumption = (body.consumed as any[]).map((raw) => ({
+        item_id: clean(raw?.item_id),
+        quantity: Math.floor(Number(raw?.quantity)) || 0,
+        ok: false,
+        reason: "custom_order_stock_unchanged",
+      }));
+      console.warn("marketing order: ignored inventory consumption on a custom order", id);
+    } else if (
+      effectiveStatus === "fulfilled" &&
+      Array.isArray(body?.consumed) &&
+      body.consumed.length
+    ) {
       for (const raw of body.consumed as any[]) {
         const itemId = clean(raw?.item_id);
         const qty = Math.floor(Number(raw?.quantity));
@@ -995,6 +1099,69 @@ export async function PATCH(req: Request) {
           delayNotes: finalNotes,
         }),
       });
+    }
+
+    // Tagging an order as needing a custom run is a call someone made, so it goes
+    // in the shared trail under their name — the same way phase moves and
+    // assignments do. Best-effort; never fails the tag itself.
+    if (customTagChanged) {
+      const { data: tagAct } = await supabaseAdmin
+        .from("marketing_order_activity")
+        .insert({
+          order_id: id,
+          admin_id: auth.user.id,
+          from_status: fromStatus,
+          to_status: hasStatus && status ? status : fromStatus,
+          note: needsCustomOrder
+            ? "Tagged this order as a custom order — samples ordered in, marketing stock unchanged."
+            : "Removed the custom-order tag — this one can be filled from stock.",
+        })
+        .select("id,from_status,to_status,note,created_at")
+        .single();
+      if (tagAct && !loggedActivity) {
+        loggedActivity = {
+          ...tagAct,
+          admin_name: clean(profile?.full_name) || null,
+          admin_email: clean(profile?.email) || null,
+        };
+      }
+
+      // Tell the rep who placed it — the "your order will take a bit longer"
+      // heads-up. Only when tagging; untagging is an internal correction and
+      // doesn't warrant a second message. Best-effort throughout.
+      if (needsCustomOrder && (current as any).created_by) {
+        const repId = clean((current as any).created_by);
+
+        void sendPushToUser(repId, {
+          title: "Your order is a custom order",
+          body: CUSTOM_ORDER_REP_NOTICE,
+          url: "/marketing-orders",
+          tag: `mo-custom-${id}`,
+        }).catch((pushErr) => {
+          console.warn("custom order rep push failed", pushErr?.message || pushErr);
+        });
+
+        const { data: repProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("email")
+          .eq("id", repId)
+          .maybeSingle();
+        const repEmail = clean((repProfile as any)?.email);
+        if (repEmail) {
+          try {
+            await sendCustomOrderTaggedEmail({
+              orderId: id,
+              to: repEmail,
+              taggedByName: clean(profile?.full_name) || null,
+              categories: current_categories,
+              items: current_items,
+              neededBy: current_needed_by,
+            });
+          } catch (tagEmailErr: any) {
+            console.warn("custom order rep email failed", tagEmailErr?.message || tagEmailErr);
+          }
+        }
+      }
     }
 
     // Assignment side-effects: log it to the shared activity trail (so the team
