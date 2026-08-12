@@ -55,10 +55,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const [invError, setInvError] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, number>>({});
-  // Which picked items should ship with a plastic overlay alongside them. One
-  // overlay per unit; both these and the standalone overlay item come off the
-  // same stock count.
-  const [withOverlay, setWithOverlay] = useState<Record<string, boolean>>({});
+  // The overlay answer per picked item: "yes", "no", or absent for not-yet-
+  // answered. Absent is deliberately NOT the same as "no" — a rep has to say
+  // either way, so an order without overlays is a decision rather than a
+  // checkbox nobody noticed. One overlay per unit, off the same stock as
+  // ordering overlays on their own.
+  const [withOverlay, setWithOverlay] = useState<Record<string, "yes" | "no">>({});
   const [otherRequest, setOtherRequest] = useState("");
 
   const [neededBy, setNeededBy] = useState("");
@@ -179,8 +181,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     }
   }
 
-  function toggleOverlay(id: string) {
-    setWithOverlay((prev) => ({ ...prev, [id]: !prev[id] }));
+  function setOverlayChoice(id: string, choice: "yes" | "no") {
+    setWithOverlay((prev) => ({ ...prev, [id]: choice }));
   }
 
   // Show only items in the collateral types selected above, then apply the
@@ -209,6 +211,20 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   // overlays and a standalone overlay order draw down.
   const overlayPool = useMemo(() => inventory.find(isOverlayPool) || null, [inventory]);
 
+  // Picked samples that offer an overlay but haven't been answered yet. The
+  // order can't be submitted while any remain.
+  const unansweredOverlays = useMemo(
+    () =>
+      selectedEntries
+        .filter(([id]) => {
+          const it = inventory.find((x) => x.id === id);
+          return !!it?.plastic_overlay && !withOverlay[id];
+        })
+        .map(([id]) => inventory.find((x) => x.id === id)?.name || "an item"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, withOverlay, inventory]
+  );
+
   // Overlays this order needs, split by where they came from. Computed with the
   // same helper the API uses, so the preview can't disagree with what's recorded.
   const overlays = useMemo(
@@ -220,7 +236,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
             quantity,
             offersOverlay: !!it?.plastic_overlay,
             isOverlayPool: isOverlayPool(it),
-            wantsOverlay: !!withOverlay[id],
+            wantsOverlay: withOverlay[id] === "yes",
           };
         })
       ),
@@ -236,6 +252,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     if (categories.length === 0) return setError("Pick at least one category.");
     if (selectedEntries.length === 0 && !otherRequest.trim()) {
       return setError("Add at least one item from the catalog, or describe what you need in the Other box.");
+    }
+    if (unansweredOverlays.length > 0) {
+      return setError(
+        `Choose an overlay option for ${unansweredOverlays.join(", ")}.`
+      );
     }
     if (!neededBy) return setError("A needed-by date is required.");
     if (!shipName.trim()) return setError("A recipient name is required.");
@@ -253,7 +274,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     const requested_items = selectedEntries.map(([item_id, quantity]) => ({
       item_id,
       quantity,
-      plastic_overlay: !!withOverlay[item_id],
+      plastic_overlay: withOverlay[item_id] === "yes",
     }));
 
     setSubmitting(true);
@@ -399,6 +420,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                         // Past what's on the shelf — still orderable, just made
                         // to order rather than pulled.
                         const overStock = qty > avail;
+                        // undefined until the rep answers the overlay question.
+                        const overlayChoice = withOverlay[it.id];
                         return (
                           <div
                             key={it.id}
@@ -442,21 +465,47 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                 </div>
                               )}
 
-                              {/* Pair an overlay with this sample — one per unit,
-                                  off the same count as ordering overlays alone. */}
+                              {/* An overlay pairs one-per-unit with this sample,
+                                  off the same count as ordering overlays alone.
+                                  Both answers are explicit — nothing is
+                                  preselected, so no rep silently gets neither. */}
                               {picked && it.plastic_overlay && (
-                                <label className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--surface-soft)] px-2 py-1.5 text-[11px] font-medium text-[var(--anchor-deep)]">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!withOverlay[it.id]}
-                                    onChange={() => toggleOverlay(it.id)}
-                                    className="h-3.5 w-3.5 shrink-0 accent-[var(--anchor-green)]"
-                                  />
-                                  <span>
-                                    + plastic overlay
-                                    {withOverlay[it.id] && qty > 1 ? ` (${qty})` : ""}
-                                  </span>
-                                </label>
+                                <div
+                                  className={
+                                    "rounded-lg px-2 py-1.5 " +
+                                    (overlayChoice
+                                      ? "bg-[var(--surface-soft)]"
+                                      : "border border-amber-300 bg-amber-50")
+                                  }
+                                >
+                                  <div className="text-[11px] font-medium text-[var(--anchor-deep)]">
+                                    Plastic overlay?
+                                  </div>
+                                  <div className="mt-1 grid grid-cols-2 gap-1">
+                                    {([
+                                      { key: "yes", label: qty > 1 ? `Yes (${qty})` : "Yes" },
+                                      { key: "no", label: "No" },
+                                    ] as const).map((opt) => {
+                                      const on = overlayChoice === opt.key;
+                                      return (
+                                        <button
+                                          key={opt.key}
+                                          type="button"
+                                          onClick={() => setOverlayChoice(it.id, opt.key)}
+                                          aria-pressed={on}
+                                          className={
+                                            "rounded-md px-1.5 py-1 text-[11px] font-semibold transition " +
+                                            (on
+                                              ? "bg-[var(--anchor-green)] text-white"
+                                              : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:border-[var(--anchor-green)]")
+                                          }
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               )}
 
                               <div className="mt-auto pt-1">
@@ -517,7 +566,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                 <ul className="mt-1 grid gap-0.5 text-[var(--anchor-gray)]">
                   {selectedEntries.map(([id, q]) => {
                     const it = inventory.find((x) => x.id === id);
-                    const paired = !!withOverlay[id] && !!it?.plastic_overlay;
+                    const paired = withOverlay[id] === "yes" && !!it?.plastic_overlay;
                     return (
                       <li key={id}>
                         {q} × {it?.name || "item"}
@@ -526,6 +575,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                     );
                   })}
                 </ul>
+
+                {unansweredOverlays.length > 0 && (
+                  <div className="mt-2 border-t border-black/10 pt-2 text-xs font-medium text-amber-700">
+                    Choose an overlay option for {unansweredOverlays.join(", ")}.
+                  </div>
+                )}
 
                 {/* Overlays come off one count however they were added, so show
                     the single total rather than leaving it to be added up. */}
@@ -654,8 +709,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
           {success && <Alert tone="success">{success}</Alert>}
 
           <div className="mt-2 flex justify-end">
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Submitting…" : "Submit order"}
+            <Button type="submit" disabled={submitting || unansweredOverlays.length > 0}>
+              {submitting
+                ? "Submitting…"
+                : unansweredOverlays.length > 0
+                  ? "Answer the overlay question"
+                  : "Submit order"}
             </Button>
           </div>
         </div>
