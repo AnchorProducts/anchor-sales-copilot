@@ -48,6 +48,76 @@ export async function GET() {
   return NextResponse.json({ users: (result.data as unknown[]) || [] });
 }
 
+// What deleting this user would actually do, for the confirmation dialog.
+// Splitting it into erased vs kept is the whole point: an admin should see that
+// the person goes and the commission claims stay before they type the name.
+export async function POST(req: Request) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = clean(body.id);
+  if (clean(body.action) !== "delete-impact" || !id) {
+    return NextResponse.json({ error: "Unknown request." }, { status: 400 });
+  }
+
+  const { data: prof } = await supabaseAdmin
+    .from("profiles")
+    .select("id,full_name,email,role")
+    .eq("id", id)
+    .maybeSingle();
+  if (!prof) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+  // Best-effort counts — a table that doesn't exist yet shouldn't break the
+  // dialog, so each miss just reports 0.
+  // Count with "*", not "id": several of these tables key on a composite
+  // (notification_tool_assignments is (tool_key, user_id)) and have no id
+  // column at all, which makes an id-based count fail silently and under-report
+  // what the delete is about to erase.
+  const count = async (table: string, column: string) => {
+    const { count: n } = await supabaseAdmin
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq(column, id);
+    return n || 0;
+  };
+
+  const [events, pushes, reads, tools, orders, consults, claims, projects, messages, support] =
+    await Promise.all([
+      count("user_events", "user_id"),
+      count("push_subscriptions", "user_id"),
+      count("marketing_order_reads", "user_id"),
+      count("notification_tool_assignments", "user_id"),
+      count("marketing_orders", "created_by"),
+      count("leads", "created_by"),
+      count("commission_claims", "created_by"),
+      count("notable_projects", "created_by"),
+      count("marketing_order_messages", "author_id"),
+      count("support_requests", "created_by"),
+    ]);
+
+  return NextResponse.json({
+    user: prof,
+    isSelf: id === gate.user.id,
+    // Destroyed outright.
+    erased: {
+      "activity events": events,
+      "push devices": pushes,
+      "read receipts": reads,
+      "notification assignments": tools,
+    },
+    // Survive, with the author blanked to "Deleted user".
+    kept: {
+      "marketing orders": orders,
+      consults,
+      "commission claims": claims,
+      "notable projects": projects,
+      "order messages": messages,
+      "support requests": support,
+    },
+  });
+}
+
 export async function PATCH(req: Request) {
   const gate = await requireAdmin();
   if ("error" in gate) return NextResponse.json({ error: gate.error }, { status: gate.status });
@@ -171,12 +241,72 @@ export async function DELETE(req: Request) {
     );
   }
 
-  // Deleting via the auth admin removes the auth.users row; profiles cascades
-  // via its FK to auth.users (id REFERENCES auth.users ON DELETE CASCADE).
+  // Detach the business records FIRST, so no cascade can take them with the
+  // login. Doing it explicitly (rather than trusting ON DELETE SET NULL) means
+  // this is correct even on a database where migration 20260812_000006 hasn't
+  // run yet: there the column is still NOT NULL, the update fails, and we refuse
+  // the delete instead of silently destroying a rep's consults and commission
+  // claims. Nothing here is reached unless every detach succeeds.
+  for (const [table, column] of [
+    ["leads", "created_by"],
+    ["commission_claims", "created_by"],
+    ["notable_projects", "created_by"],
+    ["marketing_order_messages", "author_id"],
+    ["support_requests", "created_by"],
+    ["support_messages", "author_id"],
+    ["sales_regions", "rep_user_id"],
+  ] as const) {
+    const { error } = await supabaseAdmin
+      .from(table)
+      .update({ [column]: null })
+      .eq(column, id);
+    // A missing table is fine (not every deployment has all of them); a NOT NULL
+    // violation is not — that's the un-migrated schema, and continuing would
+    // destroy records.
+    if (error && !/does not exist|schema cache/i.test(error.message)) {
+      return NextResponse.json(
+        {
+          error:
+            `Can't safely delete this user yet: ${table}.${column} still requires a value ` +
+            `(${error.message}). Run migration 20260812_000006_user_deletion_preserves_records.sql, ` +
+            `which lets these records outlive the person.`,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Personal and behavioural data is removed explicitly rather than left to
+  // cascades. Most of these do cascade from auth.users, but naming them here
+  // means "what gets erased" is readable in one place and survives someone
+  // changing a constraint later. Business records (orders, consults, claims,
+  // notable projects, messages) are deliberately NOT touched — migration
+  // 20260812_000006 switched them to ON DELETE SET NULL so they outlive the
+  // person, showing as "Deleted user".
+  const purged: Record<string, number> = {};
+  for (const [table, column] of [
+    ["user_events", "user_id"],
+    ["push_subscriptions", "user_id"],
+    ["marketing_order_reads", "user_id"],
+    ["notification_tool_assignments", "user_id"],
+  ] as const) {
+    const { count } = await supabaseAdmin
+      .from(table)
+      .delete({ count: "exact" })
+      .eq(column, id);
+    purged[table] = count || 0;
+  }
+
+  // The profile row carries the personal details (name, email, phone,
+  // territory). Removed explicitly so it can't be left orphaned if profiles
+  // doesn't cascade from auth.users on this project.
+  await supabaseAdmin.from("profiles").delete().eq("id", id);
+
+  // Finally the login itself.
   const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(id);
   if (authErr) {
     return NextResponse.json({ error: `Delete failed: ${authErr.message}` }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, purged });
 }
