@@ -30,6 +30,11 @@ type InvItem = {
 // Order the catalog's category groups in the picker; unknown keys sort last.
 const CATEGORY_ORDER = ["swag", "brochures", "samples", "other"];
 
+// Quantities aren't capped at stock on hand — asking for more than we have is a
+// legitimate request, which inside sales fills by having more made. This ceiling
+// is only a fat-finger guard.
+const MAX_QTY_PER_ITEM = 100000;
+
 export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () => void } = {}) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
@@ -135,8 +140,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     }
   }
 
-  function setQty(id: string, qty: number, max: number) {
-    const clamped = Math.max(0, Math.min(Math.floor(qty) || 0, max));
+  function setQty(id: string, qty: number) {
+    const clamped = Math.max(0, Math.min(Math.floor(qty) || 0, MAX_QTY_PER_ITEM));
     setSelected((prev) => {
       const next = { ...prev };
       if (clamped <= 0) delete next[id];
@@ -330,6 +335,9 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                         const avail = it.quantity_available;
                         const out = avail <= 0;
                         const picked = qty > 0;
+                        // Past what's on the shelf — still orderable, just made
+                        // to order rather than pulled.
+                        const overStock = qty > avail;
                         return (
                           <div
                             key={it.id}
@@ -360,26 +368,29 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                             <div className="flex flex-1 flex-col gap-1.5 p-2.5">
                               <div className="text-sm font-medium leading-snug text-black line-clamp-2">{it.name}</div>
                               <div className="text-xs text-[var(--anchor-gray)]">
-                                {out ? "Out of stock" : `${avail} in stock`}
+                                {out ? "None in stock" : `${avail} in stock`}
                               </div>
+                              {overStock && (
+                                <div className="text-xs font-medium text-amber-700">
+                                  {qty - avail} more than in stock
+                                </div>
+                              )}
 
                               <div className="mt-auto pt-1">
-                                {out ? (
-                                  <div className="text-xs text-[var(--anchor-gray)]">Unavailable</div>
-                                ) : qty === 0 ? (
+                                {qty === 0 ? (
                                   <button
                                     type="button"
-                                    onClick={() => setQty(it.id, 1, avail)}
+                                    onClick={() => setQty(it.id, 1)}
                                     className="w-full rounded-lg border border-[var(--anchor-green)] py-1.5 text-sm font-semibold text-[var(--anchor-green)] transition hover:bg-[var(--anchor-green)] hover:text-white"
                                   >
-                                    Add
+                                    {out ? "Request" : "Add"}
                                   </button>
                                 ) : (
                                   <div className="flex items-center justify-between gap-1.5">
                                     <button
                                       type="button"
                                       aria-label={`Remove one ${it.name}`}
-                                      onClick={() => setQty(it.id, qty - 1, avail)}
+                                      onClick={() => setQty(it.id, qty - 1)}
                                       className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] text-lg leading-none text-[var(--anchor-deep)]"
                                     >
                                       −
@@ -387,18 +398,17 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                     <input
                                       type="number"
                                       min={0}
-                                      max={avail}
+                                      max={MAX_QTY_PER_ITEM}
                                       inputMode="numeric"
                                       value={qty}
-                                      onChange={(e) => setQty(it.id, Number(e.target.value), avail)}
+                                      onChange={(e) => setQty(it.id, Number(e.target.value))}
                                       className="h-8 w-full min-w-0 rounded-lg border border-[var(--border-default)] text-center text-sm"
                                     />
                                     <button
                                       type="button"
                                       aria-label={`Add one ${it.name}`}
-                                      onClick={() => setQty(it.id, qty + 1, avail)}
-                                      disabled={qty >= avail}
-                                      className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] text-lg leading-none text-[var(--anchor-deep)] disabled:opacity-40"
+                                      onClick={() => setQty(it.id, qty + 1)}
+                                      className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] text-lg leading-none text-[var(--anchor-deep)]"
                                     >
                                       +
                                     </button>

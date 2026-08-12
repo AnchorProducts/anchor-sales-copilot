@@ -70,6 +70,52 @@ export function normalizeMarketingRecipients(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Large orders
+//
+// Past this many units OF A SINGLE TYPE (samples, brochures, swag — counted per
+// type, never summed across them), an order is big enough that pulling it from
+// marketing stock is the wrong move. The order-notification email says so and
+// points at NetSuite; nothing is blocked or flagged automatically. Whether it
+// actually needs a custom run is the marketing admin's or inside rep's call,
+// made by tagging the order in the queue.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const MARKETING_LARGE_TYPE_THRESHOLD = 10;
+
+// The types in an order that are over the threshold, biggest first, as
+// `{ key, label, units }`. Input is units keyed by category. Empty = nothing to
+// recommend, which is the common case.
+export function typesOverThreshold(
+  unitsByCategory: Record<string, number>
+): { key: string; label: string; units: number }[] {
+  return Object.entries(unitsByCategory)
+    .filter(([, units]) => units > MARKETING_LARGE_TYPE_THRESHOLD)
+    .map(([key, units]) => ({ key, label: marketingCategoryLabel(key), units }))
+    .sort((a, b) => b.units - a.units);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Custom orders
+//
+// A marketing admin or inside sales rep tags an order "needs custom order" when
+// it can't be filled from marketing stock — the samples have to be ordered in
+// specially. The tag does two things and nothing else:
+//
+//   1. Inventory stays unchanged. Fulfilling a custom order never decrements
+//      marketing stock, because none of it was used.
+//   2. The outside rep is told, on their tracker and by email, that this one
+//      takes longer than a stock order.
+//
+// There is no separate request to file and no status of its own — the order's
+// own status workflow below carries it.
+// ────────────────────────────────────────────────────────────────────────────
+
+// What the outside rep is told when their order is tagged. One sentence, used by
+// the tracker banner, the email, and the push so the wording never drifts.
+export const CUSTOM_ORDER_REP_NOTICE =
+  "Inside sales is custom-ordering these samples rather than shipping them from stock, so this order takes longer than usual.";
+
+// ────────────────────────────────────────────────────────────────────────────
 // Order status workflow
 //
 // `new → processing → shipped → fulfilled` is the linear progress path the

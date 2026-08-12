@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
-import { marketingCategoriesLabel } from "@/lib/marketingOrders";
+import { marketingCategoriesLabel, CUSTOM_ORDER_REP_NOTICE } from "@/lib/marketingOrders";
 import OrderStatusTracker from "./OrderStatusTracker";
 import OrderDelayBanner from "./OrderDelayBanner";
 import MarketingOrderChat from "./MarketingOrderChat";
@@ -17,6 +17,9 @@ type MarketingOrder = {
   ship_to: string | null;
   notes: string | null;
   status: string | null;
+  // Inside sales tagged this one as ordered in specially rather than pulled from
+  // stock — the reason it takes longer, called out on the card below.
+  needs_custom_order: boolean | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   created_at: string | null;
@@ -125,9 +128,19 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
               className="rounded-2xl border border-[var(--border-default)] bg-white p-4 sm:p-5"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
-                  {marketingCategoriesLabel(o.categories)}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
+                    {marketingCategoriesLabel(o.categories)}
+                  </span>
+                  {o.needs_custom_order && (
+                    <span
+                      className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900"
+                      title="Ordered in specially rather than shipped from stock"
+                    >
+                      ⚑ Custom order
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs text-[var(--anchor-gray)]">
                   Ordered {formatDateTime(o.created_at)}
                 </span>
@@ -186,6 +199,22 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                       </a>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* Why this one is slower. The whole reason the tag exists: the
+                  rep shouldn't have to chase inside sales to find out. */}
+              {o.needs_custom_order && (
+                <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                  <div className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                    ⚑ Custom order
+                  </div>
+                  <p className="mt-1 text-sm leading-relaxed text-amber-900">
+                    {CUSTOM_ORDER_REP_NOTICE}
+                  </p>
+                  <p className="mt-1.5 text-xs text-amber-900/80">
+                    Need it by a certain date? Message the team below.
+                  </p>
                 </div>
               )}
 

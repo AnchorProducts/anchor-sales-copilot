@@ -27,6 +27,12 @@ type MarketingOrder = {
   ship_to: string | null;
   notes: string | null;
   status: string | null;
+  // Tagged by hand — by a marketing admin or the inside rep working it — to say
+  // the samples are being ordered in rather than pulled from stock. Never derived
+  // from quantity. Tagging leaves inventory untouched on fulfillment and warns
+  // the outside rep that this one takes longer.
+  needs_custom_order: boolean | null;
+  custom_order_tagged_at: string | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   submitter_name: string | null;
@@ -96,6 +102,8 @@ export default function AdminMarketingOrdersPage({
   >([]);
   // "Assigned to me" filter — narrows both tabs to the current user's own orders.
   const [mineOnly, setMineOnly] = useState(false);
+  // "Custom orders" filter — the live orders being ordered in specially.
+  const [customOnly, setCustomOnly] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [updateErr, setUpdateErr] = useState<string | null>(null);
@@ -158,14 +166,20 @@ export default function AdminMarketingOrdersPage({
     [items, currentUserId]
   );
 
+  const customCount = useMemo(
+    () => items.filter((o) => o.needs_custom_order && !isArchived(o)).length,
+    [items]
+  );
+
   const filteredItems = useMemo(
     () =>
       items.filter((o) => {
         if (activeTab === "archived" ? !isArchived(o) : isArchived(o)) return false;
         if (mineOnly && o.assigned_to !== currentUserId) return false;
+        if (customOnly && !o.needs_custom_order) return false;
         return true;
       }),
-    [items, activeTab, mineOnly, currentUserId]
+    [items, activeTab, mineOnly, customOnly, currentUserId]
   );
 
   async function loadOrders() {
@@ -356,6 +370,32 @@ export default function AdminMarketingOrdersPage({
     }
   }
 
+  // Tag (or untag) an order as a custom order. Open to admins and inside reps
+  // alike — whoever is working it makes the call. Tagging emails and pushes the
+  // outside rep who placed it, and keeps marketing stock untouched when the
+  // order is fulfilled.
+  async function setCustomOrder(id: string, needsCustomOrder: boolean) {
+    setSavingId(id);
+    setUpdateErr(null);
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, needs_custom_order: needsCustomOrder }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to update the custom-order tag.");
+      } else {
+        await loadOrders();
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to update the custom-order tag.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function deleteOrder(id: string) {
     if (!window.confirm("Delete this order from history? This can’t be undone.")) return;
     setSavingId(id);
@@ -469,12 +509,37 @@ export default function AdminMarketingOrdersPage({
                   );
                 })}
 
+                <div className="ml-auto flex flex-wrap gap-2">
+                {/* Orders being ordered in specially rather than pulled. */}
+                {customCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomOnly((v) => !v)}
+                    aria-pressed={customOnly}
+                    title="Orders tagged as custom orders — samples ordered in, stock unchanged"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      customOnly
+                        ? "bg-amber-600 text-white"
+                        : "bg-amber-100 text-amber-900 hover:bg-amber-200"
+                    }`}
+                  >
+                    ⚑ Custom orders
+                    <span
+                      className={`rounded-full px-1.5 text-[10px] ${
+                        customOnly ? "bg-white/20" : "bg-black/10"
+                      }`}
+                    >
+                      {customCount}
+                    </span>
+                  </button>
+                )}
+
                 {/* Narrow to the orders this user personally owns. */}
                 <button
                   type="button"
                   onClick={() => setMineOnly((v) => !v)}
                   aria-pressed={mineOnly}
-                  className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     mineOnly
                       ? "bg-[var(--anchor-green)] text-white"
                       : "bg-[var(--surface-soft)] text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/60"
@@ -489,6 +554,7 @@ export default function AdminMarketingOrdersPage({
                     {mineCount}
                   </span>
                 </button>
+                </div>
               </div>
             )}
 
@@ -527,6 +593,14 @@ export default function AdminMarketingOrdersPage({
                         >
                           {marketingOrderStatusLabel(o.status)}
                         </span>
+                        {o.needs_custom_order && (
+                          <span
+                            className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900"
+                            title="Custom order — samples ordered in, marketing stock unchanged"
+                          >
+                            ⚑ Custom order
+                          </span>
+                        )}
                         {unread[o.id] > 0 && openChatId !== o.id && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
                             💬 {unread[o.id]} new
@@ -637,9 +711,19 @@ export default function AdminMarketingOrdersPage({
                             Required. This is logged against your name so the team can see this order is handled.
                           </p>
 
+                          {/* A custom order consumed no marketing stock, so there
+                              is nothing to decrement — say so instead of offering
+                              the picker. The API enforces this too. */}
+                          {pendingStatus[o.id] === "fulfilled" && o.needs_custom_order && (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
+                              <span className="font-semibold">Custom order</span> — these samples were
+                              ordered in, so marketing inventory stays unchanged.
+                            </div>
+                          )}
+
                           {/* Inventory consumption: only when fulfilling. Optional —
                               record which stock this order used so it's decremented. */}
-                          {pendingStatus[o.id] === "fulfilled" && (
+                          {pendingStatus[o.id] === "fulfilled" && !o.needs_custom_order && (
                             <div className="mt-3 rounded-lg border border-[var(--border-default)] bg-white p-2.5">
                               <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
                                 Inventory used (optional)
@@ -791,6 +875,41 @@ export default function AdminMarketingOrdersPage({
                           </button>
                         </div>
                       )}
+
+                      {/* The custom-order call. Whoever is working the order
+                          decides this — nothing about the order decides it for
+                          them. Ticking it emails the rep and locks inventory. */}
+                      <div className="mt-4">
+                        <label
+                          className={
+                            "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition " +
+                            (o.needs_custom_order
+                              ? "border-amber-300 bg-amber-50"
+                              : "border-[var(--border-default)] bg-[var(--surface-soft)]")
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!o.needs_custom_order}
+                            onChange={(e) => setCustomOrder(o.id, e.target.checked)}
+                            disabled={savingId === o.id}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-amber-600"
+                          />
+                          <span className="text-sm">
+                            <span className="font-semibold text-black">Needs custom order</span>
+                            <span className="mt-0.5 block text-xs text-[var(--anchor-gray)]">
+                              Can&apos;t be filled from marketing stock — you&apos;re ordering these
+                              samples in. Marketing inventory stays unchanged, and{" "}
+                              {o.submitter_name || "the rep"} is told this one takes longer.
+                            </span>
+                            {o.needs_custom_order && o.custom_order_tagged_at && (
+                              <span className="mt-1 block text-[11px] font-medium text-amber-800">
+                                Rep notified {formatDateTime(o.custom_order_tagged_at)}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      </div>
 
                       {/* Order details — stacked label/value, scannable on a phone */}
                       <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
