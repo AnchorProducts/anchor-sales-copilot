@@ -18,7 +18,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How do I order marketing materials?",
-    a: "Open “Marketing Orders,” pick one or more categories (Samples, Brochures, Swag, Other), describe the items, set a quantity and needed-by date, and add the ship-to address. Your order is emailed to the right marketing contact for each category.",
+    a: "Open “Marketing Orders,” pick one or more categories (Samples, Printables, Swag, Other, Product of the Month), describe the items, set a quantity and needed-by date, and add the ship-to address. Your order is emailed to the right marketing contact for each category.",
   },
   {
     q: "How do I file a commission claim?",

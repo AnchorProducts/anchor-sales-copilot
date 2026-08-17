@@ -18,8 +18,11 @@ export type MarketingCategory = {
 export const MARKETING_CATEGORIES: MarketingCategory[] = [
   { key: "samples", label: "Samples", description: "Product samples and demo units.", orderable: true },
   {
+    // Key stays "brochures": it's the stored value on every inventory item and
+    // the mapping key for this category's recipient address. Only the label
+    // changed, so nothing has to be re-filed or re-mapped.
     key: "brochures",
-    label: "Brochures",
+    label: "Printables",
     description: "Spec sheets, catalogs, and printed collateral.",
     orderable: true,
   },
@@ -38,9 +41,10 @@ export const MARKETING_CATEGORIES: MarketingCategory[] = [
     // away and decrements it for good.
     orderable: false,
   },
-  // Keep "other" last — it's the catch-all, and the order form pairs it with a
-  // free-text box rather than a picker button.
-  { key: "other", label: "Other", description: "Anything else — describe it below.", orderable: false },
+  // Keep "other" last — it's the catch-all. Orderable so it appears as a chip
+  // alongside the rest; the free-text "Other / not listed" box on the form
+  // complements it for anything that isn't in the catalog at all.
+  { key: "other", label: "Other", description: "Anything else — describe it below.", orderable: true },
 ];
 
 export const MARKETING_CATEGORY_KEYS = MARKETING_CATEGORIES.map((c) => c.key);
@@ -97,7 +101,7 @@ export function normalizeMarketingRecipients(
 // ────────────────────────────────────────────────────────────────────────────
 // Large orders
 //
-// Past this many units OF A SINGLE TYPE (samples, brochures, swag — counted per
+// Past this many units OF A SINGLE TYPE (samples, printables, swag — counted per
 // type, never summed across them), an order is big enough that pulling it from
 // marketing stock is the wrong move. The order-notification email says so and
 // points at NetSuite; nothing is blocked or flagged automatically. Whether it

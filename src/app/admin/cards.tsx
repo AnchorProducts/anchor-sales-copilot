@@ -130,7 +130,7 @@ export const CARDS: AdminCard[] = [
   {
     key: "marketing-center",
     title: "Marketing Admin Center",
-    description: "Marketing orders, inventory, and tradeshow checkouts in one place — samples, brochures, swag, and collateral ordered by reps, plus stock and low-stock alerts.",
+    description: "Marketing orders, inventory, and tradeshow checkouts in one place — samples, printables, swag, and collateral ordered by reps, plus stock and low-stock alerts.",
     badge: "Config",
     href: "/admin/marketing",
     icon: "package",

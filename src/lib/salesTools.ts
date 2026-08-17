@@ -77,7 +77,7 @@ export const SALES_TOOLS: SalesTool[] = [
   {
     key: "marketing-orders",
     label: "Marketing Orders",
-    description: "Order samples, brochures, swag, and other marketing collateral.",
+    description: "Order samples, printables, swag, and other marketing collateral.",
     icon: "package",
     audiences: ["internal", "external"],
   },

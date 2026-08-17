@@ -21,7 +21,7 @@ export default function MarketingOrdersPage() {
     <main className="ds-page">
       <AppNavbar
         title="Marketing Orders"
-        subtitle="Order samples, brochures & swag"
+        subtitle="Order samples, printables & swag"
         menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
@@ -30,7 +30,7 @@ export default function MarketingOrdersPage() {
           <div className="ds-caption">Marketing Orders</div>
           <h1 className="mt-2 text-2xl">Order marketing collateral</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-            Request samples, brochures, swag, and other marketing materials. Each order is routed to
+            Request samples, printables, swag, and other marketing materials. Each order is routed to
             the right marketing contact automatically.
           </p>
         </Card>

@@ -20,7 +20,7 @@ export const NOTIFICATION_TOOLS: NotificationTool[] = [
   {
     key: "marketing_order",
     label: "Marketing order placed",
-    description: "A rep submits a marketing order (samples, brochures, swag, …).",
+    description: "A rep submits a marketing order (samples, printables, swag, …).",
   },
   {
     key: "marketing_order_status",

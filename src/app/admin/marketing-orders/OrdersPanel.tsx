@@ -594,7 +594,7 @@ export default function AdminMarketingOrdersPage({
             <header className="mb-6 sm:mb-8">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Orders</h1>
               <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-                Every samples, brochure, swag, and collateral order submitted by sales reps.
+                Every samples, printables, swag, and collateral order submitted by sales reps.
               </p>
             </header>
 

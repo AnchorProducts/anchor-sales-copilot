@@ -685,7 +685,7 @@ export default function DashboardPage() {
     actions.push({ key: "project",    href: "/dashboard/get-started",        label: "Talk to a Rep or Request a Quote", desc: "New to Anchor or an existing customer — we'll route you to the right form.", icon: "clipboard", badge: "Projects" });
     actions.push({ key: "rooftop",    href: "/rooftop",                      label: t("rooftopAudit"),        desc: "Coming soon — temporarily unavailable.", icon: "shield",   badge: "Soon", comingSoon: true });
     actions.push({ key: "notable",    href: "/dashboard/notable-projects/new", label: t("notableProject"),    desc: "Submit a notable rooftop project for the showcase.", icon: "camera", badge: "Notable" });
-    actions.push({ key: "marketing-orders", href: "/marketing-orders",        label: "Marketing Orders",     desc: "Order samples, brochures, swag, and other marketing collateral.", icon: "package", badge: "Marketing" });
+    actions.push({ key: "marketing-orders", href: "/marketing-orders",        label: "Marketing Orders",     desc: "Order samples, printables, swag, and other marketing collateral.", icon: "package", badge: "Marketing" });
     // Commission is external-only (matches the page + API gate). isExternal is
     // true for external reps and for admins previewing the external experience.
     if (canOpenCommission && isExternal) {
