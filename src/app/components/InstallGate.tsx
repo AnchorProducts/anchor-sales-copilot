@@ -25,15 +25,13 @@ import { GATE_BYPASS_KEY, isGateExemptPath } from "@/lib/installGate";
 
 const GATE_BYPASS_EVENT = "anchor:install-gate:bypass";
 
-// Push is the honest reason installing matters on iOS, but the two deployments
-// notify about different things. Internal staff get the back-office topics an
-// admin has assigned them (see src/lib/push/topics.ts). An external rep only
-// ever gets updates on their own marketing orders — order received, custom-order
-// notice, and staff replies in the order thread — so promising them new leads
-// would be promising something they never receive.
-const NOTIFY_REASON = isInternal
-  ? "it's the only way to get push notifications for new leads, orders, and claims"
-  : "it's the only way to get notified when Anchor replies about your marketing orders";
+// Why installing is worth it, per deployment. Internal staff are here for the
+// back-office pushes an admin has assigned them (see src/lib/push/topics.ts).
+// External reps are simply meant to have the app on their phone, so their
+// version sells the experience and stays off notifications entirely.
+const INSTALL_REASON = isInternal
+  ? "it opens full screen, loads faster, and it's the only way to get push notifications for new leads, orders, and claims"
+  : "it opens full screen, loads faster, and works the way it's meant to on a phone";
 
 // ─── Imperative open (Help menu → "Install on your phone") ─────────────────
 export const INSTALL_GUIDE_EVENT = "anchor:install-guide:open";
@@ -202,7 +200,7 @@ export function InstallGate() {
         </h1>
         <p className="mt-2 text-sm leading-snug text-black/70">
           {APP_NAME} runs as an app on your phone, not a website. Add it to your home screen
-          to sign in — it opens full screen, loads faster, and {NOTIFY_REASON}.
+          to sign in — {INSTALL_REASON}.
         </p>
 
         <div className="mt-7">
@@ -257,13 +255,40 @@ function ShareIcon() {
   );
 }
 
+// Safari's "More" control — a rounded rect holding three dots, the way iOS
+// draws it, so it reads as the button on screen rather than as punctuation.
+function MoreIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="mx-0.5 inline h-4 w-4 -translate-y-px text-[var(--anchor-green)]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-label="More"
+      role="img"
+    >
+      <rect x="2" y="6" width="20" height="12" rx="4" />
+      <circle cx="8" cy="12" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="12" r="1.15" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function IosSteps({ browser }: { browser: "safari" | "other" }) {
   return (
     <>
       <ol className="space-y-4">
         <Step n={1}>
-          Tap the Share button <ShareIcon />{" "}
-          {browser === "safari" ? "at the bottom of Safari" : "in the browser toolbar"}.
+          Tap the <MoreIcon /> button at the bottom of{" "}
+          {browser === "safari" ? "Safari" : "the browser"}, then tap{" "}
+          {/* Keep the label and its glyph on one line — wrapping between them
+              strands the icon and the full stop on a line of their own. */}
+          <span className="whitespace-nowrap">
+            <strong>Share</strong>
+            <ShareIcon />.
+          </span>
         </Step>
         <Step n={2}>
           Scroll down the share sheet and tap <strong>Add to Home Screen</strong>.
@@ -272,7 +297,16 @@ function IosSteps({ browser }: { browser: "safari" | "other" }) {
           Tap <strong>Add</strong>, then open {APP_NAME} from your home screen to sign in.
         </Step>
       </ol>
-      {browser === "other" && (
+      {browser === "safari" ? (
+        // Safari's toolbar differs by iOS version and tab-bar setting: newer
+        // ones tuck Share inside the ••• menu, older ones put the Share icon
+        // straight on the bottom bar. Cover the second case rather than leaving
+        // those users hunting for a button they don't have.
+        <p className="mt-4 rounded-xl bg-[var(--anchor-mint)]/30 px-3 py-2.5 text-xs leading-snug text-black/70">
+          If your Safari shows the Share icon <ShareIcon /> in the bottom bar instead of{" "}
+          <MoreIcon />, tap that and go straight to step 2.
+        </p>
+      ) : (
         <p className="mt-4 rounded-xl bg-[var(--anchor-mint)]/30 px-3 py-2.5 text-xs leading-snug text-black/70">
           Don&rsquo;t see &ldquo;Add to Home Screen&rdquo;? Open this page in <strong>Safari</strong> and
           try again — iPhone only installs apps from Safari.
