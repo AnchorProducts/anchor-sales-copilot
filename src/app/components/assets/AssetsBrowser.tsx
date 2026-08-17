@@ -19,6 +19,11 @@ import {
   isFolderLike,
 } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
+import {
+  PRODUCT_OF_MONTH_KEY,
+  parseProductOfMonth,
+  type ProductOfMonth,
+} from "@/lib/settings/productOfMonth";
 
 type ProductSection = "solution" | "anchor" | "internal_assets";
 
@@ -69,6 +74,26 @@ function productHref(p: ProductRow) {
     return `/internal-assets/docs/${encodeURIComponent(p.id)}`;
   }
   return `/assets/${encodeURIComponent(p.id)}`;
+}
+
+// The Product of the Month pill. Solid green so it reads as a highlight rather
+// than another filter chip — the filter chips only go green when selected.
+const potmPillClass =
+  "inline-flex max-w-full items-center gap-2 rounded-full bg-[var(--anchor-green)] px-4 py-2 text-left text-[12px] font-semibold text-white shadow-sm transition hover:opacity-90";
+
+function PotmPillContent({ label, note }: { label: string; note?: string }) {
+  return (
+    <>
+      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="currentColor" aria-hidden>
+        <path d="M12 2.5l2.9 5.9 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3-1.2-6.5L.1 9.3l6.6-.9z" />
+      </svg>
+      <span className="shrink-0 uppercase tracking-wide text-white/75">Product of the Month</span>
+      <span aria-hidden className="shrink-0 text-white/40">
+        •
+      </span>
+      <span className="truncate">{note ? `${label} — ${note}` : label}</span>
+    </>
+  );
 }
 
 function btnClass(on: boolean) {
@@ -168,6 +193,17 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   const [isAdmin, setIsAdmin] = useState(false);
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
 
+  // Product of the Month: the setting, plus the featured product's own row.
+  // That row is fetched on its own rather than read out of `products` so the
+  // pill survives a section filter or a search that excludes it.
+  const [potm, setPotm] = useState<ProductOfMonth | null>(null);
+  const [potmProduct, setPotmProduct] = useState<ProductRow | null>(null);
+  const [potmOpen, setPotmOpen] = useState(false);
+  const [potmSaving, setPotmSaving] = useState(false);
+  const [potmMsg, setPotmMsg] = useState<string | null>(null);
+  // Editor selection, encoded as "" | "product:<id>" | "group:<label>".
+  const [potmDraft, setPotmDraft] = useState("");
+
   // Admin "New tacklebox" inline form
   const [showNewBox, setShowNewBox] = useState(false);
   const [creatingBox, setCreatingBox] = useState(false);
@@ -197,6 +233,47 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     // so the first click expands.
     setCollapsed((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
   }
+
+  // Load the Product of the Month setting. A missing row, an unreadable value,
+  // or a table that hasn't been migrated yet all just mean "no pill".
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", PRODUCT_OF_MONTH_KEY)
+        .maybeSingle();
+      if (!alive) return;
+      setPotm(parseProductOfMonth((data as { value?: unknown } | null)?.value));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase]);
+
+  // Resolve a featured product to its row. Hidden or deactivated boxes drop the
+  // pill rather than linking people into a tackle box that isn't there.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!potm || potm.kind !== "product") {
+        if (alive) setPotmProduct(null);
+        return;
+      }
+      const { data } = await supabase
+        .from("products")
+        .select("id,name,sku,series,section,internal_kind,active,hidden,solution_group")
+        .eq("id", potm.productId)
+        .maybeSingle();
+      if (!alive) return;
+      const row = (data as ProductRow | null) ?? null;
+      setPotmProduct(row && row.active !== false && !row.hidden ? row : null);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase, potm]);
 
   async function adminOpenComingSoon(item: CatalogSolution) {
     if (!isAdmin || creatingKey) return;
@@ -611,6 +688,83 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     (s) => (s.cards.length > 0 || s.placeholders.length > 0) && norm(s.label) !== "other"
   );
 
+  // What the pill should actually say and do. A product links straight to its
+  // tackle box; a group expands and scrolls to that section. Either resolves to
+  // null — and the pill disappears — when its target is no longer on show.
+  const potmView = useMemo(() => {
+    if (potm?.kind === "group") {
+      const section = solutionSections.find((s) => norm(s.label) === norm(potm.group));
+      if (!section || (section.cards.length === 0 && section.placeholders.length === 0)) return null;
+      return { kind: "group" as const, label: section.label, sectionKey: section.key, note: potm.note };
+    }
+    if (!potmProduct) return null;
+    // Prefer the catalog display name — a card's title can differ from the DB
+    // name (see SPECIAL_PREFIXES_BY_NAME / legacyName in the solution catalog).
+    let label = potmProduct.name;
+    for (const s of solutionSections) {
+      const card = s.cards.find((c) => c.product.id === potmProduct.id);
+      if (card) {
+        label = card.displayName;
+        break;
+      }
+    }
+    return { kind: "product" as const, label, href: productHref(potmProduct), note: potm?.note };
+  }, [potm, potmProduct, solutionSections]);
+
+  function focusSolutionGroup(sectionKey: string) {
+    setCollapsed((prev) => ({ ...prev, [sectionKey]: false }));
+    // Wait for the expand to paint before scrolling, or we land at the old offset.
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`solution-section-${sectionKey}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function openPotmEditor() {
+    // Clear the search first: the pickers below are built from the visible
+    // sections, so a live query would silently offer a partial list.
+    setQ("");
+    setPotmMsg(null);
+    setPotmDraft(
+      potm?.kind === "product"
+        ? `product:${potm.productId}`
+        : potm?.kind === "group"
+        ? `group:${potm.group}`
+        : ""
+    );
+    setPotmOpen(true);
+  }
+
+  async function savePotm() {
+    setPotmSaving(true);
+    setPotmMsg(null);
+    const [kind, ...rest] = potmDraft.split(":");
+    const rawValue = rest.join(":");
+    const setting: ProductOfMonth | null =
+      kind === "product" && rawValue
+        ? { kind: "product", productId: rawValue }
+        : kind === "group" && rawValue
+        ? { kind: "group", group: rawValue }
+        : null;
+
+    try {
+      const res = await fetch("/api/admin/product-of-month", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setting }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Could not save.");
+      setPotm(setting);
+      setPotmOpen(false);
+    } catch (e) {
+      setPotmMsg(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setPotmSaving(false);
+    }
+  }
+
   // When the anchors filter is active we always want to render the
   // category placeholders (so the "U-Anchor 5000 Series — coming soon"
   // category remains visible). Treat the anchors block as "having results"
@@ -764,6 +918,80 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
         </div>
       )}
 
+      {(potmView || isAdmin) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {potmView &&
+            (potmView.kind === "product" ? (
+              <Link href={potmView.href} className={potmPillClass}>
+                <PotmPillContent label={potmView.label} note={potmView.note} />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => focusSolutionGroup(potmView.sectionKey)}
+                className={potmPillClass}
+              >
+                <PotmPillContent label={potmView.label} note={potmView.note} />
+              </button>
+            ))}
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => (potmOpen ? setPotmOpen(false) : openPotmEditor())}
+              className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[12px] font-semibold text-black/60 transition hover:bg-[var(--surface-soft)]"
+            >
+              {potmOpen ? "Close" : potmView ? "Change" : "+ Set product of the month"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {isAdmin && potmOpen && (
+        <div className="mt-3 rounded-[14px] border border-black/10 bg-[var(--surface-soft)] p-4">
+          <div className="text-sm font-semibold text-black">Product of the Month</div>
+          <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
+            Highlights one tackle box, or a whole group, at the top of the library for everyone.
+          </div>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={potmDraft}
+              onChange={(e) => setPotmDraft(e.target.value)}
+              className="h-10 w-full rounded-[10px] border border-black/10 bg-white px-3 text-sm sm:max-w-sm"
+            >
+              <option value="">— None (hide the pill) —</option>
+              <optgroup label="Groups">
+                {visibleSolutionSections.map((s) => (
+                  <option key={`g:${s.key}`} value={`group:${s.label}`}>
+                    {s.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Products">
+                {visibleSolutionSections.flatMap((s) =>
+                  s.cards.map((c) => (
+                    <option key={`p:${c.product.id}`} value={`product:${c.product.id}`}>
+                      {c.displayName} — {s.label}
+                    </option>
+                  ))
+                )}
+              </optgroup>
+            </select>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={savePotm}
+                disabled={potmSaving}
+                className="inline-flex items-center justify-center rounded-[10px] bg-[var(--anchor-green)] px-4 py-2 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              >
+                {potmSaving ? "Saving…" : "Save"}
+              </button>
+              {potmMsg && <span className="text-[12px] text-red-600">{potmMsg}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4">
         {error ? (
           <Alert tone="error">{error}</Alert>
@@ -781,7 +1009,13 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
                 // "Coming soon" badge shows only when the group has no live card.
                 const activeCount = section.cards.length;
                 return (
-                  <section key={section.key} className="grid gap-2">
+                  <section
+                    key={section.key}
+                    id={`solution-section-${section.key}`}
+                    // scroll-margin so the Product of the Month pill doesn't
+                    // land the heading under the sticky page chrome.
+                    className="grid gap-2 scroll-mt-20"
+                  >
                     <button
                       type="button"
                       onClick={() => toggleCategory(section.key)}
