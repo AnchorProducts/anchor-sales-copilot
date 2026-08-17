@@ -1114,7 +1114,7 @@ type GrabRow = {
 };
 
 // The scope selector for the aisle QR codes: one "master" QR for everything,
-// plus one per category (Samples, Swag, Brochures, …). All scopes share the same
+// plus one per category (Samples, Swag, Printables, …). All scopes share the same
 // underlying token, so a single rotate/disable controls every printed code.
 const QR_SCOPES: { key: string; label: string }[] = [
   { key: "", label: "All items" },

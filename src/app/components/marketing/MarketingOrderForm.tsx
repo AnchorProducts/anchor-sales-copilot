@@ -37,7 +37,7 @@ type InvItem = {
 
 // A pseudo-category for the picker only. Selecting it surfaces flagged items
 // from every real category at once; it is never submitted as the order's
-// category, because a flagged brochure still has to route to the brochures
+// category, because a flagged printable still has to route to the Printables
 // contact. See submittedCategories below.
 const POTM_KEY = "__product_of_month__";
 
@@ -183,8 +183,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
 
     // Deselecting a type drops its picked items so the order stays consistent
     // with the collateral types chosen above (which now filter the grid). An
-    // item can be visible through more than one chip — a flagged brochure shows
-    // under both Brochures and Product of the Month — so drop it only once
+    // item can be visible through more than one chip — a flagged printable shows
+    // under both Printables and Product of the Month — so drop it only once
     // nothing still selected would show it.
     const remaining = categories.filter((k) => k !== key);
     const stillVisible = (id: string) => {
@@ -261,8 +261,6 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   // contributes its own category, which is what routes each one to the right
   // marketing contact. Falls back to "other" when someone selects only the
   // Product of the Month chip and just writes a free-text request.
-  const hasPotmItems = useMemo(() => inventory.some((it) => !!it.product_of_month), [inventory]);
-
   const submittedCategories = useMemo(() => {
     const out = new Set(categories.filter((k) => k !== POTM_KEY));
     for (const [id] of selectedEntries) {
@@ -445,16 +443,16 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                 );
               })}
 
-              {/* Only worth showing once something is actually flagged —
-                  otherwise the chip opens onto an empty list. */}
-              {hasPotmItems && (
-                <button
+              {/* Sits beside "Other" on the second row. Always shown, even
+                  with nothing flagged yet — an absent chip reads as a missing
+                  feature, where an empty list reads as "nothing tagged". */}
+              <button
                   type="button"
                   onClick={() => toggleCategory(POTM_KEY)}
                   aria-pressed={categories.includes(POTM_KEY)}
                   title="Marketing materials for the product we're featuring this month."
                   className={
-                    "col-span-3 rounded-[12px] border px-3 py-3 text-sm font-semibold transition " +
+                    "col-span-2 rounded-[12px] border px-3 py-3 text-sm font-semibold transition " +
                     (categories.includes(POTM_KEY)
                       ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
                       : "border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:border-[var(--anchor-green)]")
@@ -462,7 +460,6 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                 >
                   ★ Product of the Month{potmLabel ? ` — ${potmLabel}` : ""}
                 </button>
-              )}
             </div>
           </div>
 
@@ -489,7 +486,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                 </div>
               ) : groupedItems.length === 0 ? (
                 <div className="p-1 text-sm text-[var(--anchor-gray)]">
-                  {itemSearch.trim() ? `No items match “${itemSearch.trim()}”.` : "No items in the selected type(s)."}
+                  {itemSearch.trim()
+                    ? `No items match “${itemSearch.trim()}”.`
+                    : categories.includes(POTM_KEY) && categories.length === 1
+                    ? "Nothing is tagged as Product of the Month yet."
+                    : "No items in the selected type(s)."}
                 </div>
               ) : (
                 groupedItems.map(([catKey, list]) => (
