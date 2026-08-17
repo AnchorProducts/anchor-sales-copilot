@@ -58,6 +58,10 @@ type ItemDraft = {
   checkout_enabled: boolean;
   pizza_box: boolean;
   plastic_overlay: boolean;
+  // Belongs to the current Product of the Month. A flag, not a category, so the
+  // item keeps routing to its own marketing contact — see the order form's
+  // Product of the Month chip.
+  product_of_month: boolean;
   packaging_role: string; // "" | "pizza_box" | "overlay"
 };
 
@@ -73,6 +77,7 @@ const EMPTY_DRAFT: ItemDraft = {
   checkout_enabled: false,
   pizza_box: false,
   plastic_overlay: false,
+  product_of_month: false,
   packaging_role: "",
 };
 
@@ -197,6 +202,7 @@ export default function AdminInventoryPage({
       checkout_enabled: !!it.checkout_enabled,
       pizza_box: !!it.pizza_box,
       plastic_overlay: !!it.plastic_overlay,
+      product_of_month: !!it.product_of_month,
       packaging_role: it.packaging_role || "",
     });
   }
@@ -223,6 +229,7 @@ export default function AdminInventoryPage({
         checkout_enabled: itemModal.checkout_enabled,
         pizza_box: itemModal.pizza_box,
         plastic_overlay: itemModal.plastic_overlay,
+        product_of_month: itemModal.product_of_month,
         packaging_role: itemModal.packaging_role || null,
       };
       const res = await fetch("/api/inventory", {
@@ -687,6 +694,14 @@ export default function AdminInventoryPage({
                   />
                   <span>Offer a plastic overlay at pickup</span>
                 </label>
+                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={itemModal.product_of_month}
+                    onChange={(e) => setItemModal({ ...itemModal, product_of_month: e.target.checked })}
+                  />
+                  <span>Product of the Month — show under that chip on the order form</span>
+                </label>
                 <label className="mt-2 block text-sm">
                   <span className="font-medium">Packaging stock role</span>
                   <Select
@@ -999,6 +1014,11 @@ function ItemsList({
                       Overlay
                     </span>
                   )}
+                  {it.product_of_month && (
+                    <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-semibold text-white">
+                      ★ Product of the Month
+                    </span>
+                  )}
                   {it.packaging_role && (
                     <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
                       {it.packaging_role === "pizza_box" ? "Pizza-box pool" : "Overlay pool"}
@@ -1089,6 +1109,7 @@ type GrabRow = {
   quantity: number;
   pizza_box?: boolean;
   plastic_overlay?: boolean;
+  product_of_month?: boolean;
   created_at: string;
 };
 

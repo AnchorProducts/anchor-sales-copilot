@@ -8,6 +8,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
+import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/productOfMonth";
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
 import { inventoryCategoryLabel, isOverlayPool, overlayUnits } from "@/lib/inventory";
 import { US_STATES } from "@/lib/sales/states";
@@ -30,7 +31,15 @@ type InvItem = {
   plastic_overlay?: boolean;
   // Set on the one item that IS the overlay stock — orderable on its own.
   packaging_role?: string | null;
+  // Belongs to the current Product of the Month.
+  product_of_month?: boolean;
 };
+
+// A pseudo-category for the picker only. Selecting it surfaces flagged items
+// from every real category at once; it is never submitted as the order's
+// category, because a flagged brochure still has to route to the brochures
+// contact. See submittedCategories below.
+const POTM_KEY = "__product_of_month__";
 
 // Order the catalog's category groups in the picker; unknown keys sort last.
 // "tradeshow" is here for completeness only — it isn't orderable, so its items
@@ -48,6 +57,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [submittedByExpanded, setSubmittedByExpanded] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
+  // Display name for the Product of the Month chip; null = generic label.
+  const [potmLabel, setPotmLabel] = useState<string | null>(null);
 
   // Inventory picker state.
   const [inventory, setInventory] = useState<InvItem[]>([]);
@@ -135,30 +146,65 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     };
   }, []);
 
+  // Name the Product of the Month chip after whatever the Resource Library pill
+  // is set to, so there's one place to change it each month. Any failure just
+  // leaves the chip reading "Product of the Month".
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", PRODUCT_OF_MONTH_KEY)
+        .maybeSingle();
+      const setting = parseProductOfMonth((data as { value?: unknown } | null)?.value);
+      if (!alive || !setting) return;
+      if (setting.kind === "group") {
+        setPotmLabel(setting.group);
+        return;
+      }
+      const { data: prod } = await supabase
+        .from("products")
+        .select("name")
+        .eq("id", setting.productId)
+        .maybeSingle();
+      if (alive) setPotmLabel((prod as { name?: string } | null)?.name || null);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supabase]);
+
   function toggleCategory(key: string) {
-    if (categories.includes(key)) {
-      // Deselecting a type drops its picked items so the order stays consistent
-      // with the collateral types chosen above (which now filter the grid).
-      setCategories((prev) => prev.filter((k) => k !== key));
-      setSelected((sel) => {
-        const next = { ...sel };
-        for (const id of Object.keys(next)) {
-          const it = inventory.find((x) => x.id === id);
-          if ((it?.category || "other") === key) delete next[id];
-        }
-        return next;
-      });
-      setWithOverlay((prev) => {
-        const next = { ...prev };
-        for (const id of Object.keys(next)) {
-          const it = inventory.find((x) => x.id === id);
-          if ((it?.category || "other") === key) delete next[id];
-        }
-        return next;
-      });
-    } else {
+    if (!categories.includes(key)) {
       setCategories((prev) => [...prev, key]);
+      return;
     }
+
+    // Deselecting a type drops its picked items so the order stays consistent
+    // with the collateral types chosen above (which now filter the grid). An
+    // item can be visible through more than one chip — a flagged brochure shows
+    // under both Brochures and Product of the Month — so drop it only once
+    // nothing still selected would show it.
+    const remaining = categories.filter((k) => k !== key);
+    const stillVisible = (id: string) => {
+      const it = inventory.find((x) => x.id === id);
+      if (!it) return false;
+      if (remaining.includes(it.category || "other")) return true;
+      return remaining.includes(POTM_KEY) && !!it.product_of_month;
+    };
+
+    setCategories(remaining);
+    setSelected((sel) => {
+      const next = { ...sel };
+      for (const id of Object.keys(next)) if (!stillVisible(id)) delete next[id];
+      return next;
+    });
+    setWithOverlay((prev) => {
+      const next = { ...prev };
+      for (const id of Object.keys(next)) if (!stillVisible(id)) delete next[id];
+      return next;
+    });
   }
 
   function setQty(id: string, qty: number) {
@@ -190,7 +236,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const groupedItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
     const active = new Set(categories);
-    let list = inventory.filter((it) => active.has(it.category || "other"));
+    const wantPotm = active.has(POTM_KEY);
+    let list = inventory.filter(
+      (it) => active.has(it.category || "other") || (wantPotm && !!it.product_of_month)
+    );
     if (q) list = list.filter((it) => it.name.toLowerCase().includes(q));
     const groups: Record<string, InvItem[]> = {};
     for (const it of list) {
@@ -206,6 +255,24 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
 
   const selectedEntries = Object.entries(selected);
   const totalUnits = selectedEntries.reduce((sum, [, q]) => sum + q, 0);
+
+  // What the order is actually filed under. Product of the Month is a picker
+  // filter, not a real category, so it never ships: instead every picked item
+  // contributes its own category, which is what routes each one to the right
+  // marketing contact. Falls back to "other" when someone selects only the
+  // Product of the Month chip and just writes a free-text request.
+  const hasPotmItems = useMemo(() => inventory.some((it) => !!it.product_of_month), [inventory]);
+
+  const submittedCategories = useMemo(() => {
+    const out = new Set(categories.filter((k) => k !== POTM_KEY));
+    for (const [id] of selectedEntries) {
+      const it = inventory.find((x) => x.id === id);
+      if (it) out.add(it.category || "other");
+    }
+    if (out.size === 0) out.add("other");
+    return Array.from(out);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, selected, inventory]);
 
   // The overlay stock item, if one is set up. Its count is what BOTH the paired
   // overlays and a standalone overlay order draw down.
@@ -283,7 +350,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          categories,
+          categories: submittedCategories,
           requested_items,
           other_request: otherRequest.trim(),
           needed_by: neededBy,
@@ -300,7 +367,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         return;
       }
 
-      trackEvent("marketing_order_submitted", { orderId: json?.id ?? null, categories });
+      trackEvent("marketing_order_submitted", { orderId: json?.id ?? null, categories: submittedCategories });
       setSuccess("Order submitted. The marketing team will be in touch.");
       setCategories([]);
       setSelected({});
@@ -377,6 +444,25 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                   </button>
                 );
               })}
+
+              {/* Only worth showing once something is actually flagged —
+                  otherwise the chip opens onto an empty list. */}
+              {hasPotmItems && (
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(POTM_KEY)}
+                  aria-pressed={categories.includes(POTM_KEY)}
+                  title="Marketing materials for the product we're featuring this month."
+                  className={
+                    "col-span-3 rounded-[12px] border px-3 py-3 text-sm font-semibold transition " +
+                    (categories.includes(POTM_KEY)
+                      ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
+                      : "border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:border-[var(--anchor-green)]")
+                  }
+                >
+                  ★ Product of the Month{potmLabel ? ` — ${potmLabel}` : ""}
+                </button>
+              )}
             </div>
           </div>
 
@@ -445,6 +531,16 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                               {picked && (
                                 <span className="absolute right-1.5 top-1.5 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[11px] font-semibold text-white">
                                   {qty}
+                                </span>
+                              )}
+                              {/* Marks this month's items wherever they turn up,
+                                  including under their own category chip. */}
+                              {it.product_of_month && (
+                                <span
+                                  title="Product of the Month"
+                                  className="absolute left-1.5 top-1.5 rounded-full bg-[var(--anchor-green)] px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                                >
+                                  ★
                                 </span>
                               )}
                             </div>
