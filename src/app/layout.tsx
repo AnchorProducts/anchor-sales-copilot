@@ -10,6 +10,7 @@ import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
 import { ProfileCompletionPrompt } from "@/app/components/ProfileCompletionPrompt";
+import { InstallAppPrompt } from "@/app/components/InstallAppPrompt";
 
 export const metadata: Metadata = {
   title: {
@@ -60,6 +61,15 @@ export default function RootLayout({
             } catch(e){}
           })();
         `}} />
+        {/* Chrome fires beforeinstallprompt on load — often before React mounts.
+            Stash it so InstallAppPrompt can offer one-tap install. */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.addEventListener('beforeinstallprompt', function(e){
+            e.preventDefault();
+            window.__anchorInstallEvent = e;
+            window.dispatchEvent(new Event('anchor:installable'));
+          });
+        `}} />
       </head>
       <body>
         <AppSidebar />
@@ -70,6 +80,7 @@ export default function RootLayout({
         <AppTutorial />
         <HelpMenuButton />
         <ProfileCompletionPrompt />
+        <InstallAppPrompt />
         <UserEventTracker />
       </body>
     </html>

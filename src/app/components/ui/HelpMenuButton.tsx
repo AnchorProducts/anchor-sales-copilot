@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { pageTourForPath, startPageTutorial, startTutorial } from "@/app/components/tutorial/AppTutorial";
+import { openInstallGuide, isMobileDevice } from "@/app/components/InstallAppPrompt";
 import {
   useHideWhenOverlapping,
   HIDE_WHEN_OVERLAPPING_CLASS,
@@ -14,11 +15,32 @@ import {
 
 // Single floating Help button (bottom-right). Opens a small menu with:
 //   • Page walkthrough — the guided tour for the current page (when one exists)
+//   • Install on your phone — home-screen install steps (phone browsers only)
 //   • Ask a question   — files a support request
 //   • FAQ              — common questions
 // Replaces the separate walkthrough + support floating buttons.
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 const HIDE_PREFIXES = ["/auth", "/docs"];
+
+// Is this the installed home-screen app rather than a browser tab? iOS Safari
+// answers with its own non-standard flag instead of the display-mode query.
+function isStandalone() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+function subscribeDisplayMode(onChange: () => void) {
+  const mq = window.matchMedia("(display-mode: standalone)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+// The user agent never changes mid-session, so there is nothing to subscribe to.
+function subscribeNothing() {
+  return () => {};
+}
 
 const itemClass =
   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40";
@@ -56,6 +78,13 @@ export function HelpMenuButton() {
     setOpen(false);
   }, [pathname]);
 
+  // Offer the install steps on a phone browser only, and not to someone already
+  // running the installed app. Read via useSyncExternalStore so the server
+  // snapshot is a plain `false` — matching SSR — with no extra render pass.
+  const installed = useSyncExternalStore(subscribeDisplayMode, isStandalone, () => false);
+  const mobile = useSyncExternalStore(subscribeNothing, isMobileDevice, () => false);
+  const showInstall = mobile && !installed;
+
   // Honor View-As: an admin previewing a sales role gets the user-facing
   // support page, not the admin queue.
   const isAdmin = useEffectiveRole(actualRole) === "admin";
@@ -71,6 +100,11 @@ export function HelpMenuButton() {
     if (!tourKey) return;
     if (tourKey === "dashboard") startTutorial();
     else startPageTutorial(tourKey);
+  }
+
+  function showInstallGuide() {
+    setOpen(false);
+    openInstallGuide();
   }
 
   return (
@@ -104,6 +138,17 @@ export function HelpMenuButton() {
                   <path d="M10 8l6 4-6 4z" fill="currentColor" stroke="none" />
                 </svg>
                 Page walkthrough
+              </button>
+            )}
+
+            {showInstall && (
+              <button type="button" role="menuitem" onClick={showInstallGuide} className={itemClass}>
+                <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[var(--anchor-green)]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="6" y="2" width="12" height="20" rx="2.5" />
+                  <path d="M12 8v6" />
+                  <path d="M9.5 11.5L12 14l2.5-2.5" />
+                </svg>
+                Install on your phone
               </button>
             )}
 
