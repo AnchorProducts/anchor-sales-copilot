@@ -112,6 +112,9 @@ export type InventoryItem = {
   // Whether the item is offered with a pizza box / plastic overlay at pickup.
   pizza_box: boolean;
   plastic_overlay: boolean;
+  // Belongs to the current Product of the Month — surfaced by the order form's
+  // chip of that name, on top of the item's own category.
+  product_of_month: boolean;
   // Tags the two items that ARE the packaging stock pools (else null).
   packaging_role: PackagingRole | null;
   created_at: string;

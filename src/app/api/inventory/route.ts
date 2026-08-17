@@ -14,8 +14,27 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ITEM_COLS =
+// Column added by 20260817_000002. Kept separate so a deploy that lands before
+// the migration still serves the catalog instead of 500ing the order form —
+// see the fallback in GET.
+const POTM_COL = "product_of_month";
+
+const ITEM_COLS_BASE =
   "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,checkout_enabled,pizza_box,plastic_overlay,packaging_role,created_at,updated_at";
+
+const ITEM_COLS = `${ITEM_COLS_BASE},${POTM_COL}`;
+
+// True when the failure is just the un-migrated Product of the Month column
+// (42703 = column does not exist), rather than a real problem with the write.
+function isMissingPotmColumn(error: { code?: string; message?: string } | null) {
+  return !!error && (error.code === "42703" || !!error.message?.includes(POTM_COL));
+}
+
+function withoutPotm<T extends Record<string, unknown>>(payload: T) {
+  const next = { ...payload };
+  delete next[POTM_COL];
+  return next;
+}
 
 const PACKAGING_ROLES = ["pizza_box", "overlay"] as const;
 function parsePackagingRole(v: unknown): string | null | undefined {
@@ -61,11 +80,20 @@ export async function GET() {
     const role = clean(profile?.role);
     if (!canViewInventory(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { data, error } = await supabaseAdmin
-      .from("marketing_inventory_items")
-      .select(ITEM_COLS)
-      .order("name", { ascending: true })
-      .limit(1000);
+    const listItems = (cols: string) =>
+      supabaseAdmin
+        .from("marketing_inventory_items")
+        .select(cols)
+        .order("name", { ascending: true })
+        .limit(1000);
+
+    let { data, error } = await listItems(ITEM_COLS);
+    // 42703 = column does not exist. Retry without the newest column so an
+    // un-migrated database degrades to "nothing is flagged" rather than
+    // knocking out the whole catalog.
+    if (error && (error.code === "42703" || error.message?.includes(POTM_COL))) {
+      ({ data, error } = await listItems(ITEM_COLS_BASE));
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const items = await Promise.all(
@@ -121,9 +149,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
     }
 
-    const { data: row, error } = await supabaseAdmin
-      .from("marketing_inventory_items")
-      .insert({
+    const insertPayload: Record<string, unknown> = {
         name,
         description: clean(body.description) || null,
         category,
@@ -137,12 +163,19 @@ export async function POST(req: Request) {
         checkout_enabled: resolveCheckoutEnabled(category, parseBool(body.checkout_enabled)),
         pizza_box: parseBool(body.pizza_box),
         plastic_overlay: parseBool(body.plastic_overlay),
+        product_of_month: parseBool(body.product_of_month),
         packaging_role: packagingRole ?? null,
         created_by: auth.user.id,
         updated_by: auth.user.id,
-      })
-      .select(ITEM_COLS)
-      .single();
+    };
+
+    const insertItem = (payload: Record<string, unknown>, cols: string) =>
+      supabaseAdmin.from("marketing_inventory_items").insert(payload).select(cols).single();
+
+    let { data: row, error } = await insertItem(insertPayload, ITEM_COLS);
+    if (isMissingPotmColumn(error)) {
+      ({ data: row, error } = await insertItem(withoutPotm(insertPayload), ITEM_COLS_BASE));
+    }
 
     if (error || !row) {
       if (isPackagingRoleConflict(error)) {
@@ -158,7 +191,7 @@ export async function POST(req: Request) {
     void notifyLowStockIfCrossed(row as any, null);
 
     return NextResponse.json(
-      { ok: true, item: { ...row, image_url: null } },
+      { ok: true, item: { ...(row as unknown as Record<string, unknown>), image_url: null } },
       { status: 201 }
     );
   } catch (e: any) {
@@ -234,18 +267,20 @@ export async function PATCH(req: Request) {
     if (isTradeshowCategory(effectiveCategory)) updates.checkout_enabled = true;
     if (body?.pizza_box !== undefined) updates.pizza_box = parseBool(body.pizza_box);
     if (body?.plastic_overlay !== undefined) updates.plastic_overlay = parseBool(body.plastic_overlay);
+    if (body?.product_of_month !== undefined) updates.product_of_month = parseBool(body.product_of_month);
     if (body?.packaging_role !== undefined) {
       const role = parsePackagingRole(body.packaging_role);
       if (role === "__invalid__") return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
       updates.packaging_role = role ?? null;
     }
 
-    const { data: row, error } = await supabaseAdmin
-      .from("marketing_inventory_items")
-      .update(updates)
-      .eq("id", id)
-      .select(ITEM_COLS)
-      .single();
+    const updateItem = (payload: Record<string, unknown>, cols: string) =>
+      supabaseAdmin.from("marketing_inventory_items").update(payload).eq("id", id).select(cols).single();
+
+    let { data: row, error } = await updateItem(updates, ITEM_COLS);
+    if (isMissingPotmColumn(error)) {
+      ({ data: row, error } = await updateItem(withoutPotm(updates), ITEM_COLS_BASE));
+    }
     if (error || !row) {
       if (isPackagingRoleConflict(error)) {
         return NextResponse.json(
@@ -258,7 +293,10 @@ export async function PATCH(req: Request) {
 
     void notifyLowStockIfCrossed(row as any, prevAvailable);
 
-    return NextResponse.json({ ok: true, item: { ...row, image_url: await signItemImage((row as any).image_path) } });
+    return NextResponse.json({
+      ok: true,
+      item: { ...(row as unknown as Record<string, unknown>), image_url: await signItemImage((row as any).image_path) },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to update item." }, { status: 500 });
   }
