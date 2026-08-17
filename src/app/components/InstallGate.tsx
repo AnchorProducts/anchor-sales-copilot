@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Button from "@/app/components/ui/Button";
-import { APP_NAME, APP_LOGO } from "@/lib/appMode";
+import { APP_NAME, APP_LOGO, isInternal } from "@/lib/appMode";
 import { GATE_BYPASS_KEY, isGateExemptPath } from "@/lib/installGate";
 
 // Mobile install gate.
@@ -24,6 +24,16 @@ import { GATE_BYPASS_KEY, isGateExemptPath } from "@/lib/installGate";
 // @/lib/installGate — see the note there on why they can't live in this file.
 
 const GATE_BYPASS_EVENT = "anchor:install-gate:bypass";
+
+// Push is the honest reason installing matters on iOS, but the two deployments
+// notify about different things. Internal staff get the back-office topics an
+// admin has assigned them (see src/lib/push/topics.ts). An external rep only
+// ever gets updates on their own marketing orders — order received, custom-order
+// notice, and staff replies in the order thread — so promising them new leads
+// would be promising something they never receive.
+const NOTIFY_REASON = isInternal
+  ? "it's the only way to get push notifications for new leads, orders, and claims"
+  : "it's the only way to get notified when Anchor replies about your marketing orders";
 
 // ─── Imperative open (Help menu → "Install on your phone") ─────────────────
 export const INSTALL_GUIDE_EVENT = "anchor:install-guide:open";
@@ -192,8 +202,7 @@ export function InstallGate() {
         </h1>
         <p className="mt-2 text-sm leading-snug text-black/70">
           {APP_NAME} runs as an app on your phone, not a website. Add it to your home screen
-          to sign in — it opens full screen, works faster, and it&rsquo;s the only way to get
-          push notifications for new leads and orders.
+          to sign in — it opens full screen, loads faster, and {NOTIFY_REASON}.
         </p>
 
         <div className="mt-7">
