@@ -173,6 +173,18 @@ body {
   background-size: 28px 28px, 28px 28px, auto, auto;
 }
 
+/* Pre-paint cover for the mobile install gate. The head script in layout.tsx
+   sets this attribute before first paint when a phone browser is about to be
+   gated, so the page it asked for never flashes; InstallGate then renders over
+   the top at z-index 9999 and clears the attribute if it decides not to. */
+html[data-install-gate] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: var(--surface-page);
+}
+
 body {
   min-height: 100svh;
   min-height: 100dvh;
