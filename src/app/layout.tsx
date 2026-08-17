@@ -10,7 +10,8 @@ import { UserEventTracker } from "@/app/components/UserEventTracker";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
 import { ProfileCompletionPrompt } from "@/app/components/ProfileCompletionPrompt";
-import { InstallAppPrompt } from "@/app/components/InstallAppPrompt";
+import { InstallGate } from "@/app/components/InstallGate";
+import { GATE_EXEMPT_PREFIXES, GATE_BYPASS_KEY, MOBILE_UA_PATTERN } from "@/lib/installGate";
 
 export const metadata: Metadata = {
   title: {
@@ -62,13 +63,35 @@ export default function RootLayout({
           })();
         `}} />
         {/* Chrome fires beforeinstallprompt on load — often before React mounts.
-            Stash it so InstallAppPrompt can offer one-tap install. */}
+            Stash it so InstallGate can offer one-tap install. */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.addEventListener('beforeinstallprompt', function(e){
             e.preventDefault();
             window.__anchorInstallEvent = e;
             window.dispatchEvent(new Event('anchor:installable'));
           });
+        `}} />
+        {/* Flag a phone browser before first paint so the page underneath never
+            flashes behind the install gate. The constants come from InstallGate
+            itself, so the two can't drift apart; InstallGate clears the
+            attribute once it decides not to render. */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){
+            try {
+              var ua = navigator.userAgent;
+              var mobile = /${MOBILE_UA_PATTERN}/i.test(ua) ||
+                (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+              if (!mobile) return;
+              if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+              if (sessionStorage.getItem(${JSON.stringify(GATE_BYPASS_KEY)}) === '1') return;
+              var path = location.pathname;
+              var exempt = ${JSON.stringify(GATE_EXEMPT_PREFIXES)};
+              for (var i = 0; i < exempt.length; i++) {
+                if (path === exempt[i] || path.indexOf(exempt[i] + '/') === 0) return;
+              }
+              document.documentElement.setAttribute('data-install-gate', '1');
+            } catch(e){}
+          })();
         `}} />
       </head>
       <body>
@@ -80,7 +103,7 @@ export default function RootLayout({
         <AppTutorial />
         <HelpMenuButton />
         <ProfileCompletionPrompt />
-        <InstallAppPrompt />
+        <InstallGate />
         <UserEventTracker />
       </body>
     </html>

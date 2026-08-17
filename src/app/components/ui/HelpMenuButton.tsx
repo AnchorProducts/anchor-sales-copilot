@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { pageTourForPath, startPageTutorial, startTutorial } from "@/app/components/tutorial/AppTutorial";
-import { openInstallGuide, isMobileDevice } from "@/app/components/InstallAppPrompt";
+import { openInstallGuide, isMobileDevice } from "@/app/components/InstallGate";
 import {
   useHideWhenOverlapping,
   HIDE_WHEN_OVERLAPPING_CLASS,
