@@ -9,6 +9,7 @@ import {
   canWriteInventory,
   signItemImage,
   notifyLowStockIfCrossed,
+  INVENTORY_BUCKET,
 } from "@/lib/inventory/server";
 
 export const runtime = "nodejs";
@@ -320,7 +321,7 @@ export async function DELETE(req: Request) {
 
     const { data: current } = await supabaseAdmin
       .from("marketing_inventory_items")
-      .select("quantity_out")
+      .select("quantity_out,image_path")
       .eq("id", id)
       .maybeSingle();
     if (current && ((current as any).quantity_out || 0) > 0) {
@@ -332,6 +333,12 @@ export async function DELETE(req: Request) {
 
     const { error } = await supabaseAdmin.from("marketing_inventory_items").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // The row is gone, so nothing points at the photo any more — drop it too,
+    // or the bucket accumulates files no item can ever reference. Best-effort:
+    // a failed cleanup leaves a stray file, which must not fail the delete.
+    const imagePath = clean((current as any)?.image_path);
+    if (imagePath) void supabaseAdmin.storage.from(INVENTORY_BUCKET).remove([imagePath]);
 
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
