@@ -290,17 +290,29 @@ export default function AdminInventoryPage({
     }
   }
 
-  async function deleteItem(it: InventoryItem) {
-    if (!window.confirm(`Delete "${it.name}"? This can’t be undone.`)) return;
+  // Why a per-item error rather than the page-level banner: Delete lives inside
+  // an expanded item card, often far down a scrolled grid. A refusal written to
+  // the banner at the top of the tab is invisible from there, so a blocked
+  // delete looked like a dead button. Returns whether the item was deleted, so
+  // the modal caller knows to close.
+  const [deleteErr, setDeleteErr] = useState<{ id: string; msg: string } | null>(null);
+
+  async function deleteItem(it: InventoryItem): Promise<boolean> {
+    if (!window.confirm(`Delete "${it.name}"? This can’t be undone.`)) return false;
     setBusy(true);
+    setDeleteErr(null);
     try {
       const res = await fetch(`/api/inventory?id=${encodeURIComponent(it.id)}`, { method: "DELETE" });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setLoadErr(json?.error || "Failed to delete item.");
-      } else {
-        await loadAll();
+        setDeleteErr({ id: it.id, msg: json?.error || "Failed to delete item." });
+        return false;
       }
+      await loadAll();
+      return true;
+    } catch (e: any) {
+      setDeleteErr({ id: it.id, msg: e?.message || "Failed to delete item." });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -554,6 +566,7 @@ export default function AdminInventoryPage({
                   onDelete={deleteItem}
                   onRemoveImage={removeImage}
                   onRestock={openRestock}
+                  deleteErr={deleteErr}
                   busy={busy}
                 />
               </>
@@ -733,7 +746,27 @@ export default function AdminInventoryPage({
                 )}
               </label>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            {itemModal.id && deleteErr?.id === itemModal.id && (
+              <div className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{deleteErr.msg}</div>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              {/* Editing is where you already are when you decide an item is
+                  dead, so offer the delete here too — mr-auto keeps it away
+                  from Save. */}
+              {itemModal.id && (
+                <Button
+                  variant="destructive"
+                  className="mr-auto"
+                  disabled={busy}
+                  onClick={async () => {
+                    const target = items.find((i) => i.id === itemModal.id);
+                    if (!target) return;
+                    if (await deleteItem(target)) setItemModal(null);
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => setItemModal(null)} disabled={busy}>
                 Cancel
               </Button>
@@ -930,14 +963,16 @@ function ItemsList({
   onDelete,
   onRemoveImage,
   onRestock,
+  deleteErr,
   busy,
 }: {
   items: InventoryItem[];
   onEdit: (it: InventoryItem) => void;
   onCheckout: (it: InventoryItem) => void;
-  onDelete: (it: InventoryItem) => void;
+  onDelete: (it: InventoryItem) => Promise<boolean> | void;
   onRemoveImage: (it: InventoryItem) => void;
   onRestock: (it: InventoryItem) => void;
+  deleteErr: { id: string; msg: string } | null;
   busy: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1091,6 +1126,9 @@ function ItemsList({
                     Delete
                   </Button>
                 </div>
+                {deleteErr?.id === it.id && (
+                  <div className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{deleteErr.msg}</div>
+                )}
               </div>
             )}
           </Card>
