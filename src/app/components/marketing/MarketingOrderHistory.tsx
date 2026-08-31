@@ -69,7 +69,40 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
   const [error, setError] = useState<string | null>(null);
   // Which order's chat thread is currently expanded.
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Which order is being confirmed as received, and the last failure if one came
+  // back — shown on the order itself rather than at the top of a long list.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmErr, setConfirmErr] = useState<{ id: string; msg: string } | null>(null);
   const { counts: unread, markRead } = useOrderUnread();
+
+  // Confirm a shipped order arrived. Only the rep who placed it can do this, and
+  // only from shipped — the API enforces both. It's the step the "your order has
+  // shipped" email asks for: nobody at Anchor can see the box land, so an order
+  // sits in shipped until the person who opened it says so.
+  async function markReceived(orderId: string) {
+    setConfirmingId(orderId);
+    setConfirmErr(null);
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: orderId, status: "fulfilled", note: "Confirmed the order arrived." }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setConfirmErr({ id: orderId, msg: json?.error || "Couldn't mark that as received." });
+        return;
+      }
+      // Reflect it immediately; the list reloads on the next refreshKey anyway.
+      setItems((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: "fulfilled", updated_at: new Date().toISOString() } : o))
+      );
+    } catch (e: any) {
+      setConfirmErr({ id: orderId, msg: e?.message || "Couldn't mark that as received." });
+    } finally {
+      setConfirmingId(null);
+    }
+  }
 
   function toggleChat(orderId: string) {
     setOpenChatId((cur) => {
@@ -164,6 +197,32 @@ export default function MarketingOrderHistory({ refreshKey = 0 }: { refreshKey?:
                     >
                       {o.assigned_to_email}
                     </a>
+                  )}
+                </div>
+              )}
+
+              {/* The ask from the shipped email, in the place they land. Sits
+                  above the tracker because it's the one thing on this card that
+                  needs doing. */}
+              {o.status === "shipped" && (
+                <div className="mt-4 rounded-xl border border-[var(--anchor-green)] bg-[var(--anchor-mint)]/30 p-3">
+                  <div className="text-xs font-bold uppercase tracking-wide text-[var(--anchor-deep)]">
+                    On its way
+                  </div>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--anchor-deep)]">
+                    Once this arrives, mark it received — that closes the order out. Until then the
+                    marketing team has no way to know it got there.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => markReceived(o.id)}
+                    disabled={confirmingId === o.id}
+                    className="mt-2.5 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--anchor-green)] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {confirmingId === o.id ? "Confirming…" : "Mark as received"}
+                  </button>
+                  {confirmErr?.id === o.id && (
+                    <div className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">{confirmErr.msg}</div>
                   )}
                 </div>
               )}

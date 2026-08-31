@@ -25,15 +25,15 @@ export default function MarketingOrdersPage() {
         menuItems={[{ label: t("dashboard"), href: "/dashboard" }]}
       />
 
-      <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card data-tutorial="marketing-orders-intro" className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
-          <div className="ds-caption">Marketing Orders</div>
-          <h1 className="mt-2 text-2xl">Order marketing collateral</h1>
-          <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-            Request samples, printables, swag, and other marketing materials. Each order is routed to
-            the right marketing contact automatically.
-          </p>
-        </Card>
+      {/* Wider than the app default: the form runs a catalog grid beside a
+          summary rail, and 5xl squeezes both. */}
+      <div className="mx-auto max-w-6xl px-5 py-6">
+        {/* The navbar above already says what page this is, so this line adds
+            only the thing it doesn't — where an order ends up. */}
+        <p data-tutorial="marketing-orders-intro" className="mb-4 text-sm text-[var(--anchor-gray)]">
+          Request samples, printables, swag and other marketing materials. Each order is routed to the
+          right marketing contact automatically.
+        </p>
         {!ready ? (
           <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
         ) : (

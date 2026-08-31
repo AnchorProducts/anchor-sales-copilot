@@ -13,7 +13,11 @@ import {
 
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 // /docs/* is the full-screen document viewer — keep the nav out of the way.
-const HIDE_PREFIXES = ["/auth", "/chat", "/docs"];
+// /grab/* is the PUBLIC marketing-aisle page, opened by scanning a QR code
+// on a shelf. Whoever is holding the phone may have no account at all, so
+// every piece of app chrome on it is either a dead end or a way out of the
+// one thing they came to do.
+const HIDE_PREFIXES = ["/auth", "/chat", "/docs", "/grab"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;

@@ -14,7 +14,7 @@ import {
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
 import { marketingRegionToolKey } from "@/lib/push/topics";
-import { internalAppUrl } from "@/lib/appUrl";
+import { internalAppUrl, repAppUrl } from "@/lib/appUrl";
 import { loadAllSalesReps } from "@/lib/sales/regions";
 import {
   submitterStates,
@@ -297,6 +297,90 @@ async function sendCustomOrderTaggedEmail(params: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
+// Tell the rep who placed an order that it's on its way — and ask them to close
+// the loop when it lands. The ask is the point: "shipped" is the last thing the
+// warehouse knows, and only the person opening the box knows it actually
+// arrived, so the order sits in shipped forever unless someone asks them.
+//
+// Links to the RECIPIENT's app (repAppUrl), not whichever deployment sent the
+// mail — an outside rep who follows an internal link hits an SSO wall.
+async function sendOrderShippedEmail(params: {
+  orderId: string;
+  to: string;
+  repRole: string | null;
+  categories: string[];
+  items: string;
+  shippedByName: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+  const shortId = params.orderId.slice(0, 8);
+  const orderUrl = repAppUrl("/marketing-orders", params.repRole);
+  const by = params.shippedByName ? ` by ${params.shippedByName}` : "";
+
+  const lines: string[] = [];
+  lines.push(`Your marketing order (ID: ${shortId}) has shipped${by}.`);
+  lines.push("");
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push("");
+  lines.push("When it arrives, open the order and mark it Received — that's what closes it out,");
+  lines.push("and it's the only way the marketing team knows it got there.");
+  lines.push("");
+  lines.push(`Your orders: ${orderUrl}`);
+
+  const html = `<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f3f5f4;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f4;padding:24px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:92vw;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+        <tr><td style="background:#11500F;padding:20px 32px;font-family:Helvetica,Arial,sans-serif;">
+          <div style="color:#9CE2BB;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">Anchor Co-Pilot</div>
+          <div style="color:#ffffff;font-size:13px;margin-top:2px;">Marketing Orders</div>
+        </td></tr>
+        <tr><td style="padding:28px 32px 8px;font-family:Helvetica,Arial,sans-serif;">
+          <span style="display:inline-block;background:#dcfce7;color:#047835;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;">Shipped</span>
+          <h1 style="margin:14px 0 0;font-size:20px;line-height:1.3;color:#1a1a1a;">Your order #${escapeHtml(shortId)} is on its way</h1>
+          <p style="margin:6px 0 0;font-size:14px;color:#76777B;">${escapeHtml(categoryLabel)} — ${escapeHtml(params.items)}</p>
+        </td></tr>
+        <tr><td style="padding:20px 32px 0;font-family:Helvetica,Arial,sans-serif;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f4;border-radius:12px;">
+            <tr><td style="padding:16px 18px;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;">
+              <div style="font-size:13px;font-weight:700;">When it arrives, mark it Received</div>
+              <div style="margin-top:6px;font-size:14px;line-height:1.5;color:#76777B;">Open the order in Anchor Co-Pilot and tap <strong style="color:#11500F;">Mark as received</strong>. That closes the order out — until then the marketing team has no way to know it got there.</div>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:20px 32px 8px;font-family:Helvetica,Arial,sans-serif;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:#047835;">
+            <a href="${orderUrl}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Open your orders →</a>
+          </td></tr></table>
+        </td></tr>
+        <tr><td style="padding:24px 32px 28px;font-family:Helvetica,Arial,sans-serif;border-top:1px solid #eef2f5;margin-top:12px;">
+          <p style="margin:16px 0 0;font-size:12px;color:#9aa0a6;line-height:1.5;">You're receiving this because you placed this marketing order in Anchor Co-Pilot.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const subject = `Your marketing order has shipped — ${categoryLabel} (${shortId})`;
+
+  const result = await resend.emails.send({
+    from,
+    to: [params.to],
+    subject,
+    text: lines.join("\n"),
+    html,
+  });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
 // Tell an internal rep an admin just put them on an order. Best-effort email that
 // mirrors the fulfiller notifications — points them at the fulfillment queue.
 async function sendMarketingOrderAssignedEmail(params: {
@@ -377,10 +461,13 @@ export async function POST(req: Request) {
     // the order; tagging it as needing a custom run is a human call made later
     // from the queue.
     const unitsByCategory: Record<string, number> = {};
-    // Overlays the order consumes, from both routes, against the one pool item.
-    // Recorded on the order so fulfillment can pre-fill it rather than re-derive
-    // it from the item text.
+    // Overlays the order consumes, from both routes. Recorded on the order so
+    // fulfillment can pre-fill it rather than re-derive it from the item text —
+    // which it couldn't anyway, since the items are free text. `overlay_kits` is
+    // the same number split by anchor series, because each series has its own
+    // overlay item and the total alone doesn't say which count to pull from.
     let overlay_units = 0;
+    let overlay_kits: Record<string, number> = {};
 
     if (body.requested_items !== undefined) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
@@ -403,7 +490,7 @@ export async function POST(req: Request) {
       if (picks.length) {
         const { data: invRows, error: invErr } = await supabaseAdmin
           .from("marketing_inventory_items")
-          .select("id,name,category,quantity_available,plastic_overlay,packaging_role")
+          .select("id,name,category,quantity_available,plastic_overlay,packaging_role,packaging_kit")
           .in("id", picks.map((p) => p.item_id));
         if (invErr) {
           return NextResponse.json({ error: invErr.message }, { status: 500 });
@@ -436,9 +523,11 @@ export async function POST(req: Request) {
           unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
         }
 
-        // Overlays off the shared pool: those paired with a sample plus any
+        // Overlays off each series' pool: those paired with a sample plus any
         // ordered on their own. Recomputed here from live item data so the count
-        // recorded on the order is the server's, not the browser's.
+        // recorded on the order is the server's, not the browser's — including
+        // which series each overlay comes off, which the item knows and the
+        // browser only echoes.
         const overlays = overlayUnits(
           picks.map((p) => {
             const row: any = byId.get(p.item_id);
@@ -446,11 +535,13 @@ export async function POST(req: Request) {
               quantity: p.quantity,
               offersOverlay: !!row?.plastic_overlay,
               isOverlayPool: isOverlayPool(row),
+              kit: row?.packaging_kit ?? null,
               wantsOverlay: p.plastic_overlay,
             };
           })
         );
         overlay_units = overlays.total;
+        overlay_kits = overlays.byKit;
         // Spell the shared total out on the order, since it's the number the
         // fulfiller pulls and it isn't obvious from the lines alone.
         if (overlays.paired > 0 && overlays.standalone > 0) {
@@ -519,6 +610,7 @@ export async function POST(req: Request) {
         notes,
         status: "new",
         overlay_units,
+        overlay_kits,
       })
       .select("id")
       .single();
@@ -686,7 +778,7 @@ export async function GET() {
     let query = supabaseAdmin
       .from("marketing_orders")
       .select(
-        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,overlay_units,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
+        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,overlay_units,overlay_kits,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -844,9 +936,10 @@ export async function PATCH(req: Request) {
 
     const profile = await getProfile(auth.user.id);
     const role = clean(profile?.role);
-    if (role !== "admin" && role !== "anchor_rep") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    // Fulfillers work every field on an order. The rep who PLACED it gets exactly
+    // one power, checked below once we know what's being asked and what the order
+    // currently is: confirming it arrived.
+    const isFulfiller = role === "admin" || role === "anchor_rep";
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const id = clean(body?.id);
@@ -869,6 +962,29 @@ export async function PATCH(req: Request) {
       : [];
     const current_items = clean((current as any).items);
     const current_needed_by = clean((current as any).needed_by) || null;
+
+    // Receipt confirmation: the rep who placed a SHIPPED order says it arrived.
+    // Deliberately the narrowest possible opening in an otherwise fulfiller-only
+    // endpoint — one status, one starting point, their own order, and nothing
+    // else in the same request. Anything more (assigning, tagging, delay details,
+    // recording stock) stays with the team that fulfills orders.
+    const isOwner = clean((current as any).created_by) === auth.user.id;
+    const touchesOnlyStatus =
+      body?.assigned_to === undefined &&
+      body?.needs_custom_order === undefined &&
+      body?.projected_ship_date === undefined &&
+      body?.delay_notes === undefined &&
+      body?.consumed === undefined;
+    const isReceiptConfirmation =
+      isOwner &&
+      !isFulfiller &&
+      clean(body?.status) === "fulfilled" &&
+      fromStatus === "shipped" &&
+      touchesOnlyStatus;
+
+    if (!isFulfiller && !isReceiptConfirmation) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // Inside reps may only update orders in their own territory OR ones an admin
     // explicitly assigned to them (admins: any).
@@ -941,7 +1057,10 @@ export async function PATCH(req: Request) {
     // The accountability note: what the admin did. Required to move an order to a
     // new phase, so every admin can see who handled what and no two people redo
     // the same work.
-    const note = clean(body?.note);
+    // A rep confirming receipt is answering a yes/no, not filing a report, so the
+    // log gets a sentence on their behalf rather than the move being refused for
+    // want of one. Their name is on the row either way.
+    const note = clean(body?.note) || (isReceiptConfirmation ? "Confirmed the order arrived." : "");
 
     let status = "";
     if (hasStatus) {
@@ -996,12 +1115,20 @@ export async function PATCH(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
-    // Inventory link: when an order is fulfilled, the fulfiller may record which
-    // inventory item(s) it consumed (orders store free-text items, so the link is
-    // explicit, not inferred). Each entry decrements that item's available stock
-    // and writes a usage row. Only applied when the order's resulting status is
-    // "fulfilled". Best-effort per item — a stock issue logs a warning but never
-    // un-fulfills the order; the per-item outcomes are returned to the caller.
+    // Inventory link: when an order ships or is fulfilled, the fulfiller may
+    // record which inventory item(s) it consumed (orders store free-text items,
+    // so the link is explicit, not inferred). Each entry decrements that item's
+    // available stock and writes a usage row.
+    //
+    // Shipped counts as well as fulfilled, for two reasons. Stock leaves the
+    // shelf when the box is packed, not when it lands — and "fulfilled" is now
+    // the REP's confirmation that it arrived, so an order whose last team action
+    // was shipping would otherwise never decrement anything. Both are accepted
+    // rather than moving it wholesale, because an order can still go straight to
+    // fulfilled without ever passing through shipped.
+    //
+    // Best-effort per item — a stock issue logs a warning but never un-ships the
+    // order; the per-item outcomes are returned to the caller.
     const effectiveStatus = hasStatus ? status : fromStatus;
     // A custom order was ordered in specially, not pulled off the shelf, so
     // fulfilling it must leave marketing stock untouched. That's the point of the
@@ -1020,7 +1147,7 @@ export async function PATCH(req: Request) {
       }));
       console.warn("marketing order: ignored inventory consumption on a custom order", id);
     } else if (
-      effectiveStatus === "fulfilled" &&
+      (effectiveStatus === "fulfilled" || effectiveStatus === "shipped") &&
       Array.isArray(body?.consumed) &&
       body.consumed.length
     ) {
@@ -1137,6 +1264,45 @@ export async function PATCH(req: Request) {
           delayNotes: finalNotes,
         }),
       });
+
+      // Shipped is the one status the rep who placed the order has to act on:
+      // only they can say it arrived. Everything above went to the fulfillment
+      // team; this goes to them, with the ask attached. Best-effort throughout —
+      // a mail or push failure must never un-ship the order.
+      if (isPhaseMove && status === "shipped" && (current as any).created_by) {
+        const repId = clean((current as any).created_by);
+        const { data: repProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("email,role")
+          .eq("id", repId)
+          .maybeSingle();
+        const repRole = clean((repProfile as any)?.role) || null;
+
+        void sendPushToUser(repId, {
+          title: "Your marketing order has shipped",
+          body: "Mark it as received in Anchor Co-Pilot when it arrives — that's what closes the order out.",
+          url: "/marketing-orders",
+          tag: `mo-shipped-${id}`,
+        }).catch((pushErr) => {
+          console.warn("shipped rep push failed", pushErr?.message || pushErr);
+        });
+
+        const repEmail = clean((repProfile as any)?.email);
+        if (repEmail) {
+          try {
+            await sendOrderShippedEmail({
+              orderId: id,
+              to: repEmail,
+              repRole,
+              categories: current_categories,
+              items: current_items,
+              shippedByName: clean(profile?.full_name) || null,
+            });
+          } catch (mailErr: any) {
+            console.warn("shipped rep email failed", mailErr?.message || mailErr);
+          }
+        }
+      }
     }
 
     // Tagging an order as needing a custom run is a call someone made, so it goes

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
+import Modal from "@/app/components/ui/Modal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   marketingCategoriesLabel,
@@ -16,6 +17,7 @@ import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
 import MarketingOrderChat from "@/app/components/marketing/MarketingOrderChat";
 import MarketingOrderActivity from "@/app/components/marketing/MarketingOrderActivity";
 import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
+import { packagingKitLabel } from "@/lib/inventory";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 
 type MarketingOrder = {
@@ -36,6 +38,9 @@ type MarketingOrder = {
   // Plastic overlays this order needs, paired + standalone combined. Both draw
   // from the one overlay stock item, so this is a single number.
   overlay_units: number | null;
+  // The overlay total split by anchor series ({"2000": 12}), since each series
+  // has its own overlay item and the total alone doesn't say which to pull.
+  overlay_kits?: Record<string, number> | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   submitter_name: string | null;
@@ -232,7 +237,13 @@ export default function AdminMarketingOrdersPage({
   // Inventory items for the "what stock did this order consume?" picker shown
   // when fulfilling an order, plus the per-order draft rows {item_id, quantity}.
   const [inventory, setInventory] = useState<
-    { id: string; name: string; quantity_available: number; packaging_role?: string | null }[]
+    {
+      id: string;
+      name: string;
+      quantity_available: number;
+      packaging_role?: string | null;
+      packaging_kit?: string | null;
+    }[]
   >([]);
   const [consumeDrafts, setConsumeDrafts] = useState<
     Record<string, Array<{ item_id: string; quantity: string }>>
@@ -257,6 +268,18 @@ export default function AdminMarketingOrdersPage({
 
   const isArchived = (o: MarketingOrder) =>
     o.status === "fulfilled" || o.status === "cancelled";
+
+  // The phases where stock actually leaves the building. Shipping is when the box
+  // is packed, and since a rep's "received" confirmation is what marks an order
+  // fulfilled now, shipping is often the last time the team touches it — so
+  // that's where the inventory picker has to be offered too.
+  const recordsStock = (status: string | undefined) =>
+    status === "shipped" || status === "fulfilled";
+
+  // A needed-by date that has gone past on an order still in flight. Archived
+  // orders are done, so they can't be late — only work still owed can.
+  const isPastDue = (o: MarketingOrder) =>
+    !!o.needed_by && !isArchived(o) && o.needed_by < new Date().toISOString().slice(0, 10);
 
   // Counts per view, so each tab can show a badge.
   const counts = useMemo(() => {
@@ -312,6 +335,7 @@ export default function AdminMarketingOrdersPage({
             name: it.name,
             quantity_available: it.quantity_available,
             packaging_role: it.packaging_role ?? null,
+            packaging_kit: it.packaging_kit ?? null,
           }))
         );
       }
@@ -339,11 +363,24 @@ export default function AdminMarketingOrdersPage({
     });
   }
 
-  // The item that IS the overlay stock. Both the overlays paired with a sample
-  // and any ordered on their own come off this one row.
-  const overlayPool = useMemo(
-    () => inventory.find((it) => it.packaging_role === "overlay") || null,
+  // The overlay item for a given series. Both the overlays paired with a sample
+  // and any ordered on their own come off that series' row — there is one per
+  // anchor series, so which one matters.
+  const overlayPoolFor = useCallback(
+    (kit: string) => inventory.find((it) => it.packaging_role === "overlay" && it.packaging_kit === kit) || null,
     [inventory]
+  );
+
+  // What an order's overlays resolve to: one row per series, with the item to
+  // decrement. An order from before kits existed carries a total but no split —
+  // it's listed under no series, so nothing is pre-filled and the fulfiller
+  // picks the item, which is the honest outcome rather than a guess.
+  const overlayRowsFor = useCallback(
+    (o: MarketingOrder) =>
+      Object.entries(o.overlay_kits || {})
+        .filter(([, units]) => (units || 0) > 0)
+        .map(([kit, units]) => ({ kit, units: units as number, pool: overlayPoolFor(kit) })),
+    [overlayPoolFor]
   );
 
   // Stage a phase change: the admin picks a new status, but nothing is saved until
@@ -357,16 +394,19 @@ export default function AdminMarketingOrdersPage({
     }
     setPendingStatus((d) => ({ ...d, [o.id]: status }));
 
-    // Fulfilling an order that carries overlays: pre-fill the overlay line so the
-    // count is confirmed rather than worked out by hand. The order already knows
-    // the total across both routes. A custom order consumes no stock at all, so
-    // it gets nothing.
-    const overlays = o.overlay_units || 0;
-    if (status === "fulfilled" && overlays > 0 && overlayPool && !o.needs_custom_order) {
+    // Shipping or fulfilling an order that carries overlays: pre-fill the overlay
+    // line so the count is confirmed rather than worked out by hand. The order
+    // already knows the total across both routes. A custom order consumes no
+    // stock at all, so it gets nothing.
+    const overlayRows = overlayRowsFor(o).filter((r) => r.pool);
+    if (recordsStock(status) && overlayRows.length > 0 && !o.needs_custom_order) {
       setConsumeDrafts((d) => {
-        const rows = d[o.id] || [];
-        if (rows.some((r) => r.item_id === overlayPool.id)) return d;
-        return { ...d, [o.id]: [...rows, { item_id: overlayPool.id, quantity: String(overlays) }] };
+        let rows = d[o.id] || [];
+        for (const r of overlayRows) {
+          if (rows.some((x) => x.item_id === r.pool!.id)) continue;
+          rows = [...rows, { item_id: r.pool!.id, quantity: String(r.units) }];
+        }
+        return { ...d, [o.id]: rows };
       });
     }
   }
@@ -693,495 +733,604 @@ export default function AdminMarketingOrdersPage({
                 {activeTab === "archived" ? "No archived orders." : "No active orders."}
               </Card>
             ) : (
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredItems.map((o) => (
-                  <Card
-                    key={o.id}
-                    className={`overflow-hidden p-0 ${
-                      openOrderId === o.id ? "col-span-full" : ""
-                    }`}
-                  >
-                    {/* Header — click to open/close the full order. Shows
-                        category + status at a glance, plus a one-line preview
-                        when collapsed. */}
+              // Cards, not rows — but the card no longer changes shape when you
+              // open it. The old grid expanded the opened order to the full row
+              // width, which reflowed every card around it; the full order now
+              // opens in a dialog over the page, so the grid never moves.
+              // Archived is a history you scan, not a queue you work, so it goes
+              // two-up at every width — twice as many finished orders in view,
+              // and none of them need the room an active one does.
+              <div
+                className={`grid gap-3 ${
+                  activeTab === "archived" ? "grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3"
+                }`}
+              >
+                {filteredItems.map((o) => {
+                  const open = openOrderId === o.id;
+                  const late = isPastDue(o);
+                  return (
+                  <Card key={o.id} className="overflow-hidden p-0">
+                    {/* The whole card opens the order. Top-down: where it is,
+                        what it is, who it's for, then the deadline pinned to the
+                        bottom so it lines up across a row of cards. */}
                     <button
                       type="button"
                       onClick={() => toggleOrder(o.id)}
-                      aria-expanded={openOrderId === o.id}
-                      className="w-full border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 text-left transition hover:bg-[var(--anchor-mint)]/30 sm:px-5"
+                      aria-haspopup="dialog"
+                      className={`flex h-full w-full flex-col gap-2 p-4 text-left transition hover:bg-[var(--anchor-mint)]/30 ${
+                        open ? "bg-[var(--surface-soft)]" : ""
+                      }`}
                     >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="rounded-full bg-[var(--anchor-mint)]/60 px-2.5 py-0.5 text-xs font-semibold text-[var(--anchor-deep)]">
-                          {marketingCategoriesLabel(o.categories)}
-                        </span>
+                      <span className="flex items-center gap-2">
                         <span
-                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${marketingOrderStatusPill(o.status)}`}
+                          className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${marketingOrderStatusPill(o.status)}`}
                         >
                           {marketingOrderStatusLabel(o.status)}
                         </span>
+                      </span>
+
+                      {/* Two lines of the free-text order, which is as much as
+                          identifies it — the rest is in the dialog. */}
+                      <span className="line-clamp-2 text-sm font-semibold leading-snug text-black">
+                        {o.items}
+                      </span>
+
+                      <span className="block text-[11px] leading-relaxed text-[var(--anchor-gray)]">
+                        <span className="block truncate">
+                          #{o.id.slice(0, 8)} · {o.submitter_name || o.submitter_company || "—"}
+                        </span>
+                        <span className="block truncate">
+                          {marketingCategoriesLabel(o.categories)} · Ordered {formatDateTime(o.created_at)}
+                        </span>
+                      </span>
+
+                      {/* The flags that change what you do next. */}
+                      <span className="flex flex-wrap items-center gap-1.5 empty:hidden">
                         {o.needs_custom_order && (
                           <span
                             className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900"
                             title="Custom order — samples ordered in, marketing stock unchanged"
                           >
-                            ⚑ Custom order
+                            Custom order
                           </span>
                         )}
                         {unread[o.id] > 0 && openChatId !== o.id && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
-                            💬 {unread[o.id]} new
+                          <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
+                            {unread[o.id]} new message{unread[o.id] === 1 ? "" : "s"}
                           </span>
                         )}
                         {o.assigned_to_name && (
                           <span
-                            className="inline-flex items-center gap-1 rounded-full bg-[var(--anchor-deep)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-deep)]"
+                            className="rounded-full bg-[var(--anchor-deep)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-deep)]"
                             title={`Assigned to ${o.assigned_to_name}`}
                           >
-                            👤 {o.assigned_to_name}
+                            {o.assigned_to_name}
                           </span>
                         )}
-                        <span
-                          className={`ml-auto text-[var(--anchor-gray)] transition-transform ${
-                            openOrderId === o.id ? "rotate-180" : ""
-                          }`}
-                          aria-hidden
-                        >
-                          ▾
+                      </span>
+
+                      {/* mt-auto pins this to the bottom of the card, so the
+                          dates line up across a row however long the titles
+                          above them run. The deadline decides what gets worked
+                          first, which is why it's on the card at all. */}
+                      <span className="mt-auto flex items-baseline justify-between gap-2 border-t border-[var(--border-default)] pt-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                          Needed by
                         </span>
-                      </div>
-                      <div className="mt-1.5 truncate text-sm font-medium text-black">{o.items}</div>
-                      <div className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
-                        #{o.id.slice(0, 8)} · {o.submitter_name || o.submitter_company || "—"} · Ordered{" "}
-                        {formatDateTime(o.created_at)}
-                      </div>
+                        <span
+                          className={`text-xs font-semibold ${
+                            late ? "text-red-700" : "text-[var(--anchor-deep)]"
+                          }`}
+                        >
+                          {formatDate(o.needed_by)}
+                          {late ? " · late" : ""}
+                        </span>
+                      </span>
                     </button>
 
-                    {openOrderId === o.id && (
-                    <div className="px-4 py-4 sm:px-5">
-                      {/* What they ordered — the headline */}
-                      <p className="whitespace-pre-line text-sm font-medium leading-snug text-black">{o.items}</p>
+                    {/* The full order opens over the queue instead of unfolding
+                        inside it: the detail is a screenful of controls, and
+                        inline it pushed every row below it down the page and
+                        left the list scrolled somewhere else when you closed
+                        it. Modal renders nothing while closed, so only the open
+                        order's body is ever mounted. */}
+                    <Modal
+                      open={open}
+                      onClose={() => setOpenOrderId(null)}
+                      className="flex max-h-[92vh] flex-col overflow-hidden"
+                      // .ds-modal is a fixed 640px with its own padding; both
+                      // have to be overridden inline to beat the class.
+                      style={{ width: "min(100%, 68rem)", padding: 0 }}
+                    >
+                      <header className="flex items-start gap-3 border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 sm:px-5">
+                        <span
+                          className={`mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${marketingOrderStatusPill(o.status)}`}
+                        >
+                          {marketingOrderStatusLabel(o.status)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="truncate text-sm font-bold text-black">
+                            Order #{o.id.slice(0, 8)}
+                          </h2>
+                          <p className="truncate text-[11px] text-[var(--anchor-gray)]">
+                            {o.submitter_name || o.submitter_company || "—"} ·{" "}
+                            {marketingCategoriesLabel(o.categories)} · Needed by {formatDate(o.needed_by)}
+                            {late ? " · late" : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOpenOrderId(null)}
+                          aria-label="Close order"
+                          className="-mr-1 shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-[var(--anchor-gray)] transition hover:bg-black/5 hover:text-black"
+                        >
+                          ✕
+                        </button>
+                      </header>
 
-                      {/* Status control: a clear, full-width tap target on mobile */}
-                      <div className="mt-4">
-                        <label
-                          htmlFor={`status-${o.id}`}
-                          className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
-                        >
-                          Update status
-                        </label>
-                        <Select
-                          id={`status-${o.id}`}
-                          value={pendingStatus[o.id] ?? o.status ?? "new"}
-                          onChange={(e) => stageStatus(o, e.target.value)}
-                          disabled={savingId === o.id}
-                          className="mt-1 h-11 w-full text-sm sm:h-10 sm:w-60"
-                          aria-label="Order status"
-                        >
-                          {MARKETING_ORDER_STATUSES.map((s) => (
-                            <option key={s.key} value={s.key}>
-                              {s.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+                      {/* Read on the left, act on the right. Fulfilling an
+                          order means looking at what was asked for while working
+                          the controls — stacked in one column, the two were
+                          screens apart on a desktop. Below lg they stack, which
+                          is the only thing that fits a phone. */}
+                      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-5">
+                        <div className="min-w-0">
+                        {/* What they ordered — the headline */}
+                        <p className="whitespace-pre-line text-sm font-medium leading-snug text-black">{o.items}</p>
 
-                      {/* Owner: which internal rep is on this order. Only admins
-                          can set/change it; everyone sees who owns it. */}
-                      <div className="mt-4">
-                        <label
-                          htmlFor={`assignee-${o.id}`}
-                          className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
-                        >
-                          Assigned to
-                        </label>
-                        {role === "admin" ? (
-                          <Select
-                            id={`assignee-${o.id}`}
-                            value={o.assigned_to ?? ""}
-                            onChange={(e) => assignOrder(o.id, e.target.value)}
-                            disabled={savingId === o.id}
-                            className="mt-1 h-11 w-full text-sm sm:h-10 sm:w-60"
-                            aria-label="Assigned rep"
+                        {/* Order details — stacked label/value, scannable on a phone */}
+                        <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                              Quantity
+                            </dt>
+                            <dd className="mt-0.5 text-sm text-black">{o.quantity || "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                              Needed by
+                            </dt>
+                            <dd className="mt-0.5 text-sm text-black">{formatDate(o.needed_by)}</dd>
+                          </div>
+                          {(o.overlay_units || 0) > 0 && (
+                            <div>
+                              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                Plastic overlays
+                              </dt>
+                              <dd className="mt-0.5 text-sm text-black">
+                                {o.overlay_units}
+                                {/* Which series they come off — the fulfiller pulls
+                                    from three different shelves. */}
+                                {overlayRowsFor(o).length > 0 && (
+                                  <span className="ml-1 text-[var(--anchor-gray)]">
+                                    (
+                                    {overlayRowsFor(o)
+                                      .map((r) => `${r.units} ${packagingKitLabel(r.kit)}`)
+                                      .join(", ")}
+                                    )
+                                  </span>
+                                )}
+                              </dd>
+                            </div>
+                          )}
+                          <div className="sm:col-span-2">
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                              Ship to
+                            </dt>
+                            <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.ship_to || "—"}</dd>
+                          </div>
+                          {o.notes && (
+                            <div className="sm:col-span-2">
+                              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                Notes
+                              </dt>
+                              <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.notes}</dd>
+                            </div>
+                          )}
+                        </dl>
+
+                        {/* Who submitted it — with tappable contact links */}
+                        <div className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                            From
+                          </div>
+                          <div className="mt-0.5 text-sm font-semibold text-[var(--anchor-deep)]">
+                            {o.submitter_name || "—"}
+                            {o.submitter_company && (
+                              <span className="font-normal text-[var(--anchor-gray)]"> · {o.submitter_company}</span>
+                            )}
+                          </div>
+                          {(o.submitter_email || o.submitter_phone) && (
+                            <div className="mt-1 flex flex-col gap-0.5 text-xs sm:flex-row sm:flex-wrap sm:gap-x-4">
+                              {o.submitter_email && (
+                                <a
+                                  href={`mailto:${o.submitter_email}`}
+                                  className="break-all font-medium text-[var(--anchor-green)] underline"
+                                >
+                                  {o.submitter_email}
+                                </a>
+                              )}
+                              {o.submitter_phone && (
+                                <a
+                                  href={`tel:${o.submitter_phone}`}
+                                  className="font-medium text-[var(--anchor-green)] underline"
+                                >
+                                  {o.submitter_phone}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Latest logged action, up front, so anyone scanning the
+                            list sees this order is being handled — and by whom. */}
+                        {o.last_activity && (
+                          <div className="mt-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-soft)] px-3 py-2 text-xs">
+                            <span className="font-semibold text-[var(--anchor-deep)]">
+                              {o.last_activity.admin_name || o.last_activity.admin_email || "Admin"}
+                            </span>
+                            {o.last_activity.created_at ? ` · ${formatDateTime(o.last_activity.created_at)}` : ""}
+                            <div className="mt-0.5 whitespace-pre-line text-[var(--anchor-gray)]">
+                              {o.last_activity.note}
+                            </div>
+                          </div>
+                        )}
+
+                        {o.status === "delayed" && (
+                          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                            <div className="text-xs font-semibold text-amber-900">Delay details</div>
+                            <div className="mt-2 space-y-3">
+                              <label className="block text-xs text-amber-900">
+                                <span className="font-semibold">Projected ship date</span>
+                                <Input
+                                  type="date"
+                                  value={delayDateDraft[o.id] ?? o.projected_ship_date ?? ""}
+                                  onChange={(e) =>
+                                    setDelayDateDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                                  }
+                                  className="mt-1 h-11 w-full text-sm sm:h-10"
+                                />
+                              </label>
+                              <label className="block text-xs text-amber-900">
+                                <span className="font-semibold">Reason for delay</span>
+                                <Textarea
+                                  value={delayNotesDraft[o.id] ?? o.delay_notes ?? ""}
+                                  onChange={(e) =>
+                                    setDelayNotesDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                                  }
+                                  rows={3}
+                                  placeholder="e.g. Vendor backordered until 6/30; waiting on artwork approval."
+                                  className="mt-1 w-full text-sm"
+                                />
+                              </label>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                saveDelay(
+                                  o.id,
+                                  delayDateDraft[o.id] ?? o.projected_ship_date ?? "",
+                                  delayNotesDraft[o.id] ?? o.delay_notes ?? ""
+                                )
+                              }
+                              disabled={savingId === o.id}
+                              className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50 sm:w-auto"
+                            >
+                              Save delay details
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Actions: Messages (primary) and a de-emphasized Delete */}
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-default)] pt-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleChat(o.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                            >
+                              💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                              {unread[o.id] > 0 && openChatId !== o.id && (
+                                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
+                                  {unread[o.id]}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleActivity(o.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                            >
+                              🧾 {openActivityId === o.id ? "Hide activity" : "Activity log"}
+                            </button>
+                            {/* The pick sheet — ship-to block up top to cut out and
+                                tape to the carton, tick boxes for the items. */}
+                            <button
+                              type="button"
+                              onClick={() => printOrder(o)}
+                              title="Print this request as a pick sheet + ship-to label"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
+                            >
+                              🖨️ Print request
+                            </button>
+                          </div>
+                          {role === "admin" && (
+                            <button
+                              type="button"
+                              onClick={() => deleteOrder(o.id)}
+                              disabled={savingId === o.id}
+                              title="Delete this order from history"
+                              className="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+
+                        {openActivityId === o.id && (
+                          <div className="mt-3">
+                            <p className="mb-2 text-xs text-[var(--anchor-gray)]">
+                              Who did what and when on this order. Add a note to claim it or record a step so no one doubles up.
+                            </p>
+                            <MarketingOrderActivity orderId={o.id} onLogged={loadOrders} />
+                          </div>
+                        )}
+
+                        {openChatId === o.id && (
+                          <div className="mt-3">
+                            <p className="mb-2 text-xs text-[var(--anchor-gray)]">
+                              Chat with {o.submitter_name || "the rep"} about this order — clarify details or share photos.
+                            </p>
+                            <MarketingOrderChat orderId={o.id} />
+                          </div>
+                        )}
+                        </div>
+
+                        <div className="mt-5 grid gap-4 border-t border-[var(--border-default)] pt-4 lg:mt-0 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                        {/* Status control: a clear, full-width tap target on mobile */}
+                        <div className="mt-4">
+                          <label
+                            htmlFor={`status-${o.id}`}
+                            className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
                           >
-                            <option value="">Unassigned</option>
-                            {assignees.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.full_name || a.email || "Unnamed rep"}
+                            Update status
+                          </label>
+                          <Select
+                            id={`status-${o.id}`}
+                            value={pendingStatus[o.id] ?? o.status ?? "new"}
+                            onChange={(e) => stageStatus(o, e.target.value)}
+                            disabled={savingId === o.id}
+                            className="mt-1 h-11 w-full text-sm sm:h-10"
+                            aria-label="Order status"
+                          >
+                            {MARKETING_ORDER_STATUSES.map((s) => (
+                              <option key={s.key} value={s.key}>
+                                {s.label}
                               </option>
                             ))}
                           </Select>
-                        ) : (
-                          <div className="mt-1 text-sm text-black">
-                            {o.assigned_to_name || o.assigned_to_email || "Unassigned"}
-                          </div>
-                        )}
-                      </div>
+                        </div>
 
-                      {/* Required note before a phase change can be saved, so every
-                          admin sees who did what and no one duplicates the work. */}
-                      {pendingStatus[o.id] && pendingStatus[o.id] !== (o.status || "new") && (
-                        <div className="mt-3 rounded-xl border border-[var(--anchor-deep)]/30 bg-[var(--anchor-mint)]/30 p-3">
-                          <div className="text-xs font-semibold text-[var(--anchor-deep)]">
-                            Moving to {marketingOrderStatusLabel(pendingStatus[o.id])} — what did you do?
-                          </div>
-                          <Textarea
-                            value={phaseNoteDraft[o.id] ?? ""}
-                            onChange={(e) =>
-                              setPhaseNoteDraft((d) => ({ ...d, [o.id]: e.target.value }))
-                            }
-                            rows={3}
-                            placeholder="e.g. Printed 50 brochures, boxed them, and handed off to shipping."
-                            className="mt-2 w-full text-sm"
-                          />
-                          <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
-                            Required. This is logged against your name so the team can see this order is handled.
-                          </p>
-
-                          {/* A custom order consumed no marketing stock, so there
-                              is nothing to decrement — say so instead of offering
-                              the picker. The API enforces this too. */}
-                          {pendingStatus[o.id] === "fulfilled" && o.needs_custom_order && (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
-                              <span className="font-semibold">Custom order</span> — these samples were
-                              ordered in, so marketing inventory stays unchanged.
+                        {/* Owner: which internal rep is on this order. Only admins
+                            can set/change it; everyone sees who owns it. */}
+                        <div className="mt-4">
+                          <label
+                            htmlFor={`assignee-${o.id}`}
+                            className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]"
+                          >
+                            Assigned to
+                          </label>
+                          {role === "admin" ? (
+                            <Select
+                              id={`assignee-${o.id}`}
+                              value={o.assigned_to ?? ""}
+                              onChange={(e) => assignOrder(o.id, e.target.value)}
+                              disabled={savingId === o.id}
+                              className="mt-1 h-11 w-full text-sm sm:h-10"
+                              aria-label="Assigned rep"
+                            >
+                              <option value="">Unassigned</option>
+                              {assignees.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.full_name || a.email || "Unnamed rep"}
+                                </option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <div className="mt-1 text-sm text-black">
+                              {o.assigned_to_name || o.assigned_to_email || "Unassigned"}
                             </div>
                           )}
+                        </div>
 
-                          {/* Inventory consumption: only when fulfilling. Optional —
-                              record which stock this order used so it's decremented. */}
-                          {pendingStatus[o.id] === "fulfilled" && !o.needs_custom_order && (
-                            <div className="mt-3 rounded-lg border border-[var(--border-default)] bg-white p-2.5">
-                              <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                                Inventory used (optional)
+                        {/* Required note before a phase change can be saved, so every
+                            admin sees who did what and no one duplicates the work. */}
+                        {pendingStatus[o.id] && pendingStatus[o.id] !== (o.status || "new") && (
+                          <div className="mt-3 rounded-xl border border-[var(--anchor-deep)]/30 bg-[var(--anchor-mint)]/30 p-3">
+                            <div className="text-xs font-semibold text-[var(--anchor-deep)]">
+                              Moving to {marketingOrderStatusLabel(pendingStatus[o.id])} — what did you do?
+                            </div>
+                            <Textarea
+                              value={phaseNoteDraft[o.id] ?? ""}
+                              onChange={(e) =>
+                                setPhaseNoteDraft((d) => ({ ...d, [o.id]: e.target.value }))
+                              }
+                              rows={3}
+                              placeholder="e.g. Printed 50 brochures, boxed them, and handed off to shipping."
+                              className="mt-2 w-full text-sm"
+                            />
+                            <p className="mt-1 text-[11px] text-[var(--anchor-gray)]">
+                              Required. This is logged against your name so the team can see this order is handled.
+                            </p>
+
+                            {/* A custom order consumed no marketing stock, so there
+                                is nothing to decrement — say so instead of offering
+                                the picker. The API enforces this too. */}
+                            {recordsStock(pendingStatus[o.id]) && o.needs_custom_order && (
+                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
+                                <span className="font-semibold">Custom order</span> — these samples were
+                                ordered in, so marketing inventory stays unchanged.
                               </div>
-                              <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
-                                Pick the stock item(s) this order consumed to decrement inventory.
-                              </p>
-                              {(o.overlay_units || 0) > 0 && (
-                                <p className="mt-1 text-[11px] font-medium text-[var(--anchor-deep)]">
-                                  {overlayPool
-                                    ? `Overlays pre-filled: ${o.overlay_units} (paired + ordered on their own come off the same stock).`
-                                    : `This order needs ${o.overlay_units} overlay(s), but no item is tagged as the overlay stock — set one in Marketing Inventory.`}
+                            )}
+
+                            {/* Inventory consumption: when shipping or fulfilling.
+                                Optional — record which stock this order used so
+                                it's decremented. */}
+                            {recordsStock(pendingStatus[o.id]) && !o.needs_custom_order && (
+                              <div className="mt-3 rounded-lg border border-[var(--border-default)] bg-white p-2.5">
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                  Inventory used (optional)
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
+                                  Pick the stock item(s) this order consumed to decrement inventory.
                                 </p>
-                              )}
-                              {(consumeDrafts[o.id] || []).map((row, idx) => {
-                                const picked = inventory.find((it) => it.id === row.item_id);
-                                return (
-                                  <div key={idx} className="mt-2 flex items-center gap-2">
-                                    <Select
-                                      value={row.item_id}
-                                      onChange={(e) => setConsumeRow(o.id, idx, { item_id: e.target.value })}
-                                      className="h-9 flex-1 text-sm"
-                                    >
-                                      <option value="">Select item…</option>
-                                      {inventory.map((it) => (
-                                        <option key={it.id} value={it.id}>
-                                          {it.name} ({it.quantity_available} in stock)
-                                        </option>
-                                      ))}
-                                    </Select>
-                                    <Input
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                      max={picked ? picked.quantity_available : undefined}
-                                      value={row.quantity}
-                                      onChange={(e) => setConsumeRow(o.id, idx, { quantity: e.target.value })}
-                                      className="h-9 w-20 text-sm"
-                                      aria-label="Quantity used"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => removeConsumeRow(o.id, idx)}
-                                      aria-label="Remove"
-                                      className="text-[var(--anchor-deep)]/60 hover:text-red-600"
-                                    >
-                                      ✕
-                                    </button>
+                                {(o.overlay_units || 0) > 0 && (
+                                  <div className="mt-1 text-[11px] font-medium text-[var(--anchor-deep)]">
+                                    {overlayRowsFor(o).length === 0 ? (
+                                      <p>
+                                        This order needs {o.overlay_units} overlay(s), but they aren&apos;t
+                                        tied to an anchor series — pick the right overlay item below.
+                                      </p>
+                                    ) : (
+                                      overlayRowsFor(o).map((r) => (
+                                        <p key={r.kit}>
+                                          {r.pool
+                                            ? `${packagingKitLabel(r.kit)} overlays pre-filled: ${r.units} (paired + ordered on their own come off the same stock).`
+                                            : `This order needs ${r.units} ${packagingKitLabel(r.kit)} overlay(s), but no item is tagged as that kit's overlay stock — set one in Marketing Inventory.`}
+                                        </p>
+                                      ))
+                                    )}
                                   </div>
-                                );
-                              })}
+                                )}
+                                {(consumeDrafts[o.id] || []).map((row, idx) => {
+                                  const picked = inventory.find((it) => it.id === row.item_id);
+                                  return (
+                                    <div key={idx} className="mt-2 flex items-center gap-2">
+                                      <Select
+                                        value={row.item_id}
+                                        onChange={(e) => setConsumeRow(o.id, idx, { item_id: e.target.value })}
+                                        className="h-9 flex-1 text-sm"
+                                      >
+                                        <option value="">Select item…</option>
+                                        {inventory.map((it) => (
+                                          <option key={it.id} value={it.id}>
+                                            {it.name} ({it.quantity_available} in stock)
+                                          </option>
+                                        ))}
+                                      </Select>
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        max={picked ? picked.quantity_available : undefined}
+                                        value={row.quantity}
+                                        onChange={(e) => setConsumeRow(o.id, idx, { quantity: e.target.value })}
+                                        className="h-9 w-20 text-sm"
+                                        aria-label="Quantity used"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => removeConsumeRow(o.id, idx)}
+                                        aria-label="Remove"
+                                        className="text-[var(--anchor-deep)]/60 hover:text-red-600"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                                <button
+                                  type="button"
+                                  onClick={() => addConsumeRow(o.id)}
+                                  className="mt-2 text-xs font-semibold text-[var(--anchor-green)] hover:underline"
+                                >
+                                  + Add item
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                               <button
                                 type="button"
-                                onClick={() => addConsumeRow(o.id)}
-                                className="mt-2 text-xs font-semibold text-[var(--anchor-green)] hover:underline"
+                                onClick={() => commitPhaseChange(o.id)}
+                                disabled={savingId === o.id || !(phaseNoteDraft[o.id] ?? "").trim()}
+                                className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--anchor-deep)] px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                               >
-                                + Add item
+                                {savingId === o.id ? "Saving…" : "Save update"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => cancelPhaseChange(o.id)}
+                                disabled={savingId === o.id}
+                                className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border-default)] bg-white px-4 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--surface-soft)] disabled:opacity-50"
+                              >
+                                Cancel
                               </button>
                             </div>
-                          )}
-
-                          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                            <button
-                              type="button"
-                              onClick={() => commitPhaseChange(o.id)}
-                              disabled={savingId === o.id || !(phaseNoteDraft[o.id] ?? "").trim()}
-                              className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--anchor-deep)] px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                            >
-                              {savingId === o.id ? "Saving…" : "Save update"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => cancelPhaseChange(o.id)}
-                              disabled={savingId === o.id}
-                              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--border-default)] bg-white px-4 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--surface-soft)] disabled:opacity-50"
-                            >
-                              Cancel
-                            </button>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {o.status !== "delayed" && (
-                        <div className="mt-4 overflow-x-auto">
-                          <div className="min-w-[260px]">
-                            <OrderStatusTracker status={o.status} />
+                        {o.status !== "delayed" && (
+                          <div className="mt-4 overflow-x-auto">
+                            <div className="min-w-[260px]">
+                              <OrderStatusTracker status={o.status} />
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {(o.updated_by_name || o.updated_by_email) && (
-                        <div className="mt-3 text-xs text-[var(--anchor-gray)]">
-                          Last updated by{" "}
-                          <span className="font-semibold text-[var(--anchor-deep)]">
-                            {o.updated_by_name || o.updated_by_email}
-                          </span>
-                          {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
-                        </div>
-                      )}
-
-                      {/* Latest logged action, up front, so anyone scanning the
-                          list sees this order is being handled — and by whom. */}
-                      {o.last_activity && (
-                        <div className="mt-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-soft)] px-3 py-2 text-xs">
-                          <span className="font-semibold text-[var(--anchor-deep)]">
-                            {o.last_activity.admin_name || o.last_activity.admin_email || "Admin"}
-                          </span>
-                          {o.last_activity.created_at ? ` · ${formatDateTime(o.last_activity.created_at)}` : ""}
-                          <div className="mt-0.5 whitespace-pre-line text-[var(--anchor-gray)]">
-                            {o.last_activity.note}
-                          </div>
-                        </div>
-                      )}
-
-                      {o.status === "delayed" && (
-                        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
-                          <div className="text-xs font-semibold text-amber-900">Delay details</div>
-                          <div className="mt-2 space-y-3">
-                            <label className="block text-xs text-amber-900">
-                              <span className="font-semibold">Projected ship date</span>
-                              <Input
-                                type="date"
-                                value={delayDateDraft[o.id] ?? o.projected_ship_date ?? ""}
-                                onChange={(e) =>
-                                  setDelayDateDraft((d) => ({ ...d, [o.id]: e.target.value }))
-                                }
-                                className="mt-1 h-11 w-full text-sm sm:h-10"
-                              />
-                            </label>
-                            <label className="block text-xs text-amber-900">
-                              <span className="font-semibold">Reason for delay</span>
-                              <Textarea
-                                value={delayNotesDraft[o.id] ?? o.delay_notes ?? ""}
-                                onChange={(e) =>
-                                  setDelayNotesDraft((d) => ({ ...d, [o.id]: e.target.value }))
-                                }
-                                rows={3}
-                                placeholder="e.g. Vendor backordered until 6/30; waiting on artwork approval."
-                                className="mt-1 w-full text-sm"
-                              />
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              saveDelay(
-                                o.id,
-                                delayDateDraft[o.id] ?? o.projected_ship_date ?? "",
-                                delayNotesDraft[o.id] ?? o.delay_notes ?? ""
-                              )
-                            }
-                            disabled={savingId === o.id}
-                            className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50 sm:w-auto"
-                          >
-                            Save delay details
-                          </button>
-                        </div>
-                      )}
-
-                      {/* The custom-order call. Whoever is working the order
-                          decides this — nothing about the order decides it for
-                          them. Ticking it emails the rep and locks inventory. */}
-                      <div className="mt-4">
-                        <label
-                          className={
-                            "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition " +
-                            (o.needs_custom_order
-                              ? "border-amber-300 bg-amber-50"
-                              : "border-[var(--border-default)] bg-[var(--surface-soft)]")
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!!o.needs_custom_order}
-                            onChange={(e) => setCustomOrder(o.id, e.target.checked)}
-                            disabled={savingId === o.id}
-                            className="mt-0.5 h-4 w-4 shrink-0 accent-amber-600"
-                          />
-                          <span className="text-sm">
-                            <span className="font-semibold text-black">Needs custom order</span>
-                            <span className="mt-0.5 block text-xs text-[var(--anchor-gray)]">
-                              Can&apos;t be filled from marketing stock — you&apos;re ordering these
-                              samples in. Marketing inventory stays unchanged, and{" "}
-                              {o.submitter_name || "the rep"} is told this one takes longer.
+                        {(o.updated_by_name || o.updated_by_email) && (
+                          <div className="mt-3 text-xs text-[var(--anchor-gray)]">
+                            Last updated by{" "}
+                            <span className="font-semibold text-[var(--anchor-deep)]">
+                              {o.updated_by_name || o.updated_by_email}
                             </span>
-                            {o.needs_custom_order && o.custom_order_tagged_at && (
-                              <span className="mt-1 block text-[11px] font-medium text-amber-800">
-                                Rep notified {formatDateTime(o.custom_order_tagged_at)}
+                            {o.updated_at ? ` · ${formatDateTime(o.updated_at)}` : ""}
+                          </div>
+                        )}
+
+                        {/* The custom-order call. Whoever is working the order
+                            decides this — nothing about the order decides it for
+                            them. Ticking it emails the rep and locks inventory. */}
+                        <div className="mt-4">
+                          <label
+                            className={
+                              "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition " +
+                              (o.needs_custom_order
+                                ? "border-amber-300 bg-amber-50"
+                                : "border-[var(--border-default)] bg-[var(--surface-soft)]")
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!o.needs_custom_order}
+                              onChange={(e) => setCustomOrder(o.id, e.target.checked)}
+                              disabled={savingId === o.id}
+                              className="mt-0.5 h-4 w-4 shrink-0 accent-amber-600"
+                            />
+                            <span className="text-sm">
+                              <span className="font-semibold text-black">Needs custom order</span>
+                              <span className="mt-0.5 block text-xs text-[var(--anchor-gray)]">
+                                Can&apos;t be filled from marketing stock — you&apos;re ordering these
+                                samples in. Marketing inventory stays unchanged, and{" "}
+                                {o.submitter_name || "the rep"} is told this one takes longer.
                               </span>
-                            )}
-                          </span>
-                        </label>
+                              {o.needs_custom_order && o.custom_order_tagged_at && (
+                                <span className="mt-1 block text-[11px] font-medium text-amber-800">
+                                  Rep notified {formatDateTime(o.custom_order_tagged_at)}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        </div>
+
+                        </div>
                       </div>
-
-                      {/* Order details — stacked label/value, scannable on a phone */}
-                      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                        <div>
-                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                            Quantity
-                          </dt>
-                          <dd className="mt-0.5 text-sm text-black">{o.quantity || "—"}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                            Needed by
-                          </dt>
-                          <dd className="mt-0.5 text-sm text-black">{formatDate(o.needed_by)}</dd>
-                        </div>
-                        {(o.overlay_units || 0) > 0 && (
-                          <div>
-                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                              Plastic overlays
-                            </dt>
-                            <dd className="mt-0.5 text-sm text-black">{o.overlay_units}</dd>
-                          </div>
-                        )}
-                        <div className="sm:col-span-2">
-                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                            Ship to
-                          </dt>
-                          <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.ship_to || "—"}</dd>
-                        </div>
-                        {o.notes && (
-                          <div className="sm:col-span-2">
-                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                              Notes
-                            </dt>
-                            <dd className="mt-0.5 whitespace-pre-line text-sm text-black">{o.notes}</dd>
-                          </div>
-                        )}
-                      </dl>
-
-                      {/* Who submitted it — with tappable contact links */}
-                      <div className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface-soft)] p-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
-                          From
-                        </div>
-                        <div className="mt-0.5 text-sm font-semibold text-[var(--anchor-deep)]">
-                          {o.submitter_name || "—"}
-                          {o.submitter_company && (
-                            <span className="font-normal text-[var(--anchor-gray)]"> · {o.submitter_company}</span>
-                          )}
-                        </div>
-                        {(o.submitter_email || o.submitter_phone) && (
-                          <div className="mt-1 flex flex-col gap-0.5 text-xs sm:flex-row sm:flex-wrap sm:gap-x-4">
-                            {o.submitter_email && (
-                              <a
-                                href={`mailto:${o.submitter_email}`}
-                                className="break-all font-medium text-[var(--anchor-green)] underline"
-                              >
-                                {o.submitter_email}
-                              </a>
-                            )}
-                            {o.submitter_phone && (
-                              <a
-                                href={`tel:${o.submitter_phone}`}
-                                className="font-medium text-[var(--anchor-green)] underline"
-                              >
-                                {o.submitter_phone}
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Actions: Messages (primary) and a de-emphasized Delete */}
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-default)] pt-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleChat(o.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
-                          >
-                            💬 {openChatId === o.id ? "Hide messages" : "Messages"}
-                            {unread[o.id] > 0 && openChatId !== o.id && (
-                              <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
-                                {unread[o.id]}
-                              </span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleActivity(o.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
-                          >
-                            🧾 {openActivityId === o.id ? "Hide activity" : "Activity log"}
-                          </button>
-                          {/* The pick sheet — ship-to block up top to cut out and
-                              tape to the carton, tick boxes for the items. */}
-                          <button
-                            type="button"
-                            onClick={() => printOrder(o)}
-                            title="Print this request as a pick sheet + ship-to label"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
-                          >
-                            🖨️ Print request
-                          </button>
-                        </div>
-                        {role === "admin" && (
-                          <button
-                            type="button"
-                            onClick={() => deleteOrder(o.id)}
-                            disabled={savingId === o.id}
-                            title="Delete this order from history"
-                            className="inline-flex items-center rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-
-                      {openActivityId === o.id && (
-                        <div className="mt-3">
-                          <p className="mb-2 text-xs text-[var(--anchor-gray)]">
-                            Who did what and when on this order. Add a note to claim it or record a step so no one doubles up.
-                          </p>
-                          <MarketingOrderActivity orderId={o.id} onLogged={loadOrders} />
-                        </div>
-                      )}
-
-                      {openChatId === o.id && (
-                        <div className="mt-3">
-                          <p className="mb-2 text-xs text-[var(--anchor-gray)]">
-                            Chat with {o.submitter_name || "the rep"} about this order — clarify details or share photos.
-                          </p>
-                          <MarketingOrderChat orderId={o.id} />
-                        </div>
-                      )}
                     </div>
-                    )}
+                    </Modal>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { isInventoryCategory, isTradeshowCategory, resolveCheckoutEnabled } from "@/lib/inventory";
+import {
+  isInventoryCategory,
+  isPackagingKit,
+  isPackagingRole,
+  isTradeshowCategory,
+  resolveCheckoutEnabled,
+} from "@/lib/inventory";
 import {
   clean,
   getInventoryProfile,
@@ -15,34 +21,45 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Column added by 20260817_000002. Kept separate so a deploy that lands before
-// the migration still serves the catalog instead of 500ing the order form —
-// see the fallback in GET.
-const POTM_COL = "product_of_month";
+// Columns added after the table shipped: product_of_month (20260817_000002) and
+// packaging_kit (20260831_000001). Kept separate so a deploy that lands before
+// its migration still serves the catalog instead of 500ing the order form — see
+// the fallback in GET.
+const LATER_COLS = ["product_of_month", "packaging_kit"] as const;
 
 const ITEM_COLS_BASE =
   "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,checkout_enabled,pizza_box,plastic_overlay,packaging_role,created_at,updated_at";
 
-const ITEM_COLS = `${ITEM_COLS_BASE},${POTM_COL}`;
+const ITEM_COLS = `${ITEM_COLS_BASE},${LATER_COLS.join(",")}`;
 
-// True when the failure is just the un-migrated Product of the Month column
-// (42703 = column does not exist), rather than a real problem with the write.
-function isMissingPotmColumn(error: { code?: string; message?: string } | null) {
-  return !!error && (error.code === "42703" || !!error.message?.includes(POTM_COL));
+// True when the failure is just an un-migrated later column (42703 = column does
+// not exist), rather than a real problem with the write.
+function isMissingLaterColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  return error.code === "42703" || LATER_COLS.some((c) => error.message?.includes(c));
 }
 
-function withoutPotm<T extends Record<string, unknown>>(payload: T) {
+function withoutLaterCols<T extends Record<string, unknown>>(payload: T) {
   const next = { ...payload };
-  delete next[POTM_COL];
+  for (const c of LATER_COLS) delete next[c];
   return next;
 }
 
-const PACKAGING_ROLES = ["pizza_box", "overlay"] as const;
+// The four pizza-box kit pieces (box, overlay, under-anchor insert, foldable
+// over-anchor insert), one set per anchor series. A piece is addressed by the
+// PAIR — one item per (kit, role), which the partial unique index enforces.
 function parsePackagingRole(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   const s = String(v ?? "").trim();
   if (!s) return null;
-  return (PACKAGING_ROLES as readonly string[]).includes(s) ? s : "__invalid__";
+  return isPackagingRole(s) ? s : "__invalid__";
+}
+
+function parsePackagingKit(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  return isPackagingKit(s) ? s : "__invalid__";
 }
 
 // Parse a non-negative integer from a request value; returns null if absent,
@@ -65,9 +82,9 @@ function parseBool(v: unknown): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
-// A duplicate packaging-role assignment trips the partial unique index.
+// A second item claiming the same (kit, role) trips the partial unique index.
 function isPackagingRoleConflict(err: { code?: string; message?: string } | null): boolean {
-  return err?.code === "23505" || /packaging_role_uq/i.test(err?.message || "");
+  return err?.code === "23505" || /packaging_(kit_)?role_uq/i.test(err?.message || "");
 }
 
 // GET — list all items. Admins + inside reps + outside reps (read-only).
@@ -89,10 +106,9 @@ export async function GET() {
         .limit(1000);
 
     let { data, error } = await listItems(ITEM_COLS);
-    // 42703 = column does not exist. Retry without the newest column so an
-    // un-migrated database degrades to "nothing is flagged" rather than
-    // knocking out the whole catalog.
-    if (error && (error.code === "42703" || error.message?.includes(POTM_COL))) {
+    // Retry without the newest columns so an un-migrated database degrades to
+    // "nothing is flagged, no kits" rather than knocking out the whole catalog.
+    if (isMissingLaterColumn(error)) {
       ({ data, error } = await listItems(ITEM_COLS_BASE));
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -149,6 +165,17 @@ export async function POST(req: Request) {
     if (packagingRole === "__invalid__") {
       return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
     }
+    const packagingKit = parsePackagingKit(body.packaging_kit);
+    if (packagingKit === "__invalid__") {
+      return NextResponse.json({ error: "Invalid pizza box kit." }, { status: 400 });
+    }
+    // A piece with no kit can't be found by the aisle, so it isn't a piece.
+    if (packagingRole && !packagingKit) {
+      return NextResponse.json(
+        { error: "Pick which pizza box kit this piece belongs to." },
+        { status: 400 }
+      );
+    }
 
     const insertPayload: Record<string, unknown> = {
         name,
@@ -166,6 +193,7 @@ export async function POST(req: Request) {
         plastic_overlay: parseBool(body.plastic_overlay),
         product_of_month: parseBool(body.product_of_month),
         packaging_role: packagingRole ?? null,
+        packaging_kit: packagingKit ?? null,
         created_by: auth.user.id,
         updated_by: auth.user.id,
     };
@@ -174,14 +202,14 @@ export async function POST(req: Request) {
       supabaseAdmin.from("marketing_inventory_items").insert(payload).select(cols).single();
 
     let { data: row, error } = await insertItem(insertPayload, ITEM_COLS);
-    if (isMissingPotmColumn(error)) {
-      ({ data: row, error } = await insertItem(withoutPotm(insertPayload), ITEM_COLS_BASE));
+    if (isMissingLaterColumn(error)) {
+      ({ data: row, error } = await insertItem(withoutLaterCols(insertPayload), ITEM_COLS_BASE));
     }
 
     if (error || !row) {
       if (isPackagingRoleConflict(error)) {
         return NextResponse.json(
-          { error: "Another item is already set as that packaging pool. Clear it there first." },
+          { error: "Another item is already set as that piece of that kit. Clear it there first." },
           { status: 409 }
         );
       }
@@ -219,7 +247,7 @@ export async function PATCH(req: Request) {
 
     const { data: current, error: curErr } = await supabaseAdmin
       .from("marketing_inventory_items")
-      .select("quantity_available,low_stock_threshold,name,quantity_out,category")
+      .select("quantity_available,low_stock_threshold,name,quantity_out,category,packaging_role,packaging_kit")
       .eq("id", id)
       .maybeSingle();
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
@@ -274,18 +302,41 @@ export async function PATCH(req: Request) {
       if (role === "__invalid__") return NextResponse.json({ error: "Invalid packaging role." }, { status: 400 });
       updates.packaging_role = role ?? null;
     }
+    if (body?.packaging_kit !== undefined) {
+      const kit = parsePackagingKit(body.packaging_kit);
+      if (kit === "__invalid__") return NextResponse.json({ error: "Invalid pizza box kit." }, { status: 400 });
+      updates.packaging_kit = kit ?? null;
+    }
+    // Check the pair the item will HAVE after this update, not the half of it
+    // this request happens to mention — clearing the kit on an existing piece is
+    // as broken as adding a piece without one, and the DB constraint would
+    // reject it with a message nobody can act on.
+    const effectiveRole =
+      body?.packaging_role !== undefined
+        ? (updates.packaging_role as string | null)
+        : ((current as any).packaging_role ?? null);
+    const effectiveKit =
+      body?.packaging_kit !== undefined
+        ? (updates.packaging_kit as string | null)
+        : ((current as any).packaging_kit ?? null);
+    if (effectiveRole && !effectiveKit) {
+      return NextResponse.json(
+        { error: "Pick which pizza box kit this piece belongs to." },
+        { status: 400 }
+      );
+    }
 
     const updateItem = (payload: Record<string, unknown>, cols: string) =>
       supabaseAdmin.from("marketing_inventory_items").update(payload).eq("id", id).select(cols).single();
 
     let { data: row, error } = await updateItem(updates, ITEM_COLS);
-    if (isMissingPotmColumn(error)) {
-      ({ data: row, error } = await updateItem(withoutPotm(updates), ITEM_COLS_BASE));
+    if (isMissingLaterColumn(error)) {
+      ({ data: row, error } = await updateItem(withoutLaterCols(updates), ITEM_COLS_BASE));
     }
     if (error || !row) {
       if (isPackagingRoleConflict(error)) {
         return NextResponse.json(
-          { error: "Another item is already set as that packaging pool. Clear it there first." },
+          { error: "Another item is already set as that piece of that kit. Clear it there first." },
           { status: 409 }
         );
       }

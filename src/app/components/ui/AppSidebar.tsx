@@ -14,7 +14,11 @@ const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 // /docs/* is the full-screen document viewer. The sidebar is fixed/z-40, so if
 // it rendered here it would sit on top of the viewer header and swallow clicks
 // on the in-header "Back" button.
-const HIDE_PREFIXES = ["/auth", "/docs"];
+// /grab/* is the PUBLIC marketing-aisle page, opened by scanning a QR code
+// on a shelf. Whoever is holding the phone may have no account at all, so
+// every piece of app chrome on it is either a dead end or a way out of the
+// one thing they came to do.
+const HIDE_PREFIXES = ["/auth", "/docs", "/grab"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;
