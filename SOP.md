@@ -165,6 +165,14 @@ So if a rep in Ohio says "nobody contacted my customer," check *both* the notifi
 
 Marketing orders notify a **per-region manager**, not the inside rep directly. Each region has its own auto-created category named `marketing_order_region:<rep id>`. Assign the right manager to each one in the Notifications page. This is deliberate — orders from an outside rep flow to the manager who owns that region's fulfillment.
 
+### Two notifications that don't go to a category
+
+Both of these go to a *person* rather than a notification category, so there's nothing to assign — they work as soon as that person has an email address on their profile (and a subscribed device, for the push).
+
+**Shipped → the rep who placed it.** Moving an order to **Shipped** emails and pushes the rep who submitted it, asking them to mark it received when it arrives. Their order then shows a **Mark as received** button, which is what closes the order out — nobody at Anchor can see the box land, so without that step the order sits in Shipped forever. Because reps now own the *fulfilled* step, the **Inventory used** picker appears when you move an order to **Shipped** as well as Fulfilled; record what left the shelf at whichever step you actually pack it.
+
+**Needed by tomorrow → whoever the order is assigned to.** A job runs every morning (13:00 UTC / 9am ET) and nudges the assignee about orders due the next day, so a date doesn't pass unnoticed. Each order is nudged **once** — if it's already moved on, update its status and it won't come back. Orders that are already overdue (up to 30 days) get the same one-time nudge, so nothing slips through on a day the job doesn't run. An order with **nobody assigned** goes to the *Marketing order status* category instead, because otherwise no one would hear about it — which is the argument for assigning orders as they come in.
+
 ---
 
 ## Page 6 — Consults (RECs): the triage queue
@@ -276,6 +284,14 @@ If either is missing you'll get a message telling you which, rather than the que
 There's a public, no-login QR code (`/grab/<token>`) you can print and stick on a shelf. Someone scans it, enters their name and email once, sets quantities on any number of items, and takes them in one tap. The pickup **decrements stock automatically** and notifies the assigned recipient.
 
 Three things must be true for it to work: the QR token must be generated, a notification recipient must be assigned, and it must be served from a domain that doesn't sit behind SSO — a login wall defeats the entire point.
+
+**Pizza boxes.** There's one kit per anchor series — 2000, 3000 and 5000 (the 5000 hasn't launched, so nothing is set up for it yet). Any sample ticked as *Offer a pizza box at pickup* asks, once a quantity is set, whether these are **for a pizza box** — and if so, which pieces are needed: the box, the plastic overlay, the under-anchor insert, and the foldable over-anchor insert. All four start ticked (a complete box needs all of them); untick whatever they already have. Each ticked piece comes off that series' own count, so a 3400 sample can't quietly spend 2000 Series boxes. The anchor is the sample they're already taking.
+
+A sample knows its series from the **Pizza box kit** field in the item editor, and the aisle uses it without asking. A sample with no kit set asks *which pizza box?* first, so it still can't guess.
+
+Each piece is a normal inventory item tagged with a **pizza box kit** plus a **packaging stock role** in the item editor, which is what gives it a photo, a count and a low-stock alert. The **Pizza box kits** card at the top of the Items tab has a tab per series showing its four pieces side by side, with **+ / −** to add or subtract on the spot and **Edit** for the photo or an exact count. A piece showing *Not set up* isn't tagged yet — until it is, picking it at the aisle subtracts from nothing, and a kit with no pieces at all isn't offered at the aisle. That's how the 5000 Series turns on: set its pieces up here and it appears.
+
+**Returns.** The same QR has a **Return items** tab. Someone enters the email they used, taps *Find what I have out*, and gets their pickups from the last six months with anything still outstanding. They set how many are coming back and untick any pizza-box pieces they used up — only ticked pieces go back, and only onto the series they came off. Returned units go straight back into stock, the pickup log shows how much of each pickup came back, and the return is announced on the same **Marketing aisle pickup** channel as a pickup (no extra recipient to assign).
 
 ---
 

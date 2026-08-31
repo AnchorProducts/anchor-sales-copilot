@@ -35,7 +35,7 @@ Roles live on `profiles` (`role` + `user_type`). Profiles auto-create on first d
 | `/reset` | Set new password |
 | `/signup` | Listed in middleware `PUBLIC_PATHS` — no `page.tsx` (handled on `/`) |
 | `/auth/callback` | Magic-link / OAuth callback (route handler) |
-| `/grab/[token]` | **Public, no login** — marketing aisle QR pickup. Self-report items taken; decrements stock and notifies. |
+| `/grab/[token]` | **Public, no login** — marketing aisle QR. **Take**: self-report items taken (decrements stock, draws down the chosen pieces of that anchor series' pizza-box kit, notifies). **Return**: look up what you still have out by email and put the unused part back. |
 
 ---
 
@@ -154,6 +154,7 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 - `POST /api/commission`
 - `POST /api/notable-projects`
 - `GET/POST /api/marketing-orders` · `PATCH` (status) · `/api/marketing-orders/[id]/messages` · `/[id]/activity` · `/unread`
+- `GET /api/marketing-orders/reminders` — daily cron (13:00 UTC), guarded by `CRON_SECRET`: notifies the assignee of orders needed tomorrow (or already overdue, within 30 days) that haven't been reminded yet; unassigned ones go to the `marketing_order_status` channel. Stamps `marketing_orders.needed_by_reminder_at` so each order is nudged once.
 - `POST /api/fm-intake` · `GET/PATCH/DELETE /api/fm-intake/[id]`
   - `GET` returns `netsuiteConfigured` + `assigned_rep_name`. `PATCH` accepts `assigned_rep_user_id` (derives `status`) and `review_notes`; admin-only. `DELETE` is admin-only and removes the row plus its `knowledge` files.
 - `POST /api/support` · `/api/support/[id]` (reply)
@@ -162,6 +163,7 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 ### Inventory
 - `GET/POST /api/inventory` · `/api/inventory/[id]/image` · `/api/inventory/checkouts` · `/api/inventory/grabs` · `/api/inventory/aisle-qr`
 - `GET/POST /api/public/grab` — the no-login aisle pickup (token-gated)
+- `GET/POST /api/public/grab/return` — the no-login aisle return: outstanding pickups by email, and putting units + unused pizza-box pieces back (token-gated)
 
 ### Assets / Uploads
 - `POST /api/assets/upload-images`, `/api/internal/asset-reviews/upload`, `/api/internal-assets/rep-agreements/upload`
@@ -186,6 +188,7 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 ### Analytics / System
 - `POST /api/user-events`, `GET /api/user-events/most-used`
 - `GET /api/reports/weekly` — Friday cron (Resend + prune), guarded by `CRON_SECRET`
+- `GET /api/marketing-orders/reminders` — daily cron, guarded by `CRON_SECRET` (see Marketing Orders above)
 - `GET /api/sales-reps/by-state`, `/api/health`, `/api/status`, `/api/geocode`
 
 ---
@@ -235,6 +238,8 @@ Two channels, unified by a **"tool" (event category)** registry (`src/lib/push/t
 | E13 | Weekly analytics (cron) | `weekly_report` tool / `WEEKLY_REPORT_TO` (2 PDFs) | `Anchor Sales Co-Pilot — Weekly Analytics …` |
 | E14 | Document replaced | `document_replaced` tool — sent from the API route, **not** a DB trigger | `Document replaced — {file}` |
 | E15 | Training digest (daily edge fn) | env `ADMIN_ALERT_EMAILS`; from `onboarding@resend.dev` | `Anchor Co-Pilot digest: {N} corrections, {M} low ratings` |
+| E16 | Marketing order shipped | the rep who placed it (push + email) | `Your marketing order has shipped — …` |
+| E17 | Marketing order needed tomorrow (cron) | the assignee (push + email); `marketing_order_status` if unassigned | `Needed tomorrow — marketing order #…` |
 
 _NetSuite lead sync sends no notification — it only writes sync status back to the lead._
 
@@ -298,7 +303,7 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 - **`fm_intake_submissions`** — Universal Rooftop Equipment Intake. Contact/project fields, `equipment[]`, `payload` jsonb (buildings, HVAC, pipe stacks), `attachments` jsonb (in `knowledge`), `review_notes`, `reviewed_by/at`, `state`/`region_code` (territory scoping). `status` is **`new|assigned`** and `assigned_rep_user_id` FK drives it (20260729_000001). Also carries the five `netsuite_*` columns mirroring `leads` (20260729_000002) — the push is **not wired for intakes**, the columns exist so the shared panel can show real state once it is. RLS: admin read.
 
 ### Marketing Orders
-- **`marketing_orders`** — `created_by` FK, submitter snapshot, `categories[]`, `items`, `quantity`, `ship_to`, `needed_by`, `status` (`new|processing|shipped|fulfilled|delayed|cancelled`), `projected_ship_date`, `delay_notes`, `updated_by`, `last_message_at`.
+- **`marketing_orders`** — `created_by` FK, submitter snapshot, `categories[]`, `items`, `quantity`, `ship_to`, `needed_by`, `status` (`new|processing|shipped|fulfilled|delayed|cancelled`), `projected_ship_date`, `delay_notes`, `updated_by`, `last_message_at`. Reminder column added by 20260831_000002: `needed_by_reminder_at` — when the "needed by tomorrow" nudge went to the assignee, null until it has; it's what stops the daily cron repeating itself.
 - **`marketing_order_messages`** — per-order chat. `order_id` FK, `author_id`, `author_role`, `body`, `attachments` jsonb (in `knowledge`). Trigger bumps parent `last_message_at`.
 - **`marketing_order_reads`** — per-user read state (unread badge).
 - **`marketing_order_activity`** — attributed status-change audit log (admin/anchor_rep read).
@@ -331,7 +336,15 @@ Roles in RLS: `admin`, `anchor_rep`, `external_rep`. Most writes go through serv
 
 ### Marketing aisle grab
 - **`marketing_grab_config`** — single row. `token`, `enabled`, `updated_by/at`.
-- **`marketing_item_grabs`** — public pickup log. `item_id` FK, `item_name`, `grabbed_by_name`, `grabbed_by_email`, `quantity`, `ip`.
+- **`marketing_item_grabs`** — public pickup log. `item_id` FK, `item_name`, `grabbed_by_name`, `grabbed_by_email`, `quantity`, `ip`. Kit columns added by 20260831_000001: `components text[]` (which pizza-box pieces went out with the line), `packaging_kit` (which anchor series they came from) and `quantity_returned` (how much has come back; `quantity - quantity_returned` is what that person still holds). The legacy `pizza_box` / `plastic_overlay` booleans are kept in step with `components`.
+- **`marketing_item_returns`** — public return log (20260831_000001). `grab_id` FK, `item_id` FK, `item_name`, `quantity`, `components text[]`, `packaging_kit`, `returned_by_name/email`, `ip`.
+
+### Pizza box kits
+A pizza box is five physical pieces: the anchor (the sample item itself) plus four packaging pieces — and there is a full set per anchor series (**2000**, **3000**, **5000**; the 5000 hasn't launched). Each piece is an ordinary `marketing_inventory_items` row addressed by the PAIR `packaging_kit` + `packaging_role` — role being `pizza_box` (the box), `overlay`, `insert_under`, `insert_over` (foldable). One item per (kit, role), enforced by a partial unique index, so each piece carries its own photo, count, low-stock threshold and restock.
+
+`packaging_kit` means two related things depending on the row: on a packaging piece it's the kit that piece belongs to; on a sample it's the kit that sample's box comes from. `marketing_inventory_items.pizza_box` means "this sample is OFFERED with a box" — the flag that makes the aisle ask "are these for a pizza box?". Kit keys and labels live in `PIZZA_BOX_KITS` (`src/lib/inventory.ts`); a kit with no pieces set up isn't offered at the aisle at all, which is how the unlaunched 5000 Series stays hidden without a switch.
+
+Orders: `marketing_orders.overlay_units` is the order's overlay total and `overlay_kits jsonb` (20260831_000001) is that total split by series (`{"2000": 12, "3000": 4}`), computed server-side on submit — each series has its own overlay item, so the total alone doesn't say which count to pull from.
 
 ### Notifications & Settings
 - **`notification_settings`** — single row `id=1`. `commission_recipient_email`, `weekly_report_emails[]`, `marketing_orders_recipients` jsonb, `notable_project_emails[]`, `support_emails[]`. _(Largely superseded by the tool system.)_
@@ -375,7 +388,7 @@ No public buckets — all access via server-side `createSignedUrl` / `download` 
 | **Resend** | All transactional email |
 | **web-push (VAPID)** | Browser push notifications |
 | **NetSuite** | CRM sync (OAuth 1.0 TBA RESTlet) — per-rep manual/automatic. **Not commissioned**: gated on `isNetSuiteConfigured()` (all six `NETSUITE_*` vars). Unconfigured → greyed "Coming soon" panel + 503 from the sync route. Consults only; intakes render the panel read-only. |
-| **Vercel** | Hosting + cron (Friday 17:00 UTC → `/api/reports/weekly`), two deploys (internal/external) |
+| **Vercel** | Hosting + crons (Friday 17:00 UTC → `/api/reports/weekly`; daily 13:00 UTC → `/api/marketing-orders/reminders`), two deploys (internal/external) |
 | **PWA** | `next-pwa` service worker (`public/sw.js`), separate internal/external icons + manifest |
 
 ### Supabase edge functions

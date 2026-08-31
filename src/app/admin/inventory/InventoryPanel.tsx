@@ -15,8 +15,16 @@ import {
   isTradeshowCategory,
   inventoryCategoryLabel,
   formatUnitCost,
+  describeComponents,
+  findKitPiece,
+  packagingKitLabel,
+  packagingRoleShort,
+  PIZZA_BOX_COMPONENTS,
+  PIZZA_BOX_KITS,
   type InventoryItem,
   type ItemCheckout,
+  type PackagingKit,
+  type PackagingRole,
 } from "@/lib/inventory";
 
 function fmtDate(s: string | null) {
@@ -62,7 +70,10 @@ type ItemDraft = {
   // item keeps routing to its own marketing contact — see the order form's
   // Product of the Month chip.
   product_of_month: boolean;
-  packaging_role: string; // "" | "pizza_box" | "overlay"
+  packaging_role: string; // "" | one of PACKAGING_ROLES
+  // Which pizza box kit: the series a sample's box comes from, or the kit a
+  // packaging piece belongs to. Same field, both meanings — see lib/inventory.
+  packaging_kit: string; // "" | "2000" | "3000" | "5000"
 };
 
 const EMPTY_DRAFT: ItemDraft = {
@@ -79,6 +90,7 @@ const EMPTY_DRAFT: ItemDraft = {
   plastic_overlay: false,
   product_of_month: false,
   packaging_role: "",
+  packaging_kit: "",
 };
 
 export default function AdminInventoryPage({
@@ -96,6 +108,7 @@ export default function AdminInventoryPage({
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [checkouts, setCheckouts] = useState<ItemCheckout[]>([]);
   const [grabs, setGrabs] = useState<GrabRow[]>([]);
+  const [returns, setReturns] = useState<ReturnRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -130,7 +143,10 @@ export default function AdminInventoryPage({
     const coJson = await coRes.json().catch(() => null);
     if (coRes.ok) setCheckouts(coJson?.items || []);
     const grabJson = await grabRes.json().catch(() => null);
-    if (grabRes.ok) setGrabs(grabJson?.items || []);
+    if (grabRes.ok) {
+      setGrabs(grabJson?.items || []);
+      setReturns(grabJson?.returns || []);
+    }
   }, []);
 
   useEffect(() => {
@@ -204,6 +220,7 @@ export default function AdminInventoryPage({
       plastic_overlay: !!it.plastic_overlay,
       product_of_month: !!it.product_of_month,
       packaging_role: it.packaging_role || "",
+      packaging_kit: it.packaging_kit || "",
     });
   }
 
@@ -231,6 +248,7 @@ export default function AdminInventoryPage({
         plastic_overlay: itemModal.plastic_overlay,
         product_of_month: itemModal.product_of_month,
         packaging_role: itemModal.packaging_role || null,
+        packaging_kit: itemModal.packaging_kit || null,
       };
       const res = await fetch("/api/inventory", {
         method: itemModal.id ? "PATCH" : "POST",
@@ -455,6 +473,65 @@ export default function AdminInventoryPage({
     }
   }
 
+  // ── Pizza-box kits ──────────────────────────────────────────────────────────
+  //
+  // One kit per anchor series, each of four packaging pieces, looked up by the
+  // (kit, role) pair. A missing piece is as important to show as a stocked one:
+  // until an item is tagged with that pair, the aisle can't subtract it and the
+  // count silently never moves.
+  const kits = useMemo(
+    () =>
+      PIZZA_BOX_KITS.map((k) => ({
+        ...k,
+        pieces: PIZZA_BOX_COMPONENTS.map((c) => ({
+          ...c,
+          item: findKitPiece(items, k.key, c.key),
+        })),
+      })),
+    [items]
+  );
+
+  // Add or subtract units on a piece in place — the whole point of the kit card
+  // is that restocking a stack of boxes shouldn't mean opening the item editor.
+  // Never below zero: a negative count is a data error, not a shortage.
+  async function adjustStock(it: InventoryItem, delta: number) {
+    const next = Math.max(0, it.quantity_available + delta);
+    if (next === it.quantity_available) return;
+    setBusy(true);
+    setLoadErr(null);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, quantity_available: next }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setLoadErr(json?.error || "Failed to update stock.");
+        return;
+      }
+      await loadAll();
+    } catch (e: any) {
+      setLoadErr(e?.message || "Failed to update stock.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Start a new item already tagged as the kit piece that's missing, named the
+  // way the seeded pieces are so a hand-made one lines up with them.
+  function openCreatePiece(kit: PackagingKit, role: PackagingRole, label: string) {
+    setModalErr(null);
+    setItemFile(null);
+    setItemModal({
+      ...EMPTY_DRAFT,
+      name: `${packagingKitLabel(kit)} — ${label}`,
+      category: "samples",
+      packaging_role: role,
+      packaging_kit: kit,
+    });
+  }
+
   const shell = (
     <>
       <div className={embedded ? "pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
@@ -559,6 +636,13 @@ export default function AdminInventoryPage({
                     </span>
                   )}
                 </div>
+                <PizzaBoxKits
+                  kits={kits}
+                  onAdjust={adjustStock}
+                  onEdit={openEdit}
+                  onCreate={openCreatePiece}
+                  busy={busy}
+                />
                 <ItemsList
                   items={filteredItems}
                   onEdit={openEdit}
@@ -573,7 +657,7 @@ export default function AdminInventoryPage({
             ) : tab === "checkouts" ? (
               <CheckoutsList checkouts={checkouts} onCheckin={openCheckin} busy={busy} />
             ) : (
-              <PickupsList grabs={grabs} />
+              <PickupsList grabs={grabs} returns={returns} />
             )}
           </>
         )}
@@ -715,20 +799,52 @@ export default function AdminInventoryPage({
                   />
                   <span>Product of the Month — show under that chip on the order form</span>
                 </label>
-                <label className="mt-2 block text-sm">
-                  <span className="font-medium">Packaging stock role</span>
-                  <Select
-                    value={itemModal.packaging_role}
-                    onChange={(e) => setItemModal({ ...itemModal, packaging_role: e.target.value })}
-                  >
-                    <option value="">Not a packaging pool</option>
-                    <option value="pizza_box">This item IS the pizza-box stock</option>
-                    <option value="overlay">This item IS the plastic-overlay stock</option>
-                  </Select>
-                  <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
-                    Set one item as each pool; choosing that packaging at pickup subtracts from it.
-                  </span>
-                </label>
+                <div className="mt-2 grid gap-2 border-t border-[var(--border-default)] pt-2">
+                  <label className="block text-sm">
+                    <span className="font-medium">Pizza box kit</span>
+                    <Select
+                      value={itemModal.packaging_kit}
+                      onChange={(e) => setItemModal({ ...itemModal, packaging_kit: e.target.value })}
+                    >
+                      <option value="">—</option>
+                      {PIZZA_BOX_KITS.map((k) => (
+                        <option key={k.key} value={k.key}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
+                      There&apos;s one kit per anchor series. On a sample offered with a box, this is
+                      the series its box comes from; on a packaging piece below, the kit the piece
+                      belongs to.
+                    </span>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="font-medium">Packaging stock role</span>
+                    <Select
+                      value={itemModal.packaging_role}
+                      onChange={(e) => setItemModal({ ...itemModal, packaging_role: e.target.value })}
+                    >
+                      <option value="">Not a packaging piece</option>
+                      {PIZZA_BOX_COMPONENTS.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          This item IS {c.adminLabel}
+                        </option>
+                      ))}
+                    </Select>
+                    <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
+                      A pizza box is five pieces: the anchor, the box, the plastic overlay and the two
+                      inserts. Set one item as each piece of each kit — picking that piece at the
+                      aisle subtracts from it, so every piece keeps its own photo, count and
+                      low-stock alert.
+                    </span>
+                    {itemModal.packaging_role && !itemModal.packaging_kit && (
+                      <span className="mt-1 block text-xs font-semibold text-amber-700">
+                        Pick a kit above — a piece with no kit can&apos;t be found at the aisle.
+                      </span>
+                    )}
+                  </label>
+                </div>
               </div>
 
               <label className="block text-sm">
@@ -1056,7 +1172,12 @@ function ItemsList({
                   )}
                   {it.packaging_role && (
                     <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
-                      {it.packaging_role === "pizza_box" ? "Pizza-box pool" : "Overlay pool"}
+                      {packagingKitLabel(it.packaging_kit)} {packagingRoleShort(it.packaging_role).toLowerCase()}
+                    </span>
+                  )}
+                  {!it.packaging_role && it.packaging_kit && it.pizza_box && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
+                      {packagingKitLabel(it.packaging_kit)} kit
                     </span>
                   )}
                 </div>
@@ -1145,9 +1266,27 @@ type GrabRow = {
   grabbed_by_name: string;
   grabbed_by_email: string;
   quantity: number;
+  // Pizza-box pieces that went out with this pickup, in assembly order, and the
+  // series they came from.
+  components?: string[];
+  packaging_kit?: string | null;
+  quantity_returned?: number;
+  outstanding?: number;
   pizza_box?: boolean;
   plastic_overlay?: boolean;
   product_of_month?: boolean;
+  created_at: string;
+};
+
+type ReturnRow = {
+  id: string;
+  grab_id: string | null;
+  item_name: string;
+  quantity: number;
+  components?: string[];
+  packaging_kit?: string | null;
+  returned_by_name: string;
+  returned_by_email: string;
   created_at: string;
 };
 
@@ -1621,8 +1760,170 @@ function ItemQrModal({
   );
 }
 
-function PickupsList({ grabs }: { grabs: GrabRow[] }) {
-  if (grabs.length === 0) {
+type KitPieceRow = { key: PackagingRole; label: string; item: InventoryItem | null };
+type KitRow = { key: PackagingKit; label: string; preLaunch?: boolean; pieces: KitPieceRow[] };
+
+// The pizza-box kits: one per anchor series, each of four packaging pieces, each
+// piece an ordinary inventory item tagged with its (kit, role) pair. Surfaced at
+// the top of the Items tab because the pieces are consumed together and run out
+// apart — one card is where you see that 2000 Series boxes are fine and the 3000
+// Series over-anchor inserts are down to nine. A piece with no item behind it is
+// called out too: until it's tagged, picking it at the aisle subtracts from
+// nothing. A kit with no pieces at all is one nobody can pick from — which is
+// how the unlaunched 5000 Series stays out of the aisle without a switch.
+function PizzaBoxKits({
+  kits,
+  onAdjust,
+  onEdit,
+  onCreate,
+  busy,
+}: {
+  kits: KitRow[];
+  onAdjust: (it: InventoryItem, delta: number) => void;
+  onEdit: (it: InventoryItem) => void;
+  onCreate: (kit: PackagingKit, role: PackagingRole, label: string) => void;
+  busy: boolean;
+}) {
+  const [openKit, setOpenKit] = useState<PackagingKit>(kits[0]?.key || "2000");
+  const active = kits.find((k) => k.key === openKit) || kits[0];
+  if (!active) return null;
+  const stocked = active.pieces.filter((p) => p.item).length;
+
+  return (
+    <Card className="mb-3 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-bold text-[var(--anchor-deep)]">🍕 Pizza box kits</h2>
+        <span className="text-xs text-[var(--anchor-gray)]">
+          One kit per anchor series — the anchor + four pieces. Taking a sample “for a pizza box” at
+          the aisle subtracts that series’ pieces.
+        </span>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {kits.map((k) => {
+          const count = k.pieces.filter((p) => p.item).length;
+          return (
+            <button
+              key={k.key}
+              type="button"
+              onClick={() => setOpenKit(k.key)}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
+                k.key === active.key
+                  ? "bg-[var(--anchor-green)] text-white"
+                  : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+              }`}
+            >
+              {k.label}
+              <span className={k.key === active.key ? "ml-1.5 opacity-80" : "ml-1.5 text-[var(--anchor-gray)]"}>
+                {count}/{k.pieces.length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {stocked === 0 && (
+        <p className="mt-2 text-xs text-amber-700">
+          {active.preLaunch
+            ? `The ${active.label} hasn’t launched — nothing is set up for it yet. Set its pieces up here when it does, and the aisle will start offering it.`
+            : `No ${active.label} pieces set up yet. Until they are, the aisle can’t offer this kit.`}
+        </p>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {active.pieces.map((piece) => {
+          const it = piece.item;
+          return (
+            <div
+              key={piece.key}
+              className="flex items-center gap-3 rounded-xl border border-[var(--border-default)] p-2"
+            >
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                {it?.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--anchor-gray)]">
+                    No photo
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-[var(--anchor-deep)]">{piece.label}</div>
+                {it ? (
+                  <>
+                    <div className="truncate text-[11px] text-[var(--anchor-gray)]">{it.name}</div>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-[var(--anchor-deep)]">
+                        {it.quantity_available}
+                      </span>
+                      <span className="text-[11px] text-[var(--anchor-gray)]">in stock</span>
+                      {it.low_stock && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                          Low
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[11px] text-amber-700">
+                    Not set up — the aisle can’t count this piece yet.
+                  </div>
+                )}
+              </div>
+              {it ? (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Subtract one ${active.label} ${piece.label}`}
+                    title="Subtract one"
+                    onClick={() => onAdjust(it, -1)}
+                    disabled={busy || it.quantity_available <= 0}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Add one ${active.label} ${piece.label}`}
+                    title="Add one"
+                    onClick={() => onAdjust(it, 1)}
+                    disabled={busy}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(it)}
+                    disabled={busy}
+                    className="px-1 text-[11px] font-semibold text-[var(--anchor-green)] underline disabled:opacity-40"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={() => onCreate(active.key, piece.key, piece.label)}
+                >
+                  Set up
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// The aisle log, both directions: what went out (and how much of it has come
+// back) above, drop-offs below.
+function PickupsList({ grabs, returns }: { grabs: GrabRow[]; returns: ReturnRow[] }) {
+  if (grabs.length === 0 && returns.length === 0) {
     return (
       <Card className="p-6 text-sm text-[var(--anchor-gray)]">
         No aisle pickups yet. Print the aisle QR (top right) and post it in the marketing aisle.
@@ -1630,25 +1931,73 @@ function PickupsList({ grabs }: { grabs: GrabRow[] }) {
     );
   }
   return (
-    <div className="grid gap-2">
-      {grabs.map((g) => (
-        <Card key={g.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-          <div className="min-w-0">
-            <p className="text-sm">
-              <strong>{g.quantity}</strong> × <strong>{g.item_name}</strong>
-              {(g.pizza_box || g.plastic_overlay) && (
-                <span className="ml-2 text-xs text-[var(--anchor-gray)]">
-                  + {[g.pizza_box ? "pizza box" : "", g.plastic_overlay ? "overlay" : ""].filter(Boolean).join(" + ")}
-                </span>
-              )}
-            </p>
-            <p className="text-xs text-[var(--anchor-gray)]">
-              {g.grabbed_by_name} · {g.grabbed_by_email}
-            </p>
+    <div className="grid gap-4">
+      <div className="grid gap-2">
+        {grabs.map((g) => {
+          const series = packagingKitLabel(g.packaging_kit);
+          const pieces = describeComponents(g.components || []);
+          const back = g.quantity_returned || 0;
+          return (
+            <Card key={g.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+              <div className="min-w-0">
+                <p className="text-sm">
+                  <strong>{g.quantity}</strong> × <strong>{g.item_name}</strong>
+                  {pieces && (
+                    <span className="ml-2 text-xs text-[var(--anchor-gray)]">
+                      + {series ? `${series} ` : ""}{pieces}
+                    </span>
+                  )}
+                  {back > 0 && (
+                    <span
+                      className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        back >= g.quantity ? "bg-[var(--surface-strong)] text-[var(--anchor-gray)]" : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {back >= g.quantity ? "All returned" : `${back} returned`}
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-[var(--anchor-gray)]">
+                  {g.grabbed_by_name} · {g.grabbed_by_email}
+                </p>
+              </div>
+              <span className="text-xs text-[var(--anchor-gray)]">{fmtDateTime(g.created_at)}</span>
+            </Card>
+          );
+        })}
+      </div>
+
+      {returns.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+            Returned to the aisle
+          </h3>
+          <div className="grid gap-2">
+            {returns.map((r) => {
+              const series = packagingKitLabel(r.packaging_kit);
+              const pieces = describeComponents(r.components || []);
+              return (
+                <Card key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-green-200 bg-green-50/60 p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm">
+                      <strong>{r.quantity}</strong> × <strong>{r.item_name}</strong>
+                      {pieces && (
+                        <span className="ml-2 text-xs text-[var(--anchor-gray)]">
+                          + {series ? `${series} ` : ""}{pieces}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-[var(--anchor-gray)]">
+                      {r.returned_by_name} · {r.returned_by_email}
+                    </p>
+                  </div>
+                  <span className="text-xs text-[var(--anchor-gray)]">{fmtDateTime(r.created_at)}</span>
+                </Card>
+              );
+            })}
           </div>
-          <span className="text-xs text-[var(--anchor-gray)]">{fmtDateTime(g.created_at)}</span>
-        </Card>
-      ))}
+        </div>
+      )}
     </div>
   );
 }

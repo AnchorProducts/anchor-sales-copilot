@@ -14,7 +14,10 @@ import { startTutorial, tutorialDoneKey, TUTORIAL_PENDING_KEY } from "@/app/comp
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
 // /docs/* is the full-screen document viewer — this floating pill would overlap
 // the viewer's header.
-const HIDE_PREFIXES = ["/auth", "/docs"];
+// /grab/* is the PUBLIC marketing-aisle page. Role has no bearing on it — it
+// works without an account at all — so the switcher would do nothing there
+// except sit on top of the heading.
+const HIDE_PREFIXES = ["/auth", "/docs", "/grab"];
 
 function shouldHide(pathname: string) {
   if (HIDE_EXACT.has(pathname)) return true;

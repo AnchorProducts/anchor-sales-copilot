@@ -16,7 +16,11 @@ import { usePathname, useRouter } from "next/navigation";
 const HIDE_EXACT = new Set(["/", "/dashboard", "/signup", "/forgot", "/reset"]);
 // /docs/* is a full-screen document viewer with its own in-header Back button —
 // the floating pill would be a redundant second "Back".
-const HIDE_PREFIXES = ["/auth", "/docs"];
+// /grab/* is the PUBLIC marketing-aisle page, opened by scanning a QR code
+// on a shelf. Whoever is holding the phone may have no account at all, so
+// every piece of app chrome on it is either a dead end or a way out of the
+// one thing they came to do.
+const HIDE_PREFIXES = ["/auth", "/docs", "/grab"];
 
 export function MobileBackButton() {
   const pathname = usePathname() || "";

@@ -20,7 +20,11 @@ import {
 //   • FAQ              — common questions
 // Replaces the separate walkthrough + support floating buttons.
 const HIDE_EXACT = new Set(["/", "/signup", "/forgot", "/reset"]);
-const HIDE_PREFIXES = ["/auth", "/docs"];
+// /grab/* is the PUBLIC marketing-aisle page, opened by scanning a QR code
+// on a shelf. Whoever is holding the phone may have no account at all, so
+// every piece of app chrome on it is either a dead end or a way out of the
+// one thing they came to do.
+const HIDE_PREFIXES = ["/auth", "/docs", "/grab"];
 
 // Is this the installed home-screen app rather than a browser tab? iOS Safari
 // answers with its own non-standard flag instead of the display-mode query.
@@ -121,6 +125,9 @@ export function HelpMenuButton() {
 
       <div
         ref={floatRef}
+        // Tagged so globals.css can stand it down while a dialog is open — it
+        // outranks the modal overlay and would otherwise float over it.
+        data-help-fab=""
         className={
           "fixed right-4 bottom-24 z-[90] lg:bottom-6 " +
           (covering ? HIDE_WHEN_OVERLAPPING_CLASS : SHOW_WHEN_CLEAR_CLASS)

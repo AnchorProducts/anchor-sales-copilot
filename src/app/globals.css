@@ -531,6 +531,19 @@ input[type="datetime-local"] {
   color: var(--anchor-deep);
 }
 
+/* Floating app chrome stands down while a dialog is open.
+   The mobile dock is fixed at z-index 100 and the help button at z-90, both
+   above .ds-modal-overlay's z-60 — so on a phone they floated over every modal,
+   covering whatever sat at the bottom of it. They're hidden rather than
+   re-stacked because a dialog is a single focused task: the dock navigates away
+   from it, and the help bubble has nothing to say about it. Modal sets
+   data-modal-open on <body> for exactly as long as one is up.
+   `display` is set by a utility class on both, so !important is what wins. */
+body[data-modal-open] nav[data-tutorial="primary-nav"],
+body[data-modal-open] [data-help-fab] {
+  display: none !important;
+}
+
 .ds-modal-overlay {
   position: fixed;
   inset: 0;
