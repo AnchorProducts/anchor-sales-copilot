@@ -8,7 +8,7 @@ import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { OemMatrixTable } from "@/app/components/admin/OemMatrixTable";
 import { MatrixFilterMenu, DAY_OPTIONS, dayLabel } from "@/app/components/admin/MatrixFilterMenu";
-import { PeopleDirectory, type DirectoryPdfTarget } from "@/app/components/admin/PeopleDirectory";
+import { PeopleDirectory, type DirectoryChat, type DirectoryPdfTarget } from "@/app/components/admin/PeopleDirectory";
 import { OemPeopleModal, type OemPerson } from "@/app/components/admin/OemPeopleModal";
 import { UserAnalyticsCharts, buildUserAnalyticsSummary } from "@/app/components/admin/UserAnalyticsCharts";
 // Pure totals/types eager (no jspdf); the PDF generators are dynamically
@@ -315,6 +315,16 @@ export default function AdminAnalyticsPage() {
     });
   }
 
+  // A person's chat threads. Not windowed like the event log: "what has this
+  // rep been asking?" is a question about the whole relationship, and the useful
+  // answer is often the thread from two months ago.
+  async function loadUserChat(profileId: string): Promise<DirectoryChat> {
+    const res = await fetch(`/api/admin/user-chat?userId=${profileId}`, { credentials: "include", cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { conversations: [] };
+    return { conversations: body?.conversations ?? [], truncated: !!body?.truncated };
+  }
+
   // Load a rep/consultant's events in the current window for the inline drill-down.
   async function loadUserEvents(profileId: string): Promise<Array<{ at: string; type: string; detail: string }>> {
     const res = await fetch(`/api/admin/user-events?userId=${profileId}&days=${days}`, { credentials: "include", cache: "no-store" });
@@ -585,6 +595,7 @@ export default function AdminAnalyticsPage() {
                     // dashboard toolbar above.
                     days={days}
                     onLoadEvents={loadUserEvents}
+                    onLoadChat={loadUserChat}
                     onDownloadUserPdf={downloadUserEventLog}
                   />
                 </Card>
