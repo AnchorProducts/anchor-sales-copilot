@@ -1855,7 +1855,14 @@ function PizzaBoxKits({
           return (
             <div
               key={piece.key}
-              className="flex items-center gap-3 rounded-xl border border-[var(--border-default)] p-2"
+              // min-w-0: as a grid item this row defaults to `min-width: auto`,
+              // which floors its track at the row's min-content width — and the
+              // nowrap item name inside contributes its FULL length to that. So
+              // the column grew past the card and the row hung off the right
+              // edge of the phone, taking Edit with it, while the name never
+              // truncated. Zeroing the minimum lets the track take the card's
+              // width and the truncate below do its job.
+              className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2"
             >
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
                 {it?.image_url ? (
