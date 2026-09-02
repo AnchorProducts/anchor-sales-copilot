@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDialogBody, useDialogEscape } from "@/app/components/ui/useDialogBody";
 
 // Only "manufacturer_rep" is single-OEM. Every other type (consultant,
 // contractor, or any custom value) is a multi-OEM, company-keyed contact.
@@ -85,13 +86,10 @@ export function OemContactModal({
     setConfirmDelete(false);
   }, [open, contactId]);
 
-  // Lock body scroll while open.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
+  // Shared hooks rather than a hand-rolled body lock — see PersonEditorModal
+  // for why the mark matters. Escape closes this one now; it never did.
+  useDialogBody(open);
+  useDialogEscape(open, onClose);
 
   if (!open) return null;
 
@@ -186,7 +184,7 @@ export function OemContactModal({
       role="dialog"
       aria-modal="true"
       aria-label={mode === "edit" ? "Edit contact" : "Add contact"}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-lg sm:rounded-2xl">

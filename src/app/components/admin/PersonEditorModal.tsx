@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useDialogBody, useDialogEscape } from "@/app/components/ui/useDialogBody";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import StateMultiSelect from "@/app/components/ui/StateMultiSelect";
 
@@ -92,13 +93,12 @@ export function PersonEditorModal({
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = prev; document.removeEventListener("keydown", onKey); };
-  }, [onClose]);
+  // Shared hooks rather than a hand-rolled body lock: marking <body> is what
+  // stands the floating chrome down, and without it the mobile dock (z-100) and
+  // help bubble (z-90) drew straight over this dialog's footer. This component
+  // is only mounted while open, so the hooks are on for its whole life.
+  useDialogBody(true);
+  useDialogEscape(true, onClose);
 
   const isOem = kind !== "app_user";
   const isConsultant = kind === "consultant";
@@ -226,7 +226,7 @@ export function PersonEditorModal({
       role="dialog"
       aria-modal="true"
       aria-label="Edit person"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:max-w-2xl sm:rounded-3xl">
