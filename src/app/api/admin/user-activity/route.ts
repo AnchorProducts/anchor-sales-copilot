@@ -14,7 +14,8 @@ function parseCategory(value: string | null): ActivityCategory {
 
 // Time window (in days) for the event-driven aggregates. Defaults to 30 so
 // existing callers are unaffected.
-const ALLOWED_DAYS = [7, 14, 30, 90] as const;
+// Matches the oem-matrix endpoint exactly — see the note there.
+const ALLOWED_DAYS = [1, 7, 14, 30, 90] as const;
 function parseDays(value: string | null): number {
   const n = Number(value);
   return (ALLOWED_DAYS as readonly number[]).includes(n) ? n : 30;

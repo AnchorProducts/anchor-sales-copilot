@@ -28,21 +28,16 @@ export const SITE_LIVE_CARD_KEYS = new Set(["portal-access"]);
 
 export const CARDS: AdminCard[] = [
   {
+    // One analytics destination. OEM engagement and internal-user activity were
+    // two cards onto two pages that read the same endpoint; they're panels of
+    // one dashboard now.
     key: "oem-analytics",
-    title: "OEM Analytics",
-    description: "Manufacturer rep & consultant engagement: the OEM matrix, adoption and usage by OEM, with a matrix PDF export.",
+    title: "Analytics",
+    description: "Who's using the app and what they're doing: the OEM adoption matrix, internal and other user activity, and one searchable directory of every person — with PDF exports.",
     badge: "Analytics",
     href: "/admin/analytics",
     icon: "chart",
     featured: true,
-  },
-  {
-    key: "user-analytics",
-    title: "User Analytics",
-    description: "Everyone who isn't an OEM rep or consultant — internal Anchor staff and other signed-up users, with per-user activity PDFs.",
-    badge: "Analytics",
-    href: "/admin/user-analytics",
-    icon: "users",
   },
   {
     key: "users",

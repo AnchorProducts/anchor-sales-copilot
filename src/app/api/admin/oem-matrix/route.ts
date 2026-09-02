@@ -8,10 +8,13 @@ export const dynamic = "force-dynamic";
 
 // Per-manufacturer matrix (Sales reps / Tech reps / Consultants) plus detailed
 // logs of every event and project over a caller-selected time window
-// (?days=1|7|14|30, default 30). Computation lives in lib/analytics/oemMatrixData
+// (?days=1|7|14|30|90, default 30). Computation lives in lib/analytics/oemMatrixData
 // so the weekly report can reuse it.
 
-const ALLOWED_DAYS = [1, 7, 14, 30] as const;
+// Matches the user-activity endpoint exactly: the analytics dashboard drives
+// both from one window control, so a value either endpoint quietly rejected
+// would have it label a 30-day matrix "last 90 days".
+const ALLOWED_DAYS = [1, 7, 14, 30, 90] as const;
 function parseDays(req: Request): number {
   const raw = Number(new URL(req.url).searchParams.get("days"));
   return (ALLOWED_DAYS as readonly number[]).includes(raw) ? raw : 30;

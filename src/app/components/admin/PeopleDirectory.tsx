@@ -140,12 +140,19 @@ export function PeopleDirectory({
   onDays,
   dayOptions,
   onLoadEvents,
+  searchTerm,
 }: {
   appUsers: PeopleAppUser[];
   onDownloadUserPdf: (target: DirectoryPdfTarget) => void;
   // "oem" = OEM contact roster (reps/consultants/contractors); "other" = app
-  // users not on the roster (internal staff + other signed-up users).
-  scope?: "oem" | "other";
+  // users not on the roster (internal staff + other signed-up users); "all" =
+  // everyone, which is what the one analytics dashboard shows. The Contact type
+  // filter still separates them on demand.
+  scope?: "oem" | "other" | "all";
+  // When the page owns the search box — one search bar for the whole dashboard
+  // rather than one per panel — it passes the term in and this stops rendering
+  // its own.
+  searchTerm?: string;
   // Optional time-window control rendered in the Filters menu. The parent owns
   // the window (it re-fetches the windowed activity) — this just changes it.
   days?: number;
@@ -159,7 +166,9 @@ export function PeopleDirectory({
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const [search, setSearch] = useState("");
+  const [ownSearch, setOwnSearch] = useState("");
+  const searchControlled = searchTerm !== undefined;
+  const search = searchControlled ? searchTerm : ownSearch;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [category, setCategory] = useState<string>("all");
   const [manufacturer, setManufacturer] = useState<string>("all");
@@ -255,7 +264,10 @@ export function PeopleDirectory({
 
   // Narrow to the requested scope: OEM roster vs. everyone else.
   const scoped = useMemo(
-    () => people.filter((p) => (scope === "oem" ? p.fromRoster : !p.fromRoster)),
+    () =>
+      scope === "all"
+        ? people
+        : people.filter((p) => (scope === "oem" ? p.fromRoster : !p.fromRoster)),
     [people, scope],
   );
 
@@ -319,14 +331,22 @@ export function PeopleDirectory({
     <div>
       {/* Search + filter toggle */}
       <div className="px-4 py-3 sm:px-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, email, company, OEM…"
-            className="ds-input w-full sm:flex-1"
-          />
+        {/* items-start when the page owns the search: with nothing beside it,
+            a stretched Filters button reads as a full-width primary action. */}
+        <div
+          className={`flex flex-col gap-2 sm:flex-row sm:items-center ${
+            searchControlled ? "items-start sm:justify-end" : ""
+          }`}
+        >
+          {!searchControlled && (
+            <input
+              type="search"
+              value={ownSearch}
+              onChange={(e) => setOwnSearch(e.target.value)}
+              placeholder="Search name, email, company, OEM…"
+              className="ds-input w-full sm:flex-1"
+            />
+          )}
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
