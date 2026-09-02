@@ -710,6 +710,39 @@ FINAL BEHAVIOR
 
 `.trim();
 
+// Both turns of an exchange, written to the conversation's own thread.
+//
+// Timestamps are explicit and one millisecond apart: the two rows are inserted
+// in the same statement, so a created_at default would tie them and the reader
+// (which orders by created_at) could show the answer above the question.
+async function persistTurns(
+  userId: string,
+  conversationId: string,
+  userText: string,
+  assistantText: string
+) {
+  const now = Date.now();
+  const { error } = await supabaseAdmin.from("messages").insert([
+    {
+      user_id: userId,
+      conversation_id: conversationId,
+      role: "user",
+      content: (userText || "").toString(),
+      meta: {},
+      created_at: new Date(now).toISOString(),
+    },
+    {
+      user_id: userId,
+      conversation_id: conversationId,
+      role: "assistant",
+      content: (assistantText || "").toString(),
+      meta: {},
+      created_at: new Date(now + 1).toISOString(),
+    },
+  ]);
+  if (error) console.error("MESSAGE_PERSIST_ERROR:", error);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -977,6 +1010,15 @@ export async function POST(req: Request) {
         // Periodically summarize + extract reusable knowledge (non-blocking)
         maybeSummarizeSession(supabaseAdmin, uid, sid).catch(() => {});
         maybeExtractKnowledge(supabaseAdmin, uid, sid).catch(() => {});
+      }
+      // The user's own thread lives in `messages`, keyed by conversation. The
+      // 2026-02-04 rewrite of this route dropped that insert, and nothing has
+      // written the table since — which quietly broke the chat page's history
+      // restore (it reads this table whenever the local cache is gone) and left
+      // the conversation list pointing at threads with no messages under them.
+      const conversationId = typeof body?.conversationId === "string" ? body.conversationId : null;
+      if (uid && conversationId) {
+        persistTurns(uid, conversationId, lastUser, answer).catch(() => {});
       }
     } catch {
       // non-fatal — never block the response
