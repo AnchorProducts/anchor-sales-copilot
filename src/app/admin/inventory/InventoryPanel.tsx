@@ -233,19 +233,18 @@ export default function AdminInventoryPage({
   const overdueCount = useMemo(() => checkouts.filter((c) => c.overdue).length, [checkouts]);
   const openCount = useMemo(() => checkouts.filter((c) => c.status === "out").length, [checkouts]);
 
-  // Browsing = no search box, no category chip. The kit pieces have a home of
-  // their own in the card above the list, so browsing shouldn't list them a
-  // second time. A search or a filter is a different question — "find me this
-  // thing" — and answering it with nothing because the match happens to be a
-  // kit piece is worse than a repeat, so those search everything and the kit
-  // card steps aside instead.
+  // Browsing = no search box, no category chip, no status filter. The kit card
+  // is a summary, so it only shows while you're browsing; once you've asked a
+  // question, the list is the answer.
   const browsingItems = !itemSearch.trim() && !itemCat && !itemFlag;
 
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
-    const searching = !!q || !!itemCat || !!itemFlag;
     const matched = items.filter((it) => {
-      if (!searching && it.packaging_role) return false;
+      // Kit pieces are ordinary stock and are listed like it. They're each
+      // orderable, pickable at the aisle and countable on their own — hiding
+      // them here because the kit card also shows them made the one surface
+      // that manages stock the only one that pretended they weren't items.
       if (itemCat && it.category !== itemCat) return false;
       if (itemFlag === "low" && !it.low_stock) return false;
       if (itemFlag === "checkout" && !it.checkout_enabled) return false;
@@ -2363,8 +2362,9 @@ function PizzaBoxKits({
       </div>
 
       <p className="mt-2 text-[11px] text-[var(--anchor-gray)]">
-        Pieces are managed here, so they&apos;re kept out of the item list below. Search or pick a
-        category to see them among everything else.
+        Every piece is an ordinary item too — each one is in the list below, orderable on its own
+        and pickable on its own at the aisle. This card is just the quick way to count a whole
+        series at once.
       </p>
       </div>
     </Card>
