@@ -42,6 +42,66 @@ export function resolveCheckoutEnabled(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Where stock lives
+//
+// Location was free text, so "Shelf B3", "shelf b3" and "Warehouse shelf B3"
+// were three different places to anything trying to count what's on a shelf.
+// These are the real ones.
+//
+// The list stays OPEN: "Add a new location" writes whatever's typed, and any
+// location already sitting on an item joins the dropdown the next time one is
+// opened. A new cabinet doesn't need a deploy — it needs one person to type it
+// once.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const INVENTORY_LOCATIONS: string[] = [
+  // Every anchor is on the marketing side.
+  "Marketing aisle",
+  "Upstairs Suite A — island left cabinet",
+  "Upstairs Suite A — island right cabinet",
+  "Upstairs Suite A — marketing closet",
+];
+
+// Printables all live in the island's left cabinet for now, so a new one starts
+// there instead of starting nowhere. A suggestion, not a rule: it only fills a
+// location that's still empty and never overwrites one that's been chosen.
+const DEFAULT_LOCATION_BY_CATEGORY: Record<string, string> = {
+  // "brochures" is the stored key for the Printables category.
+  brochures: "Upstairs Suite A — island left cabinet",
+};
+
+export function defaultLocationForCategory(category: string | null | undefined): string {
+  return (category && DEFAULT_LOCATION_BY_CATEGORY[category]) || "";
+}
+
+// Every location worth offering: the known ones in their own order, then
+// anything already on an item, then the value being edited — so a one-off
+// someone typed last month can't vanish from its own dropdown. Matched
+// case-insensitively so "marketing aisle" doesn't become a second aisle.
+export function locationOptions(
+  items: readonly { location?: string | null }[],
+  current?: string | null
+): string[] {
+  const canonical = new Map<string, string>();
+  for (const l of INVENTORY_LOCATIONS) canonical.set(l.toLowerCase(), l);
+
+  const extras = new Map<string, string>();
+  const add = (v?: string | null) => {
+    const t = (v || "").trim();
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (!canonical.has(k) && !extras.has(k)) extras.set(k, t);
+  };
+  for (const i of items) add(i.location);
+  add(current);
+
+  return [
+    ...canonical.values(),
+    ...[...extras.values()].sort((a, b) => a.localeCompare(b)),
+  ];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Pizza box kits
 //
 // A finished pizza box is five physical pieces, not one: the anchor sample
