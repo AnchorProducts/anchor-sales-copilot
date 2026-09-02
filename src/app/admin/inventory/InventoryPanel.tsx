@@ -723,12 +723,14 @@ export default function AdminInventoryPage({
 
             {tab === "items" ? (
               <>
-                {/* Sticky on a phone. With 84 items, searching again meant
-                    scrolling back to the top of the whole list first; the bar
-                    now rides along. It parks below the floating back pill and
-                    view-as chip (both fixed at the top inset) so it doesn't
-                    slide under them. */}
-                <div className="sticky top-[calc(env(safe-area-inset-top)+48px)] z-30 -mx-4 mb-3 border-b border-[var(--border-default)] bg-[var(--surface-page)]/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+                {/* Deliberately NOT sticky. The top ~52px of a phone viewport
+                    belongs to the floating back pill and view-as chip, so a
+                    pinned bar has to start below them — which leaves a band of
+                    list scrolling past above it, cards sliced off mid-card. It
+                    reads as a rendering fault. Pinning this properly means an
+                    opaque header tall enough to swallow those pills, which is a
+                    bigger change than a search box justifies. */}
+                <div className="mb-3">
                   <div className="flex items-stretch gap-2">
                     <Input
                       className="min-w-0 flex-1"
