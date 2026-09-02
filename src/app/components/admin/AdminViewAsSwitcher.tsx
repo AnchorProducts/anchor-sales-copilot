@@ -108,6 +108,10 @@ export function AdminViewAsSwitcher() {
   return (
     <div
       ref={popoverRef}
+      // Stood down while a dialog is up (globals.css) — same z-60 as the modal
+      // overlay, mounted after it, and previewing another role mid-edit isn't a
+      // thing anyone wants.
+      data-floating-chrome
       // Mobile (default): centered just under the safe-area inset, in the
       // empty zone between the greeting text on the left and the user
       // avatar on the right — clear of the bottom nav, the dashboard's

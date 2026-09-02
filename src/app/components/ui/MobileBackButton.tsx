@@ -42,6 +42,9 @@ export function MobileBackButton() {
       onClick={onClick}
       aria-label="Back"
       title="Back"
+      // Stood down while a dialog is up (globals.css) — the pill ties the modal
+      // overlay's z-60 and, mounted after the page, drew over the top of it.
+      data-floating-chrome
       className="fixed z-[60] flex h-8 items-center gap-0.5 rounded-full border border-white/15 bg-[var(--anchor-deep)] pl-1.5 pr-3 text-white shadow-[0_6px_18px_rgba(0,0,0,0.2)] transition hover:bg-[var(--anchor-green)] active:scale-95 left-[calc(env(safe-area-inset-left)+12px)] top-[calc(env(safe-area-inset-top)+10px)] lg:hidden"
     >
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

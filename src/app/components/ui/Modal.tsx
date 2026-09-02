@@ -16,7 +16,9 @@ export default function Modal({ open, onClose, className, children, ...props }: 
   // While a dialog is up, the page behind it shouldn't scroll away underneath —
   // and the floating app chrome shouldn't sit on top of it. The mobile dock
   // (z-index 100) and help button (z-90) both outrank .ds-modal-overlay (z-60),
-  // so they drew over every modal in the app on a phone. Raising the overlay
+  // and the back pill and view-as switcher tie it but are mounted after it — so
+  // between them they drew over the top AND the bottom of every modal in the
+  // app on a phone. Raising the overlay
   // instead would jump it over the sheets MultiSelect opens at z-110/120, which
   // have to stay on top when one is used inside a dialog. Marking the body is
   // what lets globals.css stand the chrome down for exactly as long as a dialog
