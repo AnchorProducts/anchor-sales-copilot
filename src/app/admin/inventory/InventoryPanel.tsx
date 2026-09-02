@@ -183,9 +183,19 @@ export default function AdminInventoryPage({
   const overdueCount = useMemo(() => checkouts.filter((c) => c.overdue).length, [checkouts]);
   const openCount = useMemo(() => checkouts.filter((c) => c.status === "out").length, [checkouts]);
 
+  // Browsing = no search box, no category chip. The kit pieces have a home of
+  // their own in the card above the list, so browsing shouldn't list them a
+  // second time. A search or a filter is a different question — "find me this
+  // thing" — and answering it with nothing because the match happens to be a
+  // kit piece is worse than a repeat, so those search everything and the kit
+  // card steps aside instead.
+  const browsingItems = !itemSearch.trim() && !itemCat;
+
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
+    const searching = !!q || !!itemCat;
     return items.filter((it) => {
+      if (!searching && it.packaging_role) return false;
       if (itemCat && it.category !== itemCat) return false;
       if (!q) return true;
       return (
@@ -636,13 +646,15 @@ export default function AdminInventoryPage({
                     </span>
                   )}
                 </div>
-                <PizzaBoxKits
-                  kits={kits}
-                  onAdjust={adjustStock}
-                  onEdit={openEdit}
-                  onCreate={openCreatePiece}
-                  busy={busy}
-                />
+                {browsingItems && (
+                  <PizzaBoxKits
+                    kits={kits}
+                    onAdjust={adjustStock}
+                    onEdit={openEdit}
+                    onCreate={openCreatePiece}
+                    busy={busy}
+                  />
+                )}
                 <ItemsList
                   items={filteredItems}
                   onEdit={openEdit}
@@ -717,7 +729,7 @@ export default function AdminInventoryPage({
                   <Input
                     value={itemModal.location}
                     onChange={(e) => setItemModal({ ...itemModal, location: e.target.value })}
-                    placeholder="e.g. Warehouse shelf B3"
+                    placeholder="e.g. Shelf B3"
                   />
                 </label>
                 <label className="block text-sm">
@@ -761,10 +773,11 @@ export default function AdminInventoryPage({
                 {/* Tradeshow stock is loaned out and booked back in, so checkout
                     is on and locked there — the API enforces it either way, and
                     showing it locked beats silently overriding the tick. */}
-                <label className="mt-2 flex items-center gap-2 text-sm">
+                <label className="mt-2 flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={itemModal.checkout_enabled || isTradeshowCategory(itemModal.category)}
+                    className="mt-[3px]"
                     disabled={isTradeshowCategory(itemModal.category)}
                     onChange={(e) => setItemModal({ ...itemModal, checkout_enabled: e.target.checked })}
                   />
@@ -775,26 +788,29 @@ export default function AdminInventoryPage({
                     )}
                   </span>
                 </label>
-                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                <label className="mt-1.5 flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={itemModal.pizza_box}
+                    className="mt-[3px]"
                     onChange={(e) => setItemModal({ ...itemModal, pizza_box: e.target.checked })}
                   />
                   <span>Offer a pizza box at pickup</span>
                 </label>
-                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                <label className="mt-1.5 flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={itemModal.plastic_overlay}
+                    className="mt-[3px]"
                     onChange={(e) => setItemModal({ ...itemModal, plastic_overlay: e.target.checked })}
                   />
                   <span>Offer a plastic overlay at pickup</span>
                 </label>
-                <label className="mt-1.5 flex items-center gap-2 text-sm">
+                <label className="mt-1.5 flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={itemModal.product_of_month}
+                    className="mt-[3px]"
                     onChange={(e) => setItemModal({ ...itemModal, product_of_month: e.target.checked })}
                   />
                   <span>Product of the Month — show under that chip on the order form</span>
@@ -833,10 +849,12 @@ export default function AdminInventoryPage({
                       ))}
                     </Select>
                     <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
-                      A pizza box is five pieces: the anchor, the box, the plastic overlay and the two
-                      inserts. Set one item as each piece of each kit — picking that piece at the
-                      aisle subtracts from it, so every piece keeps its own photo, count and
-                      low-stock alert.
+                      A finished pizza box is five pieces: the anchor, the box, the plastic
+                      overlay and the two inserts. The anchor is the sample being picked and its
+                      own count already moves — so the four above are the ones stocked as pieces.
+                      Set one item as each of them, per kit; picking that piece at the aisle
+                      subtracts from it, so every piece keeps its own photo, count and low-stock
+                      alert.
                     </span>
                     {itemModal.packaging_role && !itemModal.packaging_kit && (
                       <span className="mt-1 block text-xs font-semibold text-amber-700">
@@ -1807,6 +1825,7 @@ function PizzaBoxKits({
               key={k.key}
               type="button"
               onClick={() => setOpenKit(k.key)}
+              title={`${count} of ${k.pieces.length} ${k.label} packaging pieces set up`}
               className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
                 k.key === active.key
                   ? "bg-[var(--anchor-green)] text-white"
@@ -1916,6 +1935,11 @@ function PizzaBoxKits({
           );
         })}
       </div>
+
+      <p className="mt-2 text-[11px] text-[var(--anchor-gray)]">
+        Pieces are managed here, so they&apos;re kept out of the item list below. Search or pick a
+        category to see them among everything else.
+      </p>
     </Card>
   );
 }

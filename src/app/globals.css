@@ -534,13 +534,18 @@ input[type="datetime-local"] {
 /* Floating app chrome stands down while a dialog is open.
    The mobile dock is fixed at z-index 100 and the help button at z-90, both
    above .ds-modal-overlay's z-60 — so on a phone they floated over every modal,
-   covering whatever sat at the bottom of it. They're hidden rather than
-   re-stacked because a dialog is a single focused task: the dock navigates away
-   from it, and the help bubble has nothing to say about it. Modal sets
-   data-modal-open on <body> for exactly as long as one is up.
-   `display` is set by a utility class on both, so !important is what wins. */
+   covering whatever sat at the bottom of it. The back pill and the view-as
+   switcher tie the overlay at z-60 and are mounted after the page in the root
+   layout, so they won on DOM order and covered the TOP of a modal — its title
+   and first field. They're hidden rather than re-stacked because a dialog is a
+   single focused task: the dock and the back pill both navigate away from it,
+   the help bubble has nothing to say about it, and previewing another role
+   mid-edit isn't a thing. Modal sets data-modal-open on <body> for exactly as
+   long as one is up.
+   `display` is set by a utility class on these, so !important is what wins. */
 body[data-modal-open] nav[data-tutorial="primary-nav"],
-body[data-modal-open] [data-help-fab] {
+body[data-modal-open] [data-help-fab],
+body[data-modal-open] [data-floating-chrome] {
   display: none !important;
 }
 
@@ -553,7 +558,13 @@ body[data-modal-open] [data-help-fab] {
      modal's content instead, which let wide modals overflow off-screen on
      mobile. */
   display: flex;
-  align-items: center;
+  /* Centering is `margin: auto` on the panel below, NOT `align-items: center`
+     here. A flex item centered by alignment and taller than the scroll
+     container overflows equally past both edges, and the part above the
+     container's top is unreachable — on a phone that silently ate the top of
+     every long modal (its heading and first field) with no way to scroll up to
+     it. Auto margins center the same way but collapse to zero on the side that
+     overflows, so a tall panel starts at the top and scrolls in full. */
   justify-content: center;
   overflow-y: auto;
   padding: var(--space-3);
@@ -562,6 +573,7 @@ body[data-modal-open] [data-help-fab] {
 }
 
 .ds-modal {
+  margin: auto;
   width: min(100%, 640px);
   /* The overlay centers the modal as a flex item, which defaults to
      `min-width: auto` — a wide/unbreakable child (e.g. a long QR URL) would
