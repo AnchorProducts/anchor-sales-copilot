@@ -13,6 +13,8 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   INVENTORY_CATEGORIES,
+  defaultLocationForCategory,
+  locationOptions,
   isTradeshowCategory,
   inventoryCategoryLabel,
   formatUnitCost,
@@ -117,6 +119,10 @@ const ITEM_SORTS: { key: ItemSort; label: string }[] = [
 // Aisle pickups render a page at a time.
 const PICKUP_PAGE = 20;
 
+// Sentinel for the location dropdown's "add a new one" row. A value no real
+// location can collide with, since a real one is whatever someone types.
+const NEW_LOCATION = "__new_location__";
+
 function sortItems(list: InventoryItem[], by: ItemSort): InventoryItem[] {
   const out = [...list];
   if (by === "name") out.sort((a, b) => a.name.localeCompare(b.name));
@@ -174,6 +180,9 @@ export default function AdminInventoryPage({
   const [itemSort, setItemSort] = useState<ItemSort>("name");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // True while the editor is showing the free-text box for a location that
+  // isn't in the list yet.
+  const [newLocation, setNewLocation] = useState(false);
   // Aisle pickups run to hundreds over time; a phone shouldn't render them all.
   const [pickupLimit, setPickupLimit] = useState(PICKUP_PAGE);
 
@@ -266,15 +275,26 @@ export default function AdminInventoryPage({
   const activeFilters = (itemCat ? 1 : 0) + (itemFlag ? 1 : 0);
   const lowCount = useMemo(() => items.filter((i) => i.low_stock).length, [items]);
 
+  // The known locations plus every one already in use, so a place someone added
+  // by hand is a pick from then on rather than something to retype (and mistype).
+  const locationChoices = useMemo(
+    // Not while the free-text box is open: every keystroke would otherwise show
+    // up as a half-typed option in the list behind it.
+    () => locationOptions(items, newLocation ? null : itemModal?.location),
+    [items, itemModal?.location, newLocation]
+  );
+
   // ── Item create/edit ───────────────────────────────────────────────────────
   function openCreate() {
     setModalErr(null);
     setItemFile(null);
+    setNewLocation(false);
     setItemModal({ ...EMPTY_DRAFT });
   }
   function openEdit(it: InventoryItem) {
     setModalErr(null);
     setItemFile(null);
+    setNewLocation(false);
     setItemModal({
       id: it.id,
       name: it.name,
@@ -601,6 +621,7 @@ export default function AdminInventoryPage({
   function openCreatePiece(kit: PackagingKit, role: PackagingRole, label: string) {
     setModalErr(null);
     setItemFile(null);
+    setNewLocation(false);
     setItemModal({
       ...EMPTY_DRAFT,
       name: `${packagingKitLabel(kit)} — ${label}`,
@@ -873,7 +894,15 @@ export default function AdminInventoryPage({
                   <span className="font-medium">Category</span>
                   <Select
                     value={itemModal.category}
-                    onChange={(e) => setItemModal({ ...itemModal, category: e.target.value })}
+                    onChange={(e) => {
+                      const category = e.target.value;
+                      // Printables all live in the island's left cabinet for
+                      // now. Fill an empty location with it; never overwrite one
+                      // that's already been chosen.
+                      const location =
+                        itemModal.location || (newLocation ? "" : defaultLocationForCategory(category));
+                      setItemModal({ ...itemModal, category, location });
+                    }}
                   >
                     <option value="">—</option>
                     {INVENTORY_CATEGORIES.map((c) => (
@@ -901,12 +930,39 @@ export default function AdminInventoryPage({
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-sm">
-                  <span className="font-medium">Location / bin</span>
-                  <Input
-                    value={itemModal.location}
-                    onChange={(e) => setItemModal({ ...itemModal, location: e.target.value })}
-                    placeholder="e.g. Shelf B3"
-                  />
+                  <span className="font-medium">Location</span>
+                  <Select
+                    value={newLocation ? NEW_LOCATION : itemModal.location}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === NEW_LOCATION) {
+                        // Clear the box rather than seeding it with the place
+                        // this item used to be — you picked "somewhere new".
+                        setNewLocation(true);
+                        setItemModal({ ...itemModal, location: "" });
+                        return;
+                      }
+                      setNewLocation(false);
+                      setItemModal({ ...itemModal, location: v });
+                    }}
+                  >
+                    <option value="">—</option>
+                    {locationChoices.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                    <option value={NEW_LOCATION}>+ Add a new location…</option>
+                  </Select>
+                  {newLocation && (
+                    <Input
+                      className="mt-1.5"
+                      autoFocus
+                      value={itemModal.location}
+                      onChange={(e) => setItemModal({ ...itemModal, location: e.target.value })}
+                      placeholder="e.g. Upstairs Suite B — shelf 2"
+                    />
+                  )}
                 </label>
                 <label className="block text-sm">
                   <span className="font-medium">Unit cost ($)</span>
