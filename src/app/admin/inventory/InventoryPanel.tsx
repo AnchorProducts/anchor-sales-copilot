@@ -98,15 +98,40 @@ const EMPTY_DRAFT: ItemDraft = {
 
 // A status filter over the item list — the questions an admin actually opens
 // this page with, which a category chip can't answer.
-type ItemFlag = "" | "low" | "checkout" | "potm" | "pieces";
+type ItemFlag = "" | "low" | "onloan" | "picked" | "checkout" | "potm" | "pieces";
 
 const ITEM_FLAGS: { key: ItemFlag; label: string }[] = [
   { key: "", label: "Everything" },
   { key: "low", label: "Low stock" },
+  // The Loans and Pickups tabs answer "what went out"; these answer the same
+  // question about the item in front of you, without leaving the list.
+  { key: "onloan", label: "Out on loan" },
+  { key: "picked", label: "Picked up at the aisle" },
   { key: "checkout", label: "Checkout-eligible" },
   { key: "potm", label: "Product of the Month" },
   { key: "pieces", label: "Pizza box pieces" },
 ];
+
+// One definition of each status, used both to filter the list and to count for
+// the chip beside it — so a chip can never promise a number the list won't show.
+function matchesFlag(it: InventoryItem, flag: ItemFlag, pickedIds: Set<string>): boolean {
+  switch (flag) {
+    case "low":
+      return !!it.low_stock;
+    case "onloan":
+      return it.quantity_out > 0;
+    case "picked":
+      return pickedIds.has(it.id);
+    case "checkout":
+      return it.checkout_enabled;
+    case "potm":
+      return it.product_of_month;
+    case "pieces":
+      return !!it.packaging_role;
+    default:
+      return true;
+  }
+}
 
 type ItemSort = "name" | "stock" | "recent";
 
@@ -247,6 +272,12 @@ export default function AdminInventoryPage({
   // question, the list is the answer.
   const browsingItems = !itemSearch.trim() && !itemCat && !itemFlag;
 
+  // Every item the aisle log has ever seen leave the shelf.
+  const pickedIds = useMemo(
+    () => new Set(grabs.map((g) => g.item_id).filter((id): id is string => !!id)),
+    [grabs]
+  );
+
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
     const matched = items.filter((it) => {
@@ -255,10 +286,7 @@ export default function AdminInventoryPage({
       // them here because the kit card also shows them made the one surface
       // that manages stock the only one that pretended they weren't items.
       if (itemCat && it.category !== itemCat) return false;
-      if (itemFlag === "low" && !it.low_stock) return false;
-      if (itemFlag === "checkout" && !it.checkout_enabled) return false;
-      if (itemFlag === "potm" && !it.product_of_month) return false;
-      if (itemFlag === "pieces" && !it.packaging_role) return false;
+      if (itemFlag && !matchesFlag(it, itemFlag, pickedIds)) return false;
       if (!q) return true;
       return (
         it.name.toLowerCase().includes(q) ||
@@ -267,13 +295,20 @@ export default function AdminInventoryPage({
       );
     });
     return sortItems(matched, itemSort);
-  }, [items, itemSearch, itemCat, itemFlag, itemSort]);
+  }, [items, itemSearch, itemCat, itemFlag, itemSort, pickedIds]);
 
   // How many narrowing choices are in force — the number on the Filters button,
   // so a phone can tell at a glance that the short list it's looking at is short
   // on purpose. Sort isn't a filter and isn't counted.
   const activeFilters = (itemCat ? 1 : 0) + (itemFlag ? 1 : 0);
-  const lowCount = useMemo(() => items.filter((i) => i.low_stock).length, [items]);
+  const flagCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const f of ITEM_FLAGS) {
+      out[f.key] = f.key ? items.filter((i) => matchesFlag(i, f.key, pickedIds)).length : items.length;
+    }
+    return out;
+  }, [items, pickedIds]);
+  const lowCount = flagCounts.low || 0;
 
   // The known locations plus every one already in use, so a place someone added
   // by hand is a pick from then on rather than something to retype (and mistype).
@@ -799,7 +834,7 @@ export default function AdminInventoryPage({
                     {ITEM_FLAGS.filter((f) => f.key).map((f) => (
                       <FilterChip
                         key={f.key}
-                        label={f.label}
+                        label={`${f.label} (${flagCounts[f.key] || 0})`}
                         active={itemFlag === f.key}
                         onClick={() => setItemFlag(itemFlag === f.key ? "" : f.key)}
                       />
@@ -1184,7 +1219,7 @@ export default function AdminInventoryPage({
           {ITEM_FLAGS.map((f) => (
             <FilterChip
               key={f.key || "all"}
-              label={f.key === "low" && lowCount ? `${f.label} (${lowCount})` : f.label}
+              label={`${f.label} (${flagCounts[f.key] || 0})`}
               active={itemFlag === f.key}
               onClick={() => setItemFlag(f.key)}
             />
