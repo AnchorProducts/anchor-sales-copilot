@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import Modal from "@/app/components/ui/Modal";
+import Sheet from "@/app/components/ui/Sheet";
 import Button from "@/app/components/ui/Button";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -93,6 +94,46 @@ const EMPTY_DRAFT: ItemDraft = {
   packaging_kit: "",
 };
 
+// A status filter over the item list — the questions an admin actually opens
+// this page with, which a category chip can't answer.
+type ItemFlag = "" | "low" | "checkout" | "potm" | "pieces";
+
+const ITEM_FLAGS: { key: ItemFlag; label: string }[] = [
+  { key: "", label: "Everything" },
+  { key: "low", label: "Low stock" },
+  { key: "checkout", label: "Checkout-eligible" },
+  { key: "potm", label: "Product of the Month" },
+  { key: "pieces", label: "Pizza box pieces" },
+];
+
+type ItemSort = "name" | "stock" | "recent";
+
+const ITEM_SORTS: { key: ItemSort; label: string }[] = [
+  { key: "name", label: "Name (A–Z)" },
+  { key: "stock", label: "Lowest stock first" },
+  { key: "recent", label: "Recently updated" },
+];
+
+// Aisle pickups render a page at a time.
+const PICKUP_PAGE = 20;
+
+function sortItems(list: InventoryItem[], by: ItemSort): InventoryItem[] {
+  const out = [...list];
+  if (by === "name") out.sort((a, b) => a.name.localeCompare(b.name));
+  // Anything already flagged low comes first regardless of count, so a low item
+  // with 40 on hand still outranks a healthy one with 2 — the threshold is the
+  // per-item judgement of what "low" means and it beats the raw number.
+  else if (by === "stock")
+    out.sort(
+      (a, b) =>
+        Number(!!b.low_stock) - Number(!!a.low_stock) ||
+        a.quantity_available - b.quantity_available ||
+        a.name.localeCompare(b.name)
+    );
+  else out.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+  return out;
+}
+
 export default function AdminInventoryPage({
   embedded = false,
 }: { embedded?: boolean } = {}) {
@@ -123,9 +164,18 @@ export default function AdminInventoryPage({
   const [itemQrOpen, setItemQrOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
-  // Items tab filters (search + category) so long lists stay findable.
+  // Items tab filters (search + category + status + sort) so long lists stay
+  // findable. On a phone the category chips and sort live in a bottom sheet
+  // behind one Filters button — six chips over two rows plus a sort control is
+  // most of a screen spent before the first item.
   const [itemSearch, setItemSearch] = useState("");
   const [itemCat, setItemCat] = useState("");
+  const [itemFlag, setItemFlag] = useState<ItemFlag>("");
+  const [itemSort, setItemSort] = useState<ItemSort>("name");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Aisle pickups run to hundreds over time; a phone shouldn't render them all.
+  const [pickupLimit, setPickupLimit] = useState(PICKUP_PAGE);
 
   const loadAll = useCallback(async () => {
     const [itemsRes, coRes, grabRes] = await Promise.all([
@@ -189,14 +239,18 @@ export default function AdminInventoryPage({
   // thing" — and answering it with nothing because the match happens to be a
   // kit piece is worse than a repeat, so those search everything and the kit
   // card steps aside instead.
-  const browsingItems = !itemSearch.trim() && !itemCat;
+  const browsingItems = !itemSearch.trim() && !itemCat && !itemFlag;
 
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
-    const searching = !!q || !!itemCat;
-    return items.filter((it) => {
+    const searching = !!q || !!itemCat || !!itemFlag;
+    const matched = items.filter((it) => {
       if (!searching && it.packaging_role) return false;
       if (itemCat && it.category !== itemCat) return false;
+      if (itemFlag === "low" && !it.low_stock) return false;
+      if (itemFlag === "checkout" && !it.checkout_enabled) return false;
+      if (itemFlag === "potm" && !it.product_of_month) return false;
+      if (itemFlag === "pieces" && !it.packaging_role) return false;
       if (!q) return true;
       return (
         it.name.toLowerCase().includes(q) ||
@@ -204,7 +258,14 @@ export default function AdminInventoryPage({
         (it.description || "").toLowerCase().includes(q)
       );
     });
-  }, [items, itemSearch, itemCat]);
+    return sortItems(matched, itemSort);
+  }, [items, itemSearch, itemCat, itemFlag, itemSort]);
+
+  // How many narrowing choices are in force — the number on the Filters button,
+  // so a phone can tell at a glance that the short list it's looking at is short
+  // on purpose. Sort isn't a filter and isn't counted.
+  const activeFilters = (itemCat ? 1 : 0) + (itemFlag ? 1 : 0);
+  const lowCount = useMemo(() => items.filter((i) => i.low_stock).length, [items]);
 
   // ── Item create/edit ───────────────────────────────────────────────────────
   function openCreate() {
@@ -501,6 +562,14 @@ export default function AdminInventoryPage({
     [items]
   );
 
+  // Pieces of a launched kit that nothing is tagged as yet: the aisle can't
+  // subtract them, so their count silently never moves. Worth a badge at the top
+  // of the page rather than a discovery three taps in.
+  const missingPieces = useMemo(
+    () => kits.filter((k) => !k.preLaunch).reduce((n, k) => n + k.pieces.filter((p) => !p.item).length, 0),
+    [kits]
+  );
+
   // Add or subtract units on a piece in place — the whole point of the kit card
   // is that restocking a stack of boxes shouldn't mean opening the item editor.
   // Never below zero: a negative count is a data error, not a shortage.
@@ -553,69 +622,100 @@ export default function AdminInventoryPage({
           </Card>
         ) : (
           <>
-            <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
-              <div>
+            {/* The page title only earns its space on the standalone route. Inside
+                the Marketing Admin Center the navbar and the Orders/Inventory
+                tabs have already said where you are twice — repeating it cost a
+                phone a third of a screen before anything useful. */}
+            {!embedded && (
+              <header className="mb-4 hidden sm:block">
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Inventory</h1>
                 <p className="mt-1 text-sm text-[var(--anchor-gray)]">
                   Track marketing stock and check items out for tradeshows.
                 </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => setQrOpen(true)} disabled={busy}>
-                  Aisle QR
-                </Button>
-                <Button variant="secondary" onClick={() => setItemQrOpen(true)} disabled={busy}>
-                  Item QR codes
-                </Button>
-                {tab === "items" && (
-                  <Button onClick={openCreate} disabled={busy}>
-                    + Add item
-                  </Button>
-                )}
-              </div>
-            </header>
+              </header>
+            )}
 
-            {/* Tabs */}
-            <div className="mb-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setTab("items")}
-                className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${
-                  tab === "items"
-                    ? "bg-[var(--anchor-green)] text-white"
-                    : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
-                }`}
-              >
-                Items ({items.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("checkouts")}
-                className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${
-                  tab === "checkouts"
-                    ? "bg-[var(--anchor-green)] text-white"
-                    : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
-                }`}
-              >
-                Checkouts ({openCount})
+            <div className="mb-3 hidden justify-end gap-2 lg:flex">
+              <Button variant="secondary" onClick={() => setQrOpen(true)} disabled={busy}>
+                Aisle QR
+              </Button>
+              <Button variant="secondary" onClick={() => setItemQrOpen(true)} disabled={busy}>
+                Item QR codes
+              </Button>
+            </div>
+
+            {/* Tabs. Short labels on a phone so three tabs and their counts fit
+                one row instead of wrapping to two. */}
+            <div className="mb-2 flex gap-1.5 sm:gap-2">
+              <TabButton active={tab === "items"} onClick={() => setTab("items")}>
+                Items <TabCount>{items.length}</TabCount>
+              </TabButton>
+              <TabButton active={tab === "checkouts"} onClick={() => setTab("checkouts")}>
+                <span className="sm:hidden">Loans</span>
+                <span className="hidden sm:inline">Checkouts</span> <TabCount>{openCount}</TabCount>
                 {overdueCount > 0 && (
-                  <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
-                    {overdueCount} overdue
+                  <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                    {overdueCount}
                   </span>
                 )}
-              </button>
+              </TabButton>
+              <TabButton active={tab === "pickups"} onClick={() => setTab("pickups")}>
+                <span className="sm:hidden">Pickups</span>
+                <span className="hidden sm:inline">Aisle pickups</span> <TabCount>{grabs.length}</TabCount>
+              </TabButton>
+              {/* Tabs left, overflow right. The QR posters are a printer errand
+                  — real, but not what a phone came here for, and not worth a
+                  quarter of the search row. */}
               <button
                 type="button"
-                onClick={() => setTab("pickups")}
-                className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${
-                  tab === "pickups"
-                    ? "bg-[var(--anchor-green)] text-white"
-                    : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
-                }`}
+                onClick={() => setMoreOpen(true)}
+                aria-label="More inventory actions"
+                className="ml-auto flex w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] lg:hidden"
               >
-                Aisle pickups ({grabs.length})
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
+                  <circle cx="4" cy="10" r="1.6" />
+                  <circle cx="10" cy="10" r="1.6" />
+                  <circle cx="16" cy="10" r="1.6" />
+                </svg>
               </button>
             </div>
+
+            {/* What needs someone, before the list of what doesn't. Each badge is
+                the filter for itself, so noticing a problem and looking at it are
+                the same tap. Scrolls sideways rather than wrapping. */}
+            {(lowCount > 0 || overdueCount > 0 || missingPieces > 0) && (
+              <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {lowCount > 0 && (
+                  <AttentionPill
+                    tone="amber"
+                    active={tab === "items" && itemFlag === "low"}
+                    onClick={() => {
+                      setTab("items");
+                      setItemFlag(itemFlag === "low" ? "" : "low");
+                    }}
+                  >
+                    ⚠ {lowCount} low stock
+                  </AttentionPill>
+                )}
+                {overdueCount > 0 && (
+                  <AttentionPill tone="red" active={tab === "checkouts"} onClick={() => setTab("checkouts")}>
+                    {overdueCount} overdue back
+                  </AttentionPill>
+                )}
+                {missingPieces > 0 && (
+                  <AttentionPill
+                    tone="amber"
+                    active={tab === "items" && itemFlag === "pieces"}
+                    onClick={() => {
+                      setTab("items");
+                      setItemFlag(itemFlag === "pieces" ? "" : "pieces");
+                    }}
+                  >
+                    🍕 {missingPieces} kit {missingPieces === 1 ? "piece" : "pieces"} not set up
+                  </AttentionPill>
+                )}
+              </div>
+            )}
 
             {loadErr && (
               <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadErr}</Card>
@@ -623,13 +723,47 @@ export default function AdminInventoryPage({
 
             {tab === "items" ? (
               <>
-                <div className="mb-3 flex flex-col gap-2">
-                  <Input
-                    value={itemSearch}
-                    onChange={(e) => setItemSearch(e.target.value)}
-                    placeholder="Search by name or SKU…"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
+                {/* Sticky on a phone. With 84 items, searching again meant
+                    scrolling back to the top of the whole list first; the bar
+                    now rides along. It parks below the floating back pill and
+                    view-as chip (both fixed at the top inset) so it doesn't
+                    slide under them. */}
+                <div className="sticky top-[calc(env(safe-area-inset-top)+48px)] z-30 -mx-4 mb-3 border-b border-[var(--border-default)] bg-[var(--surface-page)]/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+                  <div className="flex items-stretch gap-2">
+                    <Input
+                      className="min-w-0 flex-1"
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      placeholder="Search name or SKU…"
+                    />
+                    {/* Phones: one button for six category chips, four status
+                        filters and the sort. Desktop keeps them all in view. */}
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen(true)}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold lg:hidden ${
+                        activeFilters
+                          ? "border-[var(--anchor-green)] bg-[var(--anchor-green)] text-white"
+                          : "border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                      }`}
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-4 w-4" aria-hidden>
+                        <path d="M3 6h14M6 10h8M8.5 14h3" />
+                      </svg>
+                      Filter
+                      {activeFilters > 0 && (
+                        <span className="rounded-full bg-white/25 px-1.5 text-xs">{activeFilters}</span>
+                      )}
+                    </button>
+                    <Button className="shrink-0" onClick={openCreate} disabled={busy}>
+                      <span className="lg:hidden" aria-hidden>+</span>
+                      <span className="sr-only lg:not-sr-only">Add item</span>
+                    </Button>
+                  </div>
+
+                  {/* From lg up nothing was wrong with chips in a row, so they
+                      stay exactly where they were. */}
+                  <div className="mt-2 hidden flex-wrap items-center gap-1.5 lg:flex">
                     <FilterChip label="All" active={itemCat === ""} onClick={() => setItemCat("")} />
                     {INVENTORY_CATEGORIES.map((c) => (
                       <FilterChip
@@ -639,13 +773,48 @@ export default function AdminInventoryPage({
                         onClick={() => setItemCat(c.key)}
                       />
                     ))}
+                    <span className="mx-1 h-4 w-px bg-[var(--border-default)]" aria-hidden />
+                    {ITEM_FLAGS.filter((f) => f.key).map((f) => (
+                      <FilterChip
+                        key={f.key}
+                        label={f.label}
+                        active={itemFlag === f.key}
+                        onClick={() => setItemFlag(itemFlag === f.key ? "" : f.key)}
+                      />
+                    ))}
+                    <Select
+                      className="ml-auto w-auto"
+                      value={itemSort}
+                      onChange={(e) => setItemSort(e.target.value as ItemSort)}
+                      aria-label="Sort items"
+                    >
+                      {ITEM_SORTS.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
-                  {(itemSearch || itemCat) && (
-                    <span className="text-xs text-[var(--anchor-gray)]">
+                </div>
+
+                {(itemSearch || itemCat || itemFlag) && (
+                  <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--anchor-gray)]">
+                    <span>
                       Showing {filteredItems.length} of {items.length}
                     </span>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setItemSearch("");
+                        setItemCat("");
+                        setItemFlag("");
+                      }}
+                      className="font-semibold text-[var(--anchor-green)] underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
                 {browsingItems && (
                   <PizzaBoxKits
                     kits={kits}
@@ -657,6 +826,7 @@ export default function AdminInventoryPage({
                 )}
                 <ItemsList
                   items={filteredItems}
+                  onAdjust={adjustStock}
                   onEdit={openEdit}
                   onCheckout={openCheckout}
                   onDelete={deleteItem}
@@ -669,7 +839,12 @@ export default function AdminInventoryPage({
             ) : tab === "checkouts" ? (
               <CheckoutsList checkouts={checkouts} onCheckin={openCheckin} busy={busy} />
             ) : (
-              <PickupsList grabs={grabs} returns={returns} />
+              <PickupsList
+                grabs={grabs}
+                returns={returns}
+                limit={pickupLimit}
+                onMore={() => setPickupLimit((n) => n + PICKUP_PAGE)}
+              />
             )}
           </>
         )}
@@ -912,6 +1087,87 @@ export default function AdminInventoryPage({
         )}
       </Modal>
 
+      {/* Filter & sort — the phone's stand-in for the desktop chip row. */}
+      <Sheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Filter & sort"
+        footer={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="mr-auto"
+              onClick={() => {
+                setItemCat("");
+                setItemFlag("");
+                setItemSort("name");
+              }}
+            >
+              Reset
+            </Button>
+            <Button onClick={() => setFiltersOpen(false)}>
+              Show {filteredItems.length} {filteredItems.length === 1 ? "item" : "items"}
+            </Button>
+          </div>
+        }
+      >
+        <SheetGroup label="Category">
+          <FilterChip label="All" active={itemCat === ""} onClick={() => setItemCat("")} />
+          {INVENTORY_CATEGORIES.map((c) => (
+            <FilterChip
+              key={c.key}
+              label={c.label}
+              active={itemCat === c.key}
+              onClick={() => setItemCat(c.key)}
+            />
+          ))}
+        </SheetGroup>
+
+        <SheetGroup label="Show">
+          {ITEM_FLAGS.map((f) => (
+            <FilterChip
+              key={f.key || "all"}
+              label={f.key === "low" && lowCount ? `${f.label} (${lowCount})` : f.label}
+              active={itemFlag === f.key}
+              onClick={() => setItemFlag(f.key)}
+            />
+          ))}
+        </SheetGroup>
+
+        <SheetGroup label="Sort by">
+          {ITEM_SORTS.map((o) => (
+            <FilterChip
+              key={o.key}
+              label={o.label}
+              active={itemSort === o.key}
+              onClick={() => setItemSort(o.key)}
+            />
+          ))}
+        </SheetGroup>
+      </Sheet>
+
+      {/* Overflow: the printing errands. */}
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Inventory">
+        <div className="grid gap-2 py-1">
+          <SheetAction
+            onClick={() => {
+              setMoreOpen(false);
+              setQrOpen(true);
+            }}
+            title="Aisle QR poster"
+            hint="The code that goes up in the marketing aisle, so anyone can log what they took."
+          />
+          <SheetAction
+            onClick={() => {
+              setMoreOpen(false);
+              setItemQrOpen(true);
+            }}
+            title="Item QR codes"
+            hint="A printable code per item, for labelling the shelf."
+          />
+        </div>
+      </Sheet>
+
       {/* Aisle QR modal */}
       <AisleQrModal open={qrOpen} onClose={() => setQrOpen(false)} canRotate={role === "admin"} />
 
@@ -1090,6 +1346,91 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
+// A labelled row of chips inside a sheet.
+function SheetGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="border-b border-[var(--border-default)] py-3 last:border-0">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+// A full-width tap target in a sheet: what it does, and why you'd want it.
+function SheetAction({ onClick, title, hint }: { onClick: () => void; title: string; hint: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-[var(--border-default)] p-3 text-left transition active:bg-[var(--surface-soft)]"
+    >
+      <div className="text-sm font-semibold text-[var(--anchor-deep)]">{title}</div>
+      <div className="mt-0.5 text-xs text-[var(--anchor-gray)]">{hint}</div>
+    </button>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`flex min-w-0 items-center gap-0.5 rounded-xl px-2.5 py-1.5 text-sm font-semibold sm:px-3 ${
+        active
+          ? "bg-[var(--anchor-green)] text-white"
+          : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TabCount({ children }: { children: ReactNode }) {
+  return <span className="tabular-nums opacity-70">{children}</span>;
+}
+
+// A count that wants someone's attention AND is the filter for itself.
+function AttentionPill({
+  tone,
+  active,
+  onClick,
+  children,
+}: {
+  tone: "amber" | "red";
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const base =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-800"
+      : "border-amber-200 bg-amber-50 text-amber-900";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+        active ? "border-[var(--anchor-deep)] bg-[var(--anchor-deep)] text-white" : base
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ItemsList({
   items,
   onEdit,
@@ -1097,6 +1438,7 @@ function ItemsList({
   onDelete,
   onRemoveImage,
   onRestock,
+  onAdjust,
   deleteErr,
   busy,
 }: {
@@ -1106,6 +1448,7 @@ function ItemsList({
   onDelete: (it: InventoryItem) => Promise<boolean> | void;
   onRemoveImage: (it: InventoryItem) => void;
   onRestock: (it: InventoryItem) => void;
+  onAdjust: (it: InventoryItem, delta: number) => void;
   deleteErr: { id: string; msg: string } | null;
   busy: boolean;
 }) {
@@ -1128,16 +1471,16 @@ function ItemsList({
             // current column count is, so it can't drift when breakpoints change.
             className={`overflow-hidden p-0 ${open ? "col-span-full" : ""}`}
           >
-            {/* Compact tile — click the main area to open details + actions, or
-                the Edit button to jump straight into editing this item. */}
-            <div className="flex items-stretch">
+            {/* Tap the tile for the rest of the detail and the fuller actions;
+                everything done often — count up, count down, edit — is already
+                on the face of it. */}
             <button
               type="button"
               onClick={() => setOpenId(open ? null : it.id)}
               aria-expanded={open}
-              className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
+              className="flex w-full min-w-0 items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
             >
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)] sm:h-16 sm:w-16">
                 {it.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
@@ -1157,15 +1500,30 @@ function ItemsList({
                     ▾
                   </span>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1">
-                  {it.category && (
-                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
-                      {inventoryCategoryLabel(it.category)}
-                    </span>
-                  )}
+                {/* One row of badges on a phone, the lot from sm up. Order is
+                    by what would be missed if it were the badge cut off: a low
+                    count and a Product of the Month change what you do next,
+                    "Overlay" doesn't. The expanded card carries the rest. */}
+                <div className="mt-1 flex max-h-[1.25rem] flex-wrap items-center gap-1 overflow-hidden sm:max-h-none">
                   {it.low_stock && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       Low stock
+                    </span>
+                  )}
+                  {it.product_of_month && (
+                    <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-semibold text-white">
+                      <span className="sm:hidden">★ PotM</span>
+                      <span className="hidden sm:inline">★ Product of the Month</span>
+                    </span>
+                  )}
+                  {it.packaging_role && (
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
+                      {packagingKitLabel(it.packaging_kit)} {packagingRoleShort(it.packaging_role).toLowerCase()}
+                    </span>
+                  )}
+                  {it.category && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
+                      {inventoryCategoryLabel(it.category)}
                     </span>
                   )}
                   {it.checkout_enabled && (
@@ -1183,42 +1541,65 @@ function ItemsList({
                       Overlay
                     </span>
                   )}
-                  {it.product_of_month && (
-                    <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                      ★ Product of the Month
-                    </span>
-                  )}
-                  {it.packaging_role && (
-                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
-                      {packagingKitLabel(it.packaging_kit)} {packagingRoleShort(it.packaging_role).toLowerCase()}
-                    </span>
-                  )}
                   {!it.packaging_role && it.packaging_kit && it.pizza_box && (
                     <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
                       {packagingKitLabel(it.packaging_kit)} kit
                     </span>
                   )}
                 </div>
-                <div className="mt-1 text-xs text-[var(--anchor-gray)]">
-                  <strong className="text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail ·{" "}
-                  <strong className="text-[var(--anchor-deep)]">{it.quantity_out}</strong> out
-                </div>
               </div>
             </button>
-              {/* Always-visible per-item edit — no need to expand the card first. */}
-              <button
-                type="button"
-                onClick={() => onEdit(it)}
-                disabled={busy}
-                aria-label={`Edit ${it.name}`}
-                title="Edit item"
-                className="flex shrink-0 items-center gap-1 border-l border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/30 disabled:opacity-50"
-              >
-                <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
-                  <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                </svg>
-                Edit
-              </button>
+
+            {/* Counting stock is the job this page exists for, and it used to
+                cost four taps: expand, "+ Add stock", type, save. The stepper
+                writes straight through — the same one the kit pieces have had
+                all along. The restock modal is still there in the expanded
+                actions for "a pallet of 500 arrived". */}
+            <div className="flex items-center gap-2 border-t border-[var(--border-default)] px-3 py-2">
+              <div className="min-w-0 flex-1 text-xs text-[var(--anchor-gray)]">
+                <strong className="text-sm text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail
+                {it.quantity_out > 0 && (
+                  <>
+                    {" · "}
+                    <strong className="text-[var(--anchor-deep)]">{it.quantity_out}</strong> out
+                  </>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  aria-label={`Subtract one ${it.name}`}
+                  title="Subtract one"
+                  onClick={() => onAdjust(it, -1)}
+                  disabled={busy || it.quantity_available <= 0}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Add one ${it.name}`}
+                  title="Add one"
+                  onClick={() => onAdjust(it, 1)}
+                  disabled={busy}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(it)}
+                  disabled={busy}
+                  aria-label={`Edit ${it.name}`}
+                  title="Edit item"
+                  className="flex h-9 items-center gap-1 rounded-full border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/30 disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+                    <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                  </svg>
+                  Edit
+                </button>
+              </div>
             </div>
 
             {open && (
@@ -1803,19 +2184,45 @@ function PizzaBoxKits({
   busy: boolean;
 }) {
   const [openKit, setOpenKit] = useState<PackagingKit>(kits[0]?.key || "2000");
+  // Expanded, this card is a whole phone screen standing between the Items tab
+  // and any item. Collapsed it's a header and the series chips — which are the
+  // summary anyway, since "4/4" is the answer most visits are looking for. The
+  // pieces themselves are a tap away, and from lg up nothing collapses at all
+  // (`hidden lg:block`), so the desktop card is exactly what it was.
+  const [expanded, setExpanded] = useState(false);
   const active = kits.find((k) => k.key === openKit) || kits[0];
   if (!active) return null;
   const stocked = active.pieces.filter((p) => p.item).length;
+  const lowPieces = kits.reduce(
+    (n, k) => n + k.pieces.filter((p) => p.item?.low_stock).length,
+    0
+  );
 
   return (
     <Card className="mb-3 p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 text-left lg:pointer-events-none"
+      >
         <h2 className="text-sm font-bold text-[var(--anchor-deep)]">🍕 Pizza box kits</h2>
-        <span className="text-xs text-[var(--anchor-gray)]">
-          One kit per anchor series — the anchor + four pieces. Taking a sample “for a pizza box” at
-          the aisle subtracts that series’ pieces.
+        {lowPieces > 0 && (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+            {lowPieces} low
+          </span>
+        )}
+        <span
+          className={`ml-auto text-[var(--anchor-gray)] transition-transform lg:hidden ${expanded ? "rotate-180" : ""}`}
+          aria-hidden
+        >
+          ▾
         </span>
-      </div>
+      </button>
+      <p className="mt-1 hidden text-xs text-[var(--anchor-gray)] lg:block">
+        One kit per anchor series — the anchor + four pieces. Taking a sample “for a pizza box” at
+        the aisle subtracts that series’ pieces.
+      </p>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {kits.map((k) => {
@@ -1824,7 +2231,10 @@ function PizzaBoxKits({
             <button
               key={k.key}
               type="button"
-              onClick={() => setOpenKit(k.key)}
+              onClick={() => {
+                setOpenKit(k.key);
+                setExpanded(true);
+              }}
               title={`${count} of ${k.pieces.length} ${k.label} packaging pieces set up`}
               className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
                 k.key === active.key
@@ -1832,7 +2242,8 @@ function PizzaBoxKits({
                   : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
               }`}
             >
-              {k.label}
+              <span className="sm:hidden">{k.label.replace(" Series", "")}</span>
+              <span className="hidden sm:inline">{k.label}</span>
               <span className={k.key === active.key ? "ml-1.5 opacity-80" : "ml-1.5 text-[var(--anchor-gray)]"}>
                 {count}/{k.pieces.length}
               </span>
@@ -1841,6 +2252,7 @@ function PizzaBoxKits({
         })}
       </div>
 
+      <div className={expanded ? "" : "hidden lg:block"}>
       {stocked === 0 && (
         <p className="mt-2 text-xs text-amber-700">
           {active.preLaunch
@@ -1947,13 +2359,24 @@ function PizzaBoxKits({
         Pieces are managed here, so they&apos;re kept out of the item list below. Search or pick a
         category to see them among everything else.
       </p>
+      </div>
     </Card>
   );
 }
 
 // The aisle log, both directions: what went out (and how much of it has come
 // back) above, drop-offs below.
-function PickupsList({ grabs, returns }: { grabs: GrabRow[]; returns: ReturnRow[] }) {
+function PickupsList({
+  grabs,
+  returns,
+  limit,
+  onMore,
+}: {
+  grabs: GrabRow[];
+  returns: ReturnRow[];
+  limit: number;
+  onMore: () => void;
+}) {
   if (grabs.length === 0 && returns.length === 0) {
     return (
       <Card className="p-6 text-sm text-[var(--anchor-gray)]">
@@ -1964,7 +2387,7 @@ function PickupsList({ grabs, returns }: { grabs: GrabRow[]; returns: ReturnRow[
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        {grabs.map((g) => {
+        {grabs.slice(0, limit).map((g) => {
           const series = packagingKitLabel(g.packaging_kit);
           const pieces = describeComponents(g.components || []);
           const back = g.quantity_returned || 0;
@@ -1996,6 +2419,11 @@ function PickupsList({ grabs, returns }: { grabs: GrabRow[]; returns: ReturnRow[
             </Card>
           );
         })}
+        {grabs.length > limit && (
+          <Button variant="secondary" onClick={onMore}>
+            Show {Math.min(PICKUP_PAGE, grabs.length - limit)} more of {grabs.length}
+          </Button>
+        )}
       </div>
 
       {returns.length > 0 && (
