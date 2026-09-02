@@ -1458,7 +1458,7 @@ function ItemsList({
     return <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items to show.</Card>;
   }
   return (
-    <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-2 items-start gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const open = openId === it.id;
         return (
@@ -1478,9 +1478,9 @@ function ItemsList({
               type="button"
               onClick={() => setOpenId(open ? null : it.id)}
               aria-expanded={open}
-              className="flex w-full min-w-0 items-center gap-3 p-3 text-left transition hover:bg-[var(--anchor-mint)]/20"
+              className="flex w-full min-w-0 items-center gap-2 p-2.5 text-left transition hover:bg-[var(--anchor-mint)]/20 sm:gap-3 sm:p-3"
             >
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)] sm:h-16 sm:w-16">
+              <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)] sm:h-16 sm:w-16">
                 {it.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
@@ -1492,7 +1492,12 @@ function ItemsList({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-1.5">
-                  <h3 className="text-sm font-bold leading-snug text-[var(--anchor-deep)] break-words">{it.name}</h3>
+                  {/* Grid rows are as tall as their tallest card, so one long
+                      name used to stretch the row beside it. Two lines here,
+                      the whole name in the card once it's open. */}
+                  <h3 className="line-clamp-2 text-[13px] font-bold leading-snug text-[var(--anchor-deep)] break-words sm:line-clamp-none sm:text-sm">
+                    {it.name}
+                  </h3>
                   <span
                     className={`shrink-0 text-[var(--anchor-gray)] transition-transform ${open ? "rotate-180" : ""}`}
                     aria-hidden
@@ -1555,7 +1560,7 @@ function ItemsList({
                 writes straight through — the same one the kit pieces have had
                 all along. The restock modal is still there in the expanded
                 actions for "a pallet of 500 arrived". */}
-            <div className="flex items-center gap-2 border-t border-[var(--border-default)] px-3 py-2">
+            <div className="border-t border-[var(--border-default)] px-2.5 py-2 sm:flex sm:items-center sm:gap-2 sm:px-3">
               <div className="min-w-0 flex-1 text-xs text-[var(--anchor-gray)]">
                 <strong className="text-sm text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail
                 {it.quantity_out > 0 && (
@@ -1565,14 +1570,14 @@ function ItemsList({
                   </>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="mt-1.5 flex shrink-0 items-center gap-1 sm:mt-0">
                 <button
                   type="button"
                   aria-label={`Subtract one ${it.name}`}
                   title="Subtract one"
                   onClick={() => onAdjust(it, -1)}
                   disabled={busy || it.quantity_available <= 0}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30 sm:h-9 sm:w-9"
                 >
                   −
                 </button>
@@ -1582,7 +1587,7 @@ function ItemsList({
                   title="Add one"
                   onClick={() => onAdjust(it, 1)}
                   disabled={busy}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-default)] text-base font-bold text-[var(--anchor-deep)] disabled:opacity-30 sm:h-9 sm:w-9"
                 >
                   +
                 </button>
@@ -1592,7 +1597,7 @@ function ItemsList({
                   disabled={busy}
                   aria-label={`Edit ${it.name}`}
                   title="Edit item"
-                  className="flex h-9 items-center gap-1 rounded-full border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/30 disabled:opacity-50"
+                  className="ml-auto flex h-8 items-center gap-1 rounded-full border border-[var(--border-default)] px-2.5 text-[11px] font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/30 disabled:opacity-50 sm:ml-0 sm:h-9 sm:px-3 sm:text-xs"
                 >
                   <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
                     <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
