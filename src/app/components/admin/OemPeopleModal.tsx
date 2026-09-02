@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useDialogBody, useDialogEscape } from "@/app/components/ui/useDialogBody";
 
 export type OemPerson = {
   key: string;
@@ -32,19 +32,13 @@ export function OemPeopleModal({
   onClose: () => void;
   onDownloadPdf?: (p: OemPerson) => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
+  // Hand-rolled body handling is what left this dialog underneath the app: it
+  // locked scrolling but never marked <body>, so the floating chrome — the
+  // mobile dock at z-100, the help bubble at z-90, the back pill and view-as
+  // chip — kept drawing over it, and at z-50 this overlay lost to all of them.
+  // The shared hooks do the marking that globals.css hangs the stand-down off.
+  useDialogBody(open);
+  useDialogEscape(open, onClose);
 
   if (!open) return null;
 
@@ -53,7 +47,9 @@ export function OemPeopleModal({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      // z-60 to match the app's other dialog overlays, now that the chrome
+      // above it stands down rather than being outranked.
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:max-w-2xl sm:rounded-3xl">
@@ -131,7 +127,7 @@ export function OemPeopleModal({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-5 py-3 sm:px-6">
+        <div className="flex items-center justify-between border-t border-[var(--border-default)] bg-[var(--surface-soft)] px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
           <span className="text-xs text-[var(--anchor-gray)]">{people.length} {people.length === 1 ? "person" : "people"}</span>
           <button
             type="button"
