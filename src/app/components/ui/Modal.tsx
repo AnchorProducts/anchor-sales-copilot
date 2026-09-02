@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, type HTMLAttributes } from "react";
+import { type HTMLAttributes } from "react";
 import { cn } from "@/app/components/ui/cn";
+import { useDialogBody, useDialogEscape } from "@/app/components/ui/useDialogBody";
 
 type ModalProps = HTMLAttributes<HTMLDivElement> & {
   open: boolean;
@@ -13,39 +14,8 @@ type ModalProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export default function Modal({ open, onClose, className, children, ...props }: ModalProps) {
-  // While a dialog is up, the page behind it shouldn't scroll away underneath —
-  // and the floating app chrome shouldn't sit on top of it. The mobile dock
-  // (z-index 100) and help button (z-90) both outrank .ds-modal-overlay (z-60),
-  // and the back pill and view-as switcher tie it but are mounted after it — so
-  // between them they drew over the top AND the bottom of every modal in the
-  // app on a phone. Raising the overlay
-  // instead would jump it over the sheets MultiSelect opens at z-110/120, which
-  // have to stay on top when one is used inside a dialog. Marking the body is
-  // what lets globals.css stand the chrome down for exactly as long as a dialog
-  // is open. Counted, so closing one of two stacked dialogs doesn't bring the
-  // dock back over the other.
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const depth = Number(document.body.dataset.modalOpen || 0) + 1;
-    document.body.dataset.modalOpen = String(depth);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      const next = Number(document.body.dataset.modalOpen || 1) - 1;
-      if (next > 0) document.body.dataset.modalOpen = String(next);
-      else delete document.body.dataset.modalOpen;
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !onClose) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  useDialogBody(open);
+  useDialogEscape(open, onClose);
 
   if (!open) return null;
 
