@@ -7,6 +7,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useEffectiveRole } from "@/lib/role/viewAs";
 import { trackEvent } from "@/lib/analytics/track";
 import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/productOfMonth";
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
@@ -76,6 +77,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const supabase = useMemo(() => supabaseBrowser(), []);
   const { t } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [actualRole, setActualRole] = useState<string>("");
+  // View-As aware, so an admin previewing as an inside rep sees what they see.
+  const effectiveRole = useEffectiveRole(actualRole);
+  const canCheckOutTradeshow = effectiveRole === "anchor_rep";
   const [submittedByExpanded, setSubmittedByExpanded] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   // Display name for the Product of the Month chip; null = generic label.
@@ -116,10 +121,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       if (!user) return;
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name,company,phone,email")
+        .select("full_name,company,phone,email,role")
         .eq("id", user.id)
         .maybeSingle();
       if (!alive) return;
+      setActualRole(String((prof as { role?: string } | null)?.role || ""));
       const row = prof as {
         full_name?: string | null;
         company?: string | null;
@@ -621,6 +627,25 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
               ★ Product of the Month{potmLabel ? ` — ${potmLabel}` : ""}
             </button>
           </div>
+
+          {/* Tradeshow isn't a chip because it isn't an order: booth kit and
+              banners go out on loan and come back, and an order would decrement
+              them for good with nothing to book back in. Its absence read as a
+              missing option, so inside reps — the ones who take gear to shows,
+              and the only role the checkout API accepts — get pointed at where
+              it actually lives instead. */}
+          {canCheckOutTradeshow && (
+            <p className="mt-3 text-xs text-[var(--anchor-gray)]">
+              Taking gear to a show?{" "}
+              <a
+                href="/marketing-inventory?cat=tradeshow"
+                className="font-semibold text-[var(--anchor-green)] underline"
+              >
+                Check out tradeshow items
+              </a>{" "}
+              — booth kit, displays and banners are borrowed and returned, not ordered.
+            </p>
+          )}
         </Card>
 
         {/* ── 2. Items ────────────────────────────────────────────────────── */}
