@@ -345,8 +345,7 @@ const PAGE_TOURS: Record<string, Step[]> = {
   ],
   admin: [
     pageIntro("Admin Console", "Everything you manage as an admin. Here's each tool, one at a time."),
-    { target: '[data-tutorial="admin-tile-oem-analytics"]', title: "OEM Analytics", body: "Manufacturer rep & consultant engagement — the OEM matrix, adoption and usage by OEM, with a matrix PDF export." },
-    { target: '[data-tutorial="admin-tile-user-analytics"]', title: "User Analytics", body: "Everyone who isn't an OEM rep or consultant — internal staff and other users, with per-user activity PDFs." },
+    { target: '[data-tutorial="admin-tile-oem-analytics"]', title: "Analytics", body: "Who's using the app and what they're doing — the OEM adoption matrix, internal and other user activity, and one searchable directory of every person, with PDF exports." },
     { target: '[data-tutorial="admin-tile-users"]', title: "Users", body: "Edit names, emails, phone numbers, and roles for every user." },
     { target: '[data-tutorial="admin-tile-sales-reps"]', title: "Sales Reps", body: "Configure inside/outside sales reps, regions, Teams links, and contact info." },
     { target: '[data-tutorial="admin-tile-notifications"]', title: "Notifications", body: "Choose who gets commission claim emails and who receives the Friday analytics report." },
