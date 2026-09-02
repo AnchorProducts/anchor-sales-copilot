@@ -58,6 +58,20 @@ export type DirectoryPdfTarget = {
 
 export type DirectoryEvent = { at: string; type: string; detail: string };
 
+// A person's chat history: what they asked the assistant and what came back.
+export type ChatMessage = { role: "user" | "assistant"; content: string; clipped?: boolean; at: string };
+export type ChatConversation = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  // The person cleared this thread from their own chat sidebar. Kept and shown,
+  // because hiding it made the panel claim heavy chat users had never chatted.
+  deleted?: boolean;
+  messages: ChatMessage[];
+};
+export type DirectoryChat = { conversations: ChatConversation[]; truncated?: boolean };
+
 // Max events rendered inline in the expanded row (the PDF has the full log).
 const INLINE_EVENT_CAP = 200;
 
@@ -140,6 +154,7 @@ export function PeopleDirectory({
   onDays,
   dayOptions,
   onLoadEvents,
+  onLoadChat,
   searchTerm,
 }: {
   appUsers: PeopleAppUser[];
@@ -161,6 +176,9 @@ export function PeopleDirectory({
   // When provided, rows are clickable and expand to show the person's events in
   // the current window (fetched lazily by the parent).
   onLoadEvents?: (profileId: string) => Promise<DirectoryEvent[]>;
+  // When provided, an expanded row also offers the person's chat transcript —
+  // the questions they put to the assistant and the answers they got.
+  onLoadChat?: (profileId: string) => Promise<DirectoryChat>;
 }) {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,9 +194,12 @@ export function PeopleDirectory({
 
   // Inline event drill-down (only when onLoadEvents is provided).
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandedTab, setExpandedTab] = useState<"activity" | "chat">("activity");
   const [eventsCache, setEventsCache] = useState<Record<string, { loading: boolean; signedUp: boolean; events: DirectoryEvent[] }>>({});
+  const [chatCache, setChatCache] = useState<Record<string, { loading: boolean; signedUp: boolean; chat: DirectoryChat }>>({});
 
-  // The window changed → cached events are stale; collapse and clear.
+  // The window changed → cached events are stale; collapse and clear. The chat
+  // cache survives: a transcript isn't windowed.
   useEffect(() => {
     setExpandedKey(null);
     setEventsCache({});
@@ -188,6 +209,9 @@ export function PeopleDirectory({
     if (!onLoadEvents) return;
     if (expandedKey === p.key) { setExpandedKey(null); return; }
     setExpandedKey(p.key);
+    // Always open on activity — it's the cheap one, and already loaded for
+    // anyone whose row has been opened before.
+    setExpandedTab("activity");
     if (eventsCache[p.key]) return;
     if (!p.signedUp || !p.profileId) {
       setEventsCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: false, events: [] } }));
@@ -197,6 +221,21 @@ export function PeopleDirectory({
     onLoadEvents(p.profileId)
       .then((events) => setEventsCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: true, events } })))
       .catch(() => setEventsCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: true, events: [] } })));
+  }
+
+  function openChat(p: Person) {
+    setExpandedTab("chat");
+    if (!onLoadChat || chatCache[p.key]) return;
+    if (!p.signedUp || !p.profileId) {
+      setChatCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: false, chat: { conversations: [] } } }));
+      return;
+    }
+    setChatCache((c) => ({ ...c, [p.key]: { loading: true, signedUp: true, chat: { conversations: [] } } }));
+    onLoadChat(p.profileId)
+      .then((chat) => setChatCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: true, chat } })))
+      .catch(() =>
+        setChatCache((c) => ({ ...c, [p.key]: { loading: false, signedUp: true, chat: { conversations: [] } } }))
+      );
   }
 
   useEffect(() => {
@@ -513,7 +552,23 @@ export function PeopleDirectory({
                     </div>
                   </div>
                   {expanded && (
-                    <EventLog state={eventsCache[p.key]} days={days} />
+                    <div className="border-t border-[var(--border-default)] bg-[var(--surface-soft)]/40 px-4 py-3 pl-10 sm:px-6 sm:pl-12">
+                      {onLoadChat && (
+                        <div className="mb-3 flex gap-1.5">
+                          <MiniTab active={expandedTab === "activity"} onClick={() => setExpandedTab("activity")}>
+                            Activity
+                          </MiniTab>
+                          <MiniTab active={expandedTab === "chat"} onClick={() => openChat(p)}>
+                            Chat
+                          </MiniTab>
+                        </div>
+                      )}
+                      {expandedTab === "chat" && onLoadChat ? (
+                        <ChatLog state={chatCache[p.key]} />
+                      ) : (
+                        <EventLog state={eventsCache[p.key]} days={days} />
+                      )}
+                    </div>
                   )}
                 </li>
                 );
@@ -540,7 +595,7 @@ function EventLog({
 }) {
   const windowLabel = days ? `the last ${days} days` : "this window";
   return (
-    <div className="border-t border-[var(--border-default)] bg-[var(--surface-soft)]/40 px-4 py-3 pl-10 sm:px-6 sm:pl-12">
+    <div>
       {!state || state.loading ? (
         <p className="text-xs text-[var(--anchor-gray)]">Loading events…</p>
       ) : !state.signedUp ? (
@@ -569,6 +624,142 @@ function EventLog({
         </>
       )}
     </div>
+  );
+}
+
+// The Activity/Chat switch inside an expanded row. Smaller and quieter than the
+// page's own tabs — it's a control within a row, not navigation.
+function MiniTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        // The row itself is a click target that collapses this panel.
+        e.stopPropagation();
+        onClick();
+      }}
+      className={
+        "rounded-lg px-2.5 py-1 text-[11px] font-semibold transition " +
+        (active
+          ? "bg-[var(--anchor-deep)] text-white"
+          : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:bg-[var(--surface-soft)]")
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function fmtChatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// One person's chat threads: what they asked and what the assistant said back.
+// Threads are collapsed to their titles — someone with thirty chats shouldn't
+// have to scroll past all of them — with the most recent open, since that's the
+// one almost every visit is about.
+function ChatLog({ state }: { state?: { loading: boolean; signedUp: boolean; chat: DirectoryChat } }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const conversations = state?.chat.conversations ?? [];
+  // Default to the newest thread until someone picks another.
+  const shownId = openId ?? conversations[0]?.id ?? null;
+
+  if (!state || state.loading) {
+    return <p className="text-xs text-[var(--anchor-gray)]">Loading chats…</p>;
+  }
+  if (!state.signedUp) {
+    return <p className="text-xs text-[var(--anchor-gray)]">Not signed up — no chats.</p>;
+  }
+  if (conversations.length === 0) {
+    return <p className="text-xs text-[var(--anchor-gray)]">This person hasn&apos;t used the chat.</p>;
+  }
+
+  return (
+    <>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+        {conversations.length.toLocaleString()} {conversations.length === 1 ? "chat" : "chats"}
+      </div>
+      <ul className="space-y-2">
+        {conversations.map((c) => {
+          const open = c.id === shownId;
+          const asked = c.messages.filter((m) => m.role === "user").length;
+          return (
+            <li key={c.id} className="overflow-hidden rounded-lg border border-[var(--border-default)] bg-white">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenId(open ? "" : c.id);
+                }}
+                aria-expanded={open}
+                className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-[var(--surface-soft)]/60"
+              >
+                <svg viewBox="0 0 24 24" className={`h-3 w-3 shrink-0 text-[var(--anchor-gray)] transition-transform ${open ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <polyline points="9 6 15 12 9 18" />
+                </svg>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--anchor-deep)]">
+                  {c.title}
+                </span>
+                {c.deleted && (
+                  <span className="shrink-0 rounded-full bg-[var(--surface-strong)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--anchor-gray)]">
+                    cleared
+                  </span>
+                )}
+                <span className="shrink-0 text-[11px] text-[var(--anchor-gray)]">
+                  {asked} asked · {fmtChatDate(c.updated_at)}
+                </span>
+              </button>
+
+              {open && (
+                <div className="space-y-2 border-t border-[var(--border-default)] px-2.5 py-2.5">
+                  {c.messages.map((m, i) => (
+                    <div
+                      key={`${c.id}-${i}`}
+                      className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+                    >
+                      <div
+                        className={
+                          "max-w-[85%] rounded-xl px-2.5 py-1.5 text-xs " +
+                          (m.role === "user"
+                            ? "bg-[var(--anchor-mint)]/60 text-[var(--anchor-deep)]"
+                            : "bg-[var(--surface-soft)] text-black/80")
+                        }
+                      >
+                        <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                          {m.role === "user" ? "Asked" : "Assistant"}
+                        </div>
+                        {/* Answers arrive as markdown; rendering it would mean
+                            trusting model output in an admin page, so it stays
+                            plain text with its line breaks kept. */}
+                        <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                        {m.clipped && (
+                          <p className="mt-1 text-[10px] italic text-[var(--anchor-gray)]">
+                            …truncated
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {state.chat.truncated && (
+        <p className="mt-2 text-[11px] text-[var(--anchor-gray)]">
+          Older messages beyond the cap aren&apos;t shown.
+        </p>
+      )}
+    </>
   );
 }
 
