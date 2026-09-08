@@ -19,6 +19,10 @@ export type SalesTool = {
   description: string;
   icon: IconName;
   audiences: SalesAudience[];
+  /** Also needs a per-user grant an admin names in Manage Tools. The audience
+   *  switch decides whether the tool exists at all; the grant decides who on
+   *  that side of the app can see it. See src/lib/toolAccess.ts. */
+  restricted?: boolean;
 };
 
 export const SALES_TOOLS: SalesTool[] = [
@@ -73,6 +77,17 @@ export const SALES_TOOLS: SalesTool[] = [
     description: "Triage rooftop equipment consults submitted by external reps in your region.",
     icon: "clipboard",
     audiences: ["internal"],
+  },
+  {
+    // Filed from this app, reviewed and published on anchorp.com. Internal only:
+    // the showcase is driven by operations and the stops are filed by whoever is
+    // on the road with the truck.
+    key: "showcase",
+    label: "Showcase Stop",
+    description: "File a mobile showcase stop — where it went, what happened, and a photo.",
+    icon: "camera",
+    audiences: ["internal"],
+    restricted: true,
   },
   {
     key: "marketing-orders",

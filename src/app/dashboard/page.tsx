@@ -9,6 +9,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useEffectiveRole } from "@/lib/role/viewAs";
 import { FeatureGraphic, ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { salesToolKey, HERO_FEATURE_TO_TOOL_KEY, type SalesAudience } from "@/lib/salesTools";
+import { isRestrictedTool } from "@/lib/toolAccess";
+import { useToolAccess } from "@/lib/role/useToolAccess";
 import { usePitchBadge } from "@/lib/pitches/seen";
 import { usePortalAccess } from "@/lib/role/usePortalAccess";
 import { useSiteLive } from "@/lib/flags/useSiteLive";
@@ -566,6 +568,7 @@ export default function DashboardPage() {
   // For UI gating use the effective role so admins can preview each view.
   // `role` (actual) still drives data fetches/sign-out elsewhere.
   const effectiveRole = useEffectiveRole(role);
+  const { grants: toolGrants } = useToolAccess();
   const isExternal = effectiveRole === "external_rep";
   const isAdmin = effectiveRole === "admin";
   const isInternal = effectiveRole === "admin" || effectiveRole === "anchor_rep";
@@ -593,8 +596,14 @@ export default function DashboardPage() {
   // sales role via "View app as" resolve to one of these too.
   const viewerIsSales = isExternal || effectiveRole === "anchor_rep";
   const salesAudience: SalesAudience = isExternal ? "external" : "internal";
+  // Two gates. The audience switch hides a tool from everyone on this side of
+  // the app; a restricted tool additionally needs THIS person to be on the list
+  // an admin named in Manage Tools. Grants start empty, so a restricted tile
+  // stays hidden while they load rather than flashing in and disappearing.
   const isSalesToolHidden = (toolKey: string) =>
-    viewerIsSales && hiddenSalesKeys.has(salesToolKey(salesAudience, toolKey));
+    viewerIsSales &&
+    (hiddenSalesKeys.has(salesToolKey(salesAudience, toolKey)) ||
+      (isRestrictedTool(toolKey) && !toolGrants.has(toolKey)));
 
   const firstName = (fullName || "").trim().split(/\s+/)[0] || "";
   const greetingName = firstName || "there";
@@ -693,6 +702,9 @@ export default function DashboardPage() {
     }
     if (isInternalSales) {
       actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
+      // Filed here, published on anchorp.com. Internal only — external partner
+      // reps have nothing to do with the showcase schedule.
+      actions.push({ key: "showcase", href: "/dashboard/showcase", label: "Showcase Stop", desc: "File a mobile showcase stop — where it went, what happened, and a photo.", icon: "camera", badge: "Showcase" });
     }
   } else {
     if (heroLink !== "/chat") {
