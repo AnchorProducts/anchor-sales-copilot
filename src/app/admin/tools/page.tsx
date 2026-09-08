@@ -9,6 +9,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
 import { CARDS, BADGE_STYLE, TileIcon } from "../cards";
 import { SALES_TOOLS, salesToolKey, type SalesAudience } from "@/lib/salesTools";
+import ToolAccessPicker from "@/app/components/admin/ToolAccessPicker";
 import { SITE_LIVE_KEY, SITE_LIVE_SURFACES, siteLiveFrom } from "@/lib/flags/siteLive";
 
 export const dynamic = "force-dynamic";
@@ -268,16 +269,23 @@ export default function AdminToolsPage() {
             <h2 className="mt-8 text-lg font-bold text-[var(--anchor-deep)]">Sales rep tools</h2>
             <p className="mb-4 mt-1 text-sm text-[var(--anchor-gray)]">
               Deactivated tools are hidden from a rep&apos;s dashboard. Toggle each tool separately for internal and external reps.
+              A tool marked <strong>Assigned</strong> goes further: only the people you name on it can see or open it.
             </p>
             <div className="flex flex-col gap-2.5">
               {SALES_TOOLS.map((tool) => (
-                <Card key={tool.key} className="flex items-center gap-4 p-4">
+                <Card key={tool.key} className="p-4">
+                  <div className="flex items-center gap-4">
                   <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[var(--anchor-mint)]/40 p-2.5 text-[var(--anchor-deep)]">
                     <TileIcon name={tool.icon} className="h-5 w-5" />
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-base font-bold text-[var(--anchor-deep)]">{tool.label}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-base font-bold text-[var(--anchor-deep)]">{tool.label}</h3>
+                      {tool.restricted && (
+                        <span className="ds-badge !rounded-full bg-[#dbeafe] text-[#1e3a8a]">Assigned</span>
+                      )}
+                    </div>
                     <p className="mt-0.5 line-clamp-2 text-sm text-[var(--anchor-gray)]">{tool.description}</p>
                   </div>
 
@@ -305,6 +313,12 @@ export default function AdminToolsPage() {
                       );
                     })}
                   </div>
+                  </div>
+
+                  {/* Per-user access, for tools that are a named list rather
+                      than a role. Rendered under the audience switches because
+                      it is the second of the two gates, not an alternative. */}
+                  {tool.restricted && <ToolAccessPicker toolKey={tool.key} label={tool.label} />}
                 </Card>
               ))}
             </div>
