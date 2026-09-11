@@ -1,6 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireInternalUser } from "@/lib/portalAccess";
+import { isArchiveDoc } from "@/lib/library/archive";
 
 /* ============================================================================
  * Resource Library — the SHARED document source.
@@ -31,6 +32,9 @@ export type LibraryDoc = {
   path: string | null;
   updatedAt: string | null;
   downloadUrl: string | null;
+  /** Superseded material, marked by the ARCHIVE- naming convention. Keeps its
+   *  category, so it still appears under Sales Sheets / Data Sheets / etc. */
+  isArchive: boolean;
 };
 
 export type LibraryData = {
@@ -89,12 +93,17 @@ export async function getLibraryDocuments(): Promise<LibraryData | null> {
       path,
       updatedAt: (a.last_updated as string) ?? (a.created_at as string) ?? null,
       downloadUrl: path ? urlMap.get(path) ?? null : null,
+      isArchive: isArchiveDoc({ path, title: a.title as string | null }),
     };
   });
 
-  // External reps never see internal-only material, whatever the deploy.
+  // External reps never see internal-only material, whatever the deploy. The
+  // archive check is belt-and-braces: archived uploads are written as internal,
+  // but a hand-placed ARCHIVE- file outside internal/ must still stay inside.
   const visible =
-    access.appRole === "external_rep" ? docs.filter((d) => d.visibility !== "internal") : docs;
+    access.appRole === "external_rep"
+      ? docs.filter((d) => d.visibility !== "internal" && !d.isArchive)
+      : docs;
 
   const categories = Array.from(new Set(visible.map((d) => d.categoryLabel))).sort();
   const products = Array.from(
