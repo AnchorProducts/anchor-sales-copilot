@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { ingestStorageFile } from "@/lib/knowledge/ingestStorageFile";
+import { isArchivePath, withArchivePrefix } from "@/lib/library/archive";
 import { sendPushToTool } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
 
@@ -58,6 +59,11 @@ function basename(p: string) {
   const s = String(p || "");
   const i = s.lastIndexOf("/");
   return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function extensionOf(name: string) {
+  const dot = String(name || "").lastIndexOf(".");
+  return dot > 0 ? String(name).slice(dot) : "";
 }
 
 // True only if a storage object already exists at exactly this path. Replace
@@ -141,7 +147,14 @@ export async function POST(req: NextRequest) {
     const phase = String(body?.phase || "").trim();
     const prefix = normalizePrefix(String(body?.prefix || ""));
     const category = String(body?.category || "other").trim();
-    const visibility = String(body?.visibility || "public").trim();
+
+    // Archiving is orthogonal to category: the file keeps its category (a
+    // retired sales sheet is still a sales sheet) and additionally carries the
+    // ARCHIVE- name marker. Archived material is internal by definition — it is
+    // superseded, so it must never reach a customer — which also keeps it out
+    // of the public Webflow feed via the existing internal-path gate.
+    const archive = body?.archive === true;
+    const visibility = archive ? "internal" : String(body?.visibility || "public").trim();
 
     // ── Replace-in-place ──────────────────────────────────────────────────
     // Overwrite the bytes of an EXISTING library file at its exact path. The
@@ -244,17 +257,23 @@ export async function POST(req: NextRequest) {
 
       let finalName: string;
       const fixedBase = CATEGORY_FIXED_BASENAME[category];
-      if (fixedBase) {
-        const dot = baseName.lastIndexOf(".");
-        const ext = dot > 0 ? baseName.slice(dot) : "";
-        finalName = `${fixedBase}${ext}`;
+      if (fixedBase && !archive) {
+        finalName = `${fixedBase}${extensionOf(baseName)}`;
       } else {
+        // An archived upload always keeps its own name. The canonical fixed
+        // basename ("Sales-Sheet.pdf") is reserved for the ONE current file per
+        // category — reusing it here would overwrite the live sheet with the
+        // retired one, which is the exact opposite of archiving.
         const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
         const alreadyTagged =
           categoryPrefix &&
           baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
         finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
       }
+      // The category token stays in the name so tabFromPath() still files this
+      // under Sales/Data/etc. — an archived sales sheet must show up when
+      // someone filters for sales sheets, just flagged as archived.
+      if (archive) finalName = withArchivePrefix(finalName);
 
       const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
       const path = `${folder}/${finalName}`;
@@ -293,6 +312,18 @@ export async function POST(req: NextRequest) {
     if (!path.startsWith(`${folder}/`)) {
       return NextResponse.json({ error: "Invalid storage path" }, { status: 400 });
     }
+    // The commit must agree with what we signed. Without this, an archive
+    // commit could attach a plain title to an ARCHIVE- file (or the reverse),
+    // and the two halves of the library would disagree about what's archived.
+    if (archive !== isArchivePath(path)) {
+      return NextResponse.json({ error: "Archive flag does not match the file name." }, { status: 400 });
+    }
+
+    // The title carries the marker too, because the All Documents list shows
+    // titles, not file names.
+    const displayTitle = archive
+      ? withArchivePrefix(userTitle || finalName)
+      : userTitle || finalName;
 
     // Insert the assets-table row server-side so the FK to asset_categories
     // can be satisfied with a value we *know* exists. Done via supabaseAdmin
@@ -313,7 +344,7 @@ export async function POST(req: NextRequest) {
           .from("assets")
           .insert({
             product_id: productId,
-            title: userTitle || finalName,
+            title: displayTitle,
             type: assetType,
             category_key: resolvedKey,
             path,
@@ -336,21 +367,29 @@ export async function POST(req: NextRequest) {
     // circuit inside the helper — they don't get embedded. Wrapped in
     // try/catch AND .catch so neither a synchronous throw at call-site nor
     // an async rejection can ever fail the upload response.
-    try {
-      ingestStorageFile({
-        path,
-        title: finalName,
-        category,
-        productTags: [],
-        createdBy: user.id,
-      }).catch((err) => console.warn("[admin/assets/upload] ingestion failed:", err));
-    } catch (err) {
-      console.warn("[admin/assets/upload] ingestion threw synchronously:", err);
+    //
+    // Archived docs are deliberately NOT ingested. They are superseded by
+    // definition, so letting the copilot quote them would put retired numbers
+    // in front of a rep. They stay browsable and downloadable in the library —
+    // they just aren't an answer source.
+    if (!archive) {
+      try {
+        ingestStorageFile({
+          path,
+          title: displayTitle,
+          category,
+          productTags: [],
+          createdBy: user.id,
+        }).catch((err) => console.warn("[admin/assets/upload] ingestion failed:", err));
+      } catch (err) {
+        console.warn("[admin/assets/upload] ingestion threw synchronously:", err);
+      }
     }
 
     return NextResponse.json({
       path,
       name: finalName,
+      archive,
       row: rowResult,
     });
   } catch (e: any) {

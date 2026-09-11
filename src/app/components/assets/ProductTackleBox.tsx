@@ -9,6 +9,7 @@ import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionC
 import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
 import { compressImages } from "@/lib/media/compressImage";
+import { isArchivePath, withArchivePrefix } from "@/lib/library/archive";
 
 function catalogDisplayName(rawName: string | undefined | null): string {
   if (!rawName) return "";
@@ -74,6 +75,7 @@ type TabKey =
   | "presentation"
   | "pics"
   | "case"
+  | "archive"
   | "other";
 
 // TAB_LABELS is computed inside the component using t() so it translates
@@ -91,11 +93,14 @@ const TAB_ORDER: TabKey[] = [
   "presentation",
   "pics",
   "case",
+  "archive",
   "other",
 ];
 
-// Tabs that should only appear for internal users
-const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook"]);
+// Tabs that should only appear for internal users. Archive is here because
+// retired documents are for internal reference only — a customer-facing rep
+// should never be handed a superseded sheet.
+const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook", "archive"]);
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
 const PDF_EXTS = new Set(["pdf"]);
@@ -335,7 +340,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     install: t("tabInstall"), sales: t("tabSales"), intake: t("tabIntake"),
     test: t("tabTest"), pricebook: t("tabPricebook"), approval: t("tabApproval"),
     presentation: t("tabPresentation"), pics: t("tabPics"), case: t("tabCase"),
-    other: t("tabOther"),
+    archive: t("tabArchive"), other: t("tabOther"),
   };
 
   const [loading, setLoading] = useState(true);
@@ -392,6 +397,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     type: "document",
     path: "",
     visibility: "public" as "public" | "internal",
+    archive: false,
   });
   const [formMsg, setFormMsg] = useState<string | null>(null);
 
@@ -593,12 +599,17 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       presentation: 0,
       pics: 0,
       case: 0,
+      archive: 0,
       other: 0,
     };
 
+    // Archive is a cross-cutting marker, not a category: an archived sales
+    // sheet counts toward BOTH Sales and Archive, so filtering by Sales still
+    // lists it.
     for (const a of visibleAssets) {
       const k = tabFromPath(a.path);
       counts[k] = (counts[k] || 0) + 1;
+      if (isArchivePath(a.path)) counts.archive += 1;
     }
 
     // if not internal, force-hide internal-only tabs
@@ -620,6 +631,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
   const filtered = useMemo(() => {
     if (activeTab === "all") return visibleAssets;
+    if (activeTab === "archive") return visibleAssets.filter((a) => isArchivePath(a.path));
     return visibleAssets.filter((a) => tabFromPath(a.path) === activeTab);
   }, [visibleAssets, activeTab]);
 
@@ -1038,7 +1050,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
     const category_key = form.category_key.trim();
     const type = form.type.trim();
-    const visibility = form.visibility;
+    const archive = form.archive;
+    // Archived material is superseded, so it is internal by definition — the
+    // server enforces this too; mirroring it here keeps the UI honest.
+    const visibility = archive ? "internal" : form.visibility;
     const manualPath = form.path.trim();
 
     if (!category_key) {
@@ -1077,6 +1092,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
             prefix,
             category: category_key,
             visibility,
+            archive,
             fileName: uploadFile.name,
           }),
         });
@@ -1116,6 +1132,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
             name: sign.name,
             category: category_key,
             visibility,
+            archive,
             productId,
             type,
             title,
@@ -1138,7 +1155,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
           // (e.g. category_key FK). Surface it but keep the upload.
           setFormMsg(`Uploaded, but row insert failed: ${json.row.error}`);
           setUploadFile(null);
-          setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
+          setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public", archive: false });
           await load();
           setAdding(false);
           return;
@@ -1153,7 +1170,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     } else if (manualPath) {
       // Manual storage path was provided (no file uploaded). Fall back to a
       // client-side insert for that legacy "point at an existing object" path.
-      const title = form.title.trim() || manualPath.split("/").pop() || "Asset";
+      const rawTitle = form.title.trim() || manualPath.split("/").pop() || "Asset";
+      const title = archive ? withArchivePrefix(rawTitle) : rawTitle;
       const { error: insErr } = await supabase.from("assets").insert({
         product_id: productId,
         title,
@@ -1170,7 +1188,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     }
 
     setUploadFile(null);
-    setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public" });
+    setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public", archive: false });
     setFormMsg("Added!");
     await load();
     setAdding(false);
@@ -1409,11 +1427,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                             <div className="truncate text-[12px] font-semibold text-black">
                               {a.title || basename(a.path)}
                             </div>
-                            {a.visibility === "internal" && (
+                            {isArchivePath(a.path) ? (
+                              <span className="mt-0.5 inline-block rounded-full bg-[#e5e7eb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#4b5563]">
+                                {t("tabArchive")}
+                              </span>
+                            ) : a.visibility === "internal" ? (
                               <span className="mt-0.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold text-black/60">
                                 {t("internal")}
                               </span>
-                            )}
+                            ) : null}
                             <div className="mt-2 flex gap-1.5">
                               <button
                                 type="button"
@@ -1466,7 +1488,12 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                   {badge && (
                                     <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">{badge}</span>
                                   )}
-                                  {a.visibility === "internal" && (
+                                  {isArchivePath(a.path) && (
+                                    <span className="shrink-0 rounded-full bg-[#e5e7eb] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#4b5563]">
+                                      {t("tabArchive")}
+                                    </span>
+                                  )}
+                                  {a.visibility === "internal" && !isArchivePath(a.path) && (
                                     <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-black/70">{t("internal")}</span>
                                   )}
                                 </div>
@@ -1676,13 +1703,34 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <label className="grid gap-1 text-sm">
                   <span className="font-semibold text-black">Visibility</span>
                   <select
-                    value={form.visibility}
+                    value={form.archive ? "internal" : form.visibility}
+                    disabled={form.archive}
                     onChange={(e) => setForm((s) => ({ ...s, visibility: e.target.value as any }))}
-                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835] disabled:opacity-60"
                   >
                     <option value="public">Public</option>
                     <option value="internal">Internal</option>
                   </select>
+                </label>
+
+                {/* Archive is a tag, not a category. The file keeps the category
+                    chosen above, so it stays on that tab, and additionally
+                    lands on the internal-only Archive tab. */}
+                <label className="sm:col-span-4 flex items-start gap-2 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 py-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.archive}
+                    onChange={(e) => setForm((s) => ({ ...s, archive: e.target.checked }))}
+                    className="mt-0.5 h-4 w-4 accent-[#047835]"
+                  />
+                  <span>
+                    <span className="font-semibold text-black">Archive this document</span>
+                    <span className="mt-0.5 block text-[12px] text-black/60">
+                      Saved as <code>ARCHIVE-&lt;name&gt;</code>, internal only, and left out of
+                      the copilot&rsquo;s answers. It keeps its category, so it still appears
+                      under {"\u201C"}{form.category_key.replace(/_/g, " ")}{"\u201D"} alongside the current file.
+                    </span>
+                  </span>
                 </label>
 
                 <label className="grid gap-1 text-sm">

@@ -32,9 +32,21 @@ type Doc = {
   path: string | null;
   updatedAt: string | null;
   downloadUrl: string | null;
+  isArchive: boolean;
 };
 
 const ALL = "All";
+
+/* Archive is a cross-cutting marker, not a category. Filtering by "Sales Sheet"
+ * lists current AND archived sales sheets together; this control is the way to
+ * narrow to one or the other. Default "all" so nothing is hidden by surprise. */
+type ArchiveFilter = "all" | "current" | "archive";
+
+const ARCHIVE_FILTERS: { key: ArchiveFilter; label: string }[] = [
+  { key: "all", label: "All documents" },
+  { key: "current", label: "Current only" },
+  { key: "archive", label: "Archive" },
+];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -74,6 +86,7 @@ export default function LibraryDocumentsPage() {
   const [category, setCategory] = useState<string>(ALL);
   const [solution, setSolution] = useState<string>(ALL);
   const [visibility, setVisibility] = useState<string>(ALL);
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
 
   useEffect(() => {
     let alive = true;
@@ -118,11 +131,15 @@ export default function LibraryDocumentsPage() {
       if (category !== ALL && d.categoryLabel !== category) return false;
       if (solution !== ALL && d.productName !== solution) return false;
       if (visibility !== ALL && d.visibility !== visibility) return false;
+      if (archiveFilter === "current" && d.isArchive) return false;
+      if (archiveFilter === "archive" && !d.isArchive) return false;
       if (!q) return true;
       const hay = [d.title, d.categoryLabel, d.productName ?? "", d.path ?? ""].join(" ").toLowerCase();
       return hay.includes(q);
     });
-  }, [docs, search, category, solution, visibility]);
+  }, [docs, search, category, solution, visibility, archiveFilter]);
+
+  const archiveCount = useMemo(() => docs.filter((d) => d.isArchive).length, [docs]);
 
   return (
     <main className="ds-page">
@@ -197,6 +214,25 @@ export default function LibraryDocumentsPage() {
               </div>
             )}
           </div>
+
+          {archiveCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {ARCHIVE_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setArchiveFilter(f.key)}
+                  className={chipClass(archiveFilter === f.key)}
+                >
+                  {f.label}
+                  {f.key === "archive" ? ` (${archiveCount})` : ""}
+                </button>
+              ))}
+              <span className="text-[11px] text-[var(--anchor-gray)]">
+                Archived documents keep their category, so they also show up under it.
+              </span>
+            </div>
+          )}
         </div>
 
         {err && <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</Card>}
@@ -235,7 +271,12 @@ export default function LibraryDocumentsPage() {
                         <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-deep)]">
                           {d.categoryLabel}
                         </span>
-                        {d.visibility === "internal" && (
+                        {d.isArchive && (
+                          <span className="rounded-full bg-[#e5e7eb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#4b5563]">
+                            Archive
+                          </span>
+                        )}
+                        {d.visibility === "internal" && !d.isArchive && (
                           <span className="rounded-full bg-[#fde68a] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#7c4a00]">
                             Internal
                           </span>
