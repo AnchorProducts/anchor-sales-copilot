@@ -21,8 +21,12 @@
 
 export const ARCHIVE_PREFIX = "ARCHIVE-";
 
-/** Case-insensitive so a hand-uploaded "archive-foo.pdf" still counts. */
-const ARCHIVE_RE = /^archive[-_]/i;
+/* Case-insensitive so a hand-uploaded "archive-foo.pdf" still counts, and a
+ * space is allowed because the library backfill derives a title from the file
+ * name and turns separators into spaces — "ARCHIVE-install-sheet-x.pdf" becomes
+ * the title "ARCHIVE install sheet x". A separator is still required, so an
+ * ordinary word like "archived" is not mistaken for the marker. */
+const ARCHIVE_RE = /^archive[-_ ]/i;
 
 function basename(p: string): string {
   const s = String(p || "").split("?")[0];
