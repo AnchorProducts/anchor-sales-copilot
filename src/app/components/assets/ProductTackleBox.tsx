@@ -97,6 +97,24 @@ const TAB_ORDER: TabKey[] = [
   "other",
 ];
 
+/* The categories an admin can file a solution document under. These `key`
+ * values are the real `asset_categories.key` rows — `assets.category_key` is
+ * NOT NULL with a foreign key onto that table, so anything not listed there
+ * cannot be saved. There is no "Other" because the table has no general
+ * bucket; every document has to be filed somewhere real. */
+const ASSET_CATEGORY_OPTIONS: { key: string; label: string }[] = [
+  { key: "sales_sheet", label: "Sales Sheet" },
+  { key: "data_sheet", label: "Data Sheet" },
+  { key: "install_guide", label: "Install Guide" },
+  { key: "spec_document", label: "Spec Document" },
+  { key: "intake_form", label: "Intake Form" },
+  { key: "test_reports", label: "Test Report" },
+  { key: "pricebook", label: "Pricebook" },
+  { key: "manufacturer_approval_letters", label: "Manufacturer Approval Letter" },
+  { key: "presentations", label: "Presentation" },
+  { key: "case_studies", label: "Case Study" },
+];
+
 // Tabs that should only appear for internal users. Archive is here because
 // retired documents are for internal reference only — a customer-facing rep
 // should never be handed a superseded sheet.
@@ -1672,17 +1690,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     onChange={(e) => setForm((s) => ({ ...s, category_key: e.target.value }))}
                     className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                   >
-                    <option value="sales_sheet">Sales Sheet</option>
-                    <option value="data_sheet">Data Sheet</option>
-                    <option value="install_sheet">Install Sheet</option>
-                    <option value="spec_document">Spec Document</option>
-                    <option value="intake_forms">Intake Form</option>
-                    <option value="test_reports">Test Report</option>
-                    <option value="pricebook">Pricebook</option>
-                    <option value="approval_letters">Approval Letter</option>
-                    <option value="presentation">Presentation</option>
-                    <option value="case_studies">Case Study</option>
-                    <option value="other">Other</option>
+                    {ASSET_CATEGORY_OPTIONS.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
                   </select>
                 </label>
 
