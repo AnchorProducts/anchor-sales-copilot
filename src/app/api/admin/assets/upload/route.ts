@@ -13,18 +13,23 @@ export const dynamic = "force-dynamic";
 // in ProductTackleBox. The tab grouping reads filenames, not folders, so we
 // prefix uploaded files with the category token to guarantee they land on the
 // right tab regardless of how the user named the source file.
+// Keys here are the REAL `asset_categories.key` values, which the Anchor
+// Internal Portal owns. They are not free-form labels: `assets.category_key`
+// is NOT NULL with a foreign key onto that table, so a key that isn't a row
+// there cannot be stored at all.
 const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   spec_document: "spec-",
+  spec: "spec-",
   data_sheet: "data-sheet-",
   sales_sheet: "sales-sheet-",
-  install_sheet: "install-sheet-",
-  intake_forms: "intake-",
+  install_guide: "install-sheet-",
+  intake_form: "intake-",
   test_reports: "test-report-",
   pricebook: "pricebook-",
-  approval_letters: "approval-",
-  presentation: "presentation-",
+  manufacturer_approval_letters: "approval-",
+  presentations: "presentation-",
   case_studies: "case-study-",
-  other: "",
+  pictures: "",
 };
 
 // Categories whose filenames should be fully replaced (not prefixed) so each
@@ -34,7 +39,7 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
 const CATEGORY_FIXED_BASENAME: Record<string, string> = {
   sales_sheet: "Sales-Sheet",
   data_sheet: "Data-Sheet",
-  install_sheet: "Install-Sheet",
+  install_guide: "Install-Sheet",
 };
 
 function normalizePrefix(p: string) {
@@ -81,35 +86,51 @@ async function storageFileExists(path: string): Promise<boolean> {
   return data.some((e: any) => String(e?.name) === name);
 }
 
-// asset_categories enforces an FK on assets.category_key, and not every
-// long-form key (e.g. "data_sheet") exists in that table. Build a candidate
-// list — preferred → short form → "other" — and pick the first one that's
-// actually a row in asset_categories.
-function categoryKeyCandidates(category: string): string[] {
-  switch (category) {
-    case "sales_sheet": return ["sales_sheet", "sales", "other"];
-    case "data_sheet": return ["data_sheet", "data", "other"];
-    case "install_sheet": return ["install_sheet", "install_manual", "install", "other"];
-    case "spec_document": return ["spec_document", "spec", "other"];
-    case "intake_forms": return ["intake_forms", "intake", "other"];
-    case "test_reports": return ["test_reports", "test", "other"];
-    case "pricebook": return ["pricebook", "pricing", "other"];
-    case "approval_letters": return ["approval_letters", "approval", "other"];
-    case "presentation": return ["presentation", "presentations", "other"];
-    case "case_studies": return ["case_studies", "case_study", "case", "other"];
-    default: return ["other"];
-  }
-}
+// Older clients (and this route's own earlier guesses) used names that were
+// never rows in asset_categories — "install_sheet", "intake_forms",
+// "approval_letters", "other". Translate those to the real key rather than
+// failing the insert, so an admin on a cached page still gets a usable row.
+// There is deliberately no entry for "other": the table has no general bucket,
+// so a caller sending it must pick a real category.
+const CATEGORY_ALIASES: Record<string, string> = {
+  install_sheet: "install_guide",
+  install_manual: "install_guide",
+  install: "install_guide",
+  intake_forms: "intake_form",
+  intake: "intake_form",
+  approval_letters: "manufacturer_approval_letters",
+  approval: "manufacturer_approval_letters",
+  presentation: "presentations",
+  case_study: "case_studies",
+  case: "case_studies",
+  sales: "sales_sheet",
+  data: "data_sheet",
+  test: "test_reports",
+  pricing: "pricebook",
+  pics: "pictures",
+};
 
-async function resolveValidCategoryKey(candidates: string[]): Promise<string | null> {
-  const { data, error } = await supabaseAdmin
-    .from("asset_categories")
-    .select("key")
-    .in("key", candidates);
-  if (error || !Array.isArray(data)) return null;
+/** Resolve whatever the client sent to a key that really exists, or null.
+ *  Returns the live key list too, so a failure can say what IS available
+ *  instead of only what was tried. */
+async function resolveValidCategoryKey(
+  category: string,
+): Promise<{ key: string | null; available: string[] }> {
+  const { data, error } = await supabaseAdmin.from("asset_categories").select("key");
+  if (error || !Array.isArray(data)) return { key: null, available: [] };
+
   const valid = new Set(data.map((r: any) => String(r.key)));
-  for (const c of candidates) if (valid.has(c)) return c;
-  return null;
+  const available = Array.from(valid).sort();
+
+  const raw = String(category || "").trim();
+  // An exact key always wins, so a value that is genuinely a row (e.g. "spec",
+  // which exists alongside "spec_document") is never rewritten by an alias.
+  if (valid.has(raw)) return { key: raw, available };
+
+  const alias = CATEGORY_ALIASES[raw];
+  if (alias && valid.has(alias)) return { key: alias, available };
+
+  return { key: null, available };
 }
 
 export async function POST(req: NextRequest) {
@@ -332,12 +353,13 @@ export async function POST(req: NextRequest) {
     // listing.
     let rowResult: { ok: boolean; error?: string; id?: string; category_key?: string } = { ok: false };
     if (productId) {
-      const candidates = categoryKeyCandidates(category);
-      const resolvedKey = await resolveValidCategoryKey(candidates);
+      const { key: resolvedKey, available } = await resolveValidCategoryKey(category);
       if (!resolvedKey) {
         rowResult = {
           ok: false,
-          error: `No matching asset_categories row. Tried: ${candidates.join(", ")}`,
+          error:
+            `"${category}" is not an asset category. Valid categories are: ` +
+            `${available.join(", ") || "(none — asset_categories is empty or unreadable)"}`,
         };
       } else {
         const { data: ins, error: insErr } = await supabaseAdmin
