@@ -42,6 +42,10 @@ const BUCKET = "knowledge";
 // snapshots in the document library.
 const EXCLUDED_PREFIXES = ["marketing-orders/"];
 
+// Supabase writes a zero-byte placeholder to keep an empty folder alive. It is
+// not a document and must never become a library row.
+const PLACEHOLDER_NAMES = new Set([".emptyfolderplaceholder"]);
+
 type BucketFile = { path: string; updatedAt: string | null };
 
 async function listAll(): Promise<BucketFile[]> {
@@ -113,21 +117,44 @@ async function plan() {
   }
 
   const skippedExcluded: string[] = [];
+  const skippedPlaceholder: string[] = [];
+  const skippedNoCategory: string[] = [];
+  const skippedNoProduct: string[] = [];
   const rows: Array<Record<string, unknown>> = [];
 
+  // `assets.product_id` and `assets.category_key` are both NOT NULL, and each
+  // carries a foreign key. A file we can't attribute to a product AND resolve
+  // to a real category therefore cannot be stored at all — the whole insert
+  // chunk would be rejected and nothing would land. Skip those and name them in
+  // the summary instead: they stay visible through the bucket listing exactly
+  // as they are today, and an admin can file them by hand.
   for (const f of files) {
     if (known.has(f.path)) continue;
     if (EXCLUDED_PREFIXES.some((pre) => f.path.toLowerCase().startsWith(pre))) {
       skippedExcluded.push(f.path);
       continue;
     }
+    if (PLACEHOLDER_NAMES.has(f.path.split("/").pop()?.toLowerCase() ?? "")) {
+      skippedPlaceholder.push(f.path);
+      continue;
+    }
+    const categoryKey = categoryKeyFromPath(f.path);
+    if (!categoryKey) {
+      skippedNoCategory.push(f.path);
+      continue;
+    }
+    const productId = productIdFor(f.path);
+    if (!productId) {
+      skippedNoProduct.push(f.path);
+      continue;
+    }
     rows.push({
       title: titleFromPath(f.path),
       path: f.path,
       type: IMAGE_EXTS.has(extOf(f.path)) ? "image" : "document",
-      category_key: categoryKeyFromPath(f.path),
+      category_key: categoryKey,
       visibility: visibilityFromPath(f.path),
-      product_id: productIdFor(f.path),
+      product_id: productId,
       scope: "product",
       last_updated: f.updatedAt,
     });
@@ -135,12 +162,9 @@ async function plan() {
 
   const byCategory: Record<string, number> = {};
   const byVisibility: Record<string, number> = {};
-  let withProduct = 0;
   for (const r of rows) {
-    const key = (r.category_key as string) ?? "(uncategorized)";
-    byCategory[key] = (byCategory[key] ?? 0) + 1;
+    byCategory[r.category_key as string] = (byCategory[r.category_key as string] ?? 0) + 1;
     byVisibility[r.visibility as string] = (byVisibility[r.visibility as string] ?? 0) + 1;
-    if (r.product_id) withProduct++;
   }
 
   return {
@@ -148,8 +172,9 @@ async function plan() {
     alreadyIndexed: known.size,
     excluded: skippedExcluded.length,
     toInsert: rows.length,
-    matchedToProduct: withProduct,
-    unmatched: rows.length - withProduct,
+    skippedPlaceholder: skippedPlaceholder.length,
+    skippedNoCategory,
+    skippedNoProduct,
     byCategory,
     byVisibility,
     sample: rows.slice(0, 15).map((r) => ({
