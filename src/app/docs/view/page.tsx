@@ -49,6 +49,13 @@ function DocViewer() {
   const title = params?.get("title") || basenameFromPath(path);
   const backLabel = deriveBackLabel(from);
 
+  // History length when the viewer opened. Anything added after that was pushed
+  // by the embedded Office viewer, and Back steps over it. Client-only: this
+  // component renders inside Suspense behind useSearchParams.
+  const [arrivedHistoryLength] = useState(() =>
+    typeof window === "undefined" ? 0 : window.history.length
+  );
+
   // Session token so the mobile redirect / download can authenticate /api/doc-open
   // (a top-level navigation can't send the auth cookie). null = not loaded yet.
   const [token, setToken] = useState<string | null>(null);
@@ -130,14 +137,45 @@ function DocViewer() {
   }
 
   function goBack() {
-    // Go straight to the originating page rather than history.back(): the viewer
-    // is opened via a hard navigation, and the embedded Office viewer pushes its
-    // own entries onto the session history on iOS, so "back" doesn't reliably
-    // return to the tacklebox. `from` is always the page that opened the viewer.
     // Guard against a manipulated `from` (must be a same-origin path, not a
     // protocol-relative or absolute URL) so this can't become an open redirect.
     const dest = /^\/(?!\/)/.test(from) ? from : "/dashboard";
-    router.push(dest);
+
+    // NEVER PUSH. This used to router.push(dest), which added the opener as a
+    // NEW page instead of returning to it — so the app's Back from there went to
+    // this viewer, whose Back pushed the opener again, and nobody could get
+    // further back than the page they'd just left.
+    //
+    // Every opener reaches this page with a full navigation, so the referrer is
+    // the page underneath. When that's `dest`, go back through real history,
+    // stepping over any entries the embedded Office viewer pushed on iOS (the
+    // reason this didn't use history.back() before).
+    let cameFromDest = false;
+    try {
+      const ref = document.referrer ? new URL(document.referrer) : null;
+      cameFromDest =
+        !!ref && ref.origin === window.location.origin && ref.pathname === dest.split("?")[0];
+    } catch {
+      /* no usable referrer — replace below */
+    }
+
+    if (cameFromDest) {
+      const pushedHere = Math.max(0, window.history.length - arrivedHistoryLength);
+      let left = false;
+      window.addEventListener("pagehide", () => { left = true; }, { once: true });
+      window.history.go(-(1 + pushedHere));
+      // If history couldn't get there, don't strand them on the viewer.
+      // `left` keeps a page restored later from the back-forward cache from
+      // firing this on its way back in.
+      window.setTimeout(() => {
+        if (!left && window.location.pathname === "/docs/view") router.replace(dest);
+      }, 800);
+      return;
+    }
+
+    // Opened some other way (a deep link, a fresh tab): swap this page for the
+    // opener rather than stacking a new one on top of it.
+    router.replace(dest);
   }
 
   return (

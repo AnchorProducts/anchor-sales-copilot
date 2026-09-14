@@ -109,7 +109,13 @@ export default function ProjectIntakeDetailPage({ params }: { params: Promise<{ 
       <div className="ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10">
         <button
           type="button"
-          onClick={() => router.push("/dashboard/opportunities")}
+          onClick={() => {
+            // A real back. The consult list is the only page that links here, so
+            // the previous entry is it. Pushing the list instead added a page, and
+            // Back from the list came straight back to this consult.
+            if (window.history.length > 1) router.back();
+            else router.replace("/dashboard/opportunities");
+          }}
           className="mb-3 text-sm font-semibold text-[var(--anchor-green)] hover:underline"
         >
           ← Back to Active Consults
