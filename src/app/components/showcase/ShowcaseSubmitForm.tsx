@@ -5,30 +5,36 @@ import Button from "@/app/components/ui/Button";
 import { Card } from "@/app/components/ui/Card";
 import { Alert } from "@/app/components/ui/Alert";
 import { Input, Textarea } from "@/app/components/ui/Field";
-import { PhotoPicker, usePhotoUpload } from "@/app/components/showcase/PhotoPicker";
+import { PhotoTray, usePhotoUploads } from "@/app/components/showcase/PhotoTray";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { trackEvent } from "@/lib/analytics/track";
-import { MAX_NOTE, MAX_TEXT, showcaseFetch, today } from "@/lib/showcase/client";
+import { MAX_NOTE, MAX_PHOTOS, MAX_TEXT, showcaseFetch, today } from "@/lib/showcase/client";
 
 /* ============================================================================
- * File a mobile-showcase stop.
+ * Add a mobile-showcase stop.
  *
  * Built for one person on a phone, often on a bad connection in a contractor's
  * yard. Two decisions follow from that:
  *
- *  1. The photo uploads the moment it is chosen, not on submit (PhotoPicker).
- *     The upload is the slow part; doing it up front means the submit is a
+ *  1. Photos upload the moment they are chosen, not on submit (PhotoTray).
+ *     The uploads are the slow part; doing them up front means the submit is a
  *     small JSON POST.
- *  2. A failed submit KEEPS the form and the uploaded path. Retrying re-sends
- *     the form, not the photograph.
+ *  2. A failed submit KEEPS the form and the uploaded paths. Retrying re-sends
+ *     the form, not the photographs.
  *
- * Everything filed here is pending until marketing reviews it on anchorp.com —
+ * Everything added here is pending until marketing reviews it on anchorp.com —
  * keepers included. There is no other way onto the schedule.
  * ==========================================================================*/
 
-export default function ShowcaseSubmitForm({ onFiled }: { onFiled: () => void }) {
+export default function ShowcaseSubmitForm({
+  onFiled,
+  onCancel,
+}: {
+  onFiled: () => void;
+  onCancel: () => void;
+}) {
   const supabase = useMemo(() => supabaseBrowser(), []);
-  const { photo, pick, retry, clear } = usePhotoUpload();
+  const uploads = usePhotoUploads();
 
   const [date, setDate] = useState(today);
   const [city, setCity] = useState("");
@@ -46,9 +52,9 @@ export default function ShowcaseSubmitForm({ onFiled }: { onFiled: () => void })
     if (!city.trim()) return setError("A city is required.");
     if (!event.trim()) return setError("An event is required.");
     if (note.length > MAX_NOTE) return setError(`Keep the note under ${MAX_NOTE} characters.`);
-    if (photo.kind === "uploading") return setError("The photo is still uploading — give it a moment.");
-    if (photo.kind === "error") {
-      return setError("The photo didn't upload. Try it again or remove it before filing.");
+    if (uploads.busy) return setError("Photos are still uploading — give them a moment.");
+    if (uploads.failed) {
+      return setError("Some photos didn't upload. Try them again or remove them before filing.");
     }
 
     setSubmitting(true);
@@ -59,32 +65,35 @@ export default function ShowcaseSubmitForm({ onFiled }: { onFiled: () => void })
         city: city.trim(),
         event: event.trim(),
         note: note.trim(),
-        photoPath: photo.kind === "ready" ? photo.path : "",
+        photoPaths: uploads.paths,
       },
     });
     setSubmitting(false);
 
     if (!result.ok) {
-      // The form and the uploaded photo are deliberately left in place.
+      // The form and the uploaded photos are deliberately left in place.
       setError(result.error);
       return;
     }
 
-    trackEvent("showcase_stop_submitted", { stopId: result.data.id ?? null });
+    trackEvent("showcase_stop_submitted", {
+      stopId: result.data.id ?? null,
+      photos: uploads.paths.length,
+    });
     setDate(today());
     setCity("");
     setEvent("");
     setNote("");
-    clear();
+    uploads.clear();
     onFiled();
   }
 
   return (
     <form onSubmit={submit}>
       <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
-        <div className="text-sm font-semibold text-black">Where did the truck stop?</div>
+        <h2 className="text-lg font-semibold text-black">Add a stop</h2>
         <div className="mt-1 text-sm text-[var(--anchor-gray)]">
-          Marketing reviews every stop before it shows up on anchorp.com.
+          Marketing reviews every stop and photo before it shows up on anchorp.com.
         </div>
 
         <div className="mt-5 grid gap-4">
@@ -130,22 +139,25 @@ export default function ShowcaseSubmitForm({ onFiled }: { onFiled: () => void })
 
           <div className="grid gap-2 text-sm">
             <span className="font-semibold">
-              Photo <span className="font-normal text-[var(--anchor-gray)]">(optional, one)</span>
+              Photos{" "}
+              <span className="font-normal text-[var(--anchor-gray)]">
+                (optional, up to {MAX_PHOTOS})
+              </span>
             </span>
-            <PhotoPicker
-              photo={photo}
-              onPick={pick}
-              onRetry={retry}
-              onRemove={clear}
-              hint="It uploads right away, so filing the stop stays quick on a slow connection."
+            <PhotoTray
+              uploads={uploads}
+              hint="Each photo uploads as soon as you pick it, so filing stays quick on a slow connection."
             />
           </div>
 
           {error && <Alert tone="error">{error}</Alert>}
 
-          <div>
-            <Button type="submit" disabled={submitting || photo.kind === "uploading"}>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={submitting || uploads.busy}>
               {submitting ? "Filing…" : "File this stop"}
+            </Button>
+            <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+              Cancel
             </Button>
           </div>
         </div>

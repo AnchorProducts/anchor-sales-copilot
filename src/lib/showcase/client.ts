@@ -9,6 +9,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type StopStatus = "pending" | "published" | "declined";
 
+export type PhotoStatus = "pending" | "published" | "declined";
+
+/** One photograph on a stop. Each is reviewed on its own. */
+export type StopPhoto = {
+  id: string;
+  status: PhotoStatus;
+  /** Public address when published; otherwise a signed preview that expires
+   *  after 30 minutes, or null. Lists refetch on focus, so it stays fresh. */
+  url: string | null;
+  reviewNote: string | null;
+  mine: boolean;
+  submittedAt: string;
+};
+
 /** GET /api/showcase/submit — the caller's own filings, newest first. */
 export type Submission = {
   id: string;
@@ -19,6 +33,8 @@ export type Submission = {
   status: StopStatus;
   reviewNote: string | null;
   submittedAt: string;
+  /** Only the photographs this caller attached. */
+  photos: StopPhoto[];
 };
 
 /** GET /api/showcase/stops — every stop, ascending by date. Keepers only. */
@@ -31,14 +47,57 @@ export type ScheduleStop = {
   note: string | null;
   status: StopStatus;
   reviewNote: string | null;
-  photo: "published" | "waiting" | "none";
-  photoUrl: string | null;
   mine: boolean;
   submittedAt: string | null;
+  photos: StopPhoto[];
 };
 
 export const MAX_TEXT = 200;
 export const MAX_NOTE = 1000;
+/** Per filing or per add — the website refuses more in one request. */
+export const MAX_PHOTOS = 10;
+
+export function photoCounts(photos: StopPhoto[]) {
+  let live = 0;
+  let pending = 0;
+  let declined = 0;
+  for (const p of photos) {
+    if (p.status === "published") live++;
+    else if (p.status === "pending") pending++;
+    else declined++;
+  }
+  return { live, pending, declined };
+}
+
+/** "3 photos: 2 live · 1 in review", or "No photos". */
+export function photoSummary(photos: StopPhoto[]): string {
+  if (!photos.length) return "No photos";
+  const c = photoCounts(photos);
+  const parts = [
+    c.live ? `${c.live} live` : "",
+    c.pending ? `${c.pending} in review` : "",
+    c.declined ? `${c.declined} declined` : "",
+  ].filter(Boolean);
+  return `${photos.length} photo${photos.length === 1 ? "" : "s"}: ${parts.join(" · ")}`;
+}
+
+/** A past stop on the site with nothing from the day, live or on its way. */
+export function needsPhotos(stop: ScheduleStop, day: string): boolean {
+  return (
+    stop.date < day &&
+    stop.status === "published" &&
+    !stop.photos.some((p) => p.status !== "declined")
+  );
+}
+
+/** The picture a stop is shown with: a live one, else one in review. */
+export function coverUrl(photos: StopPhoto[]): string | null {
+  return (
+    photos.find((p) => p.status === "published" && p.url)?.url ??
+    photos.find((p) => p.status === "pending" && p.url)?.url ??
+    null
+  );
+}
 
 /** `code` on the 403 from our own assigned-list gate (src/lib/showcase/portal.ts),
  *  so it can't be mistaken for the website's "doesn't keep the schedule". */
