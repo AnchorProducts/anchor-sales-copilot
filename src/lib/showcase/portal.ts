@@ -14,7 +14,7 @@ import "server-only";
  * WHY THESE CALLS ARE PROXIED SERVER-SIDE
  * The browser could call anchorp.com directly, but only if the website serves
  * CORS headers for this origin — which is not part of the contract and is not
- * ours to change. Proxying the two small JSON calls through our own routes
+ * ours to change. Proxying the small JSON calls through our own routes
  * sidesteps CORS entirely and keeps the website's base URL out of the client
  * bundle. The PHOTO is deliberately NOT proxied: it goes browser → Supabase
  * Storage on a signed URL, because a photo off a modern phone is comfortably
@@ -28,6 +28,9 @@ const DEFAULT_PORTAL_BASE = "https://anchorp.com";
 
 /** The tool key these routes are gated on — see src/lib/toolAccess.ts. */
 export const SHOWCASE_TOOL_KEY = "showcase";
+
+/** `code` on our own 403 — mirrored as NOT_ASSIGNED in src/lib/showcase/client.ts. */
+const SHOWCASE_NOT_ASSIGNED = "not_assigned";
 
 /** Base URL of the website that owns the showcase schedule. */
 export function portalBaseUrl(): string {
@@ -51,16 +54,23 @@ export function bearerFrom(req: Request): string {
 export async function proxyToPortal(
   req: Request,
   path: string,
-  init: { method: "GET" | "POST"; body?: unknown }
+  init: { method: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown }
 ): Promise<Response> {
   const token = bearerFrom(req);
 
   // Two gates, both server-side. The showcase is a named list, not a role: the
   // website would accept any authorized portal user, so if we did not check
   // here, anyone who found the URL could file a stop.
+  //
+  // Our 403 carries a code because the website's 403 means something else: on
+  // the schedule routes it is "authorized, but doesn't keep the schedule", and
+  // the page reads that to decide whether to show the Schedule tab.
   const gate = await requireToolAccessFromBearer(token, SHOWCASE_TOOL_KEY);
   if ("error" in gate) {
-    return Response.json({ error: gate.error }, { status: gate.status });
+    return Response.json(
+      { error: gate.error, ...(gate.status === 403 ? { code: SHOWCASE_NOT_ASSIGNED } : {}) },
+      { status: gate.status }
+    );
   }
 
   let upstream: Response;

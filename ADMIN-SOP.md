@@ -331,6 +331,14 @@ Keep the list short. This is one or two people who are actually on the road, not
 
 What you do *not* do here: publishing, declining, and writing the decline reason all happen on the website, in **Marketing → Pages → Mobile showcase**. The reason you type there is what the rep sees back in the app, so write it for them.
 
+**Who keeps the schedule.** Some people on the list also get a **Schedule** tab. It shows every stop, pending and declined included. From it they can fix a stop's date, city, event and note, attach a photo, or remove the stop. That tab is decided by the **website**, not here. A person keeps the schedule if their `portal_invites` row has the **Showcase** flag (anchorp.com → Marketing → Authorized users), **or** their role is `admin`, **or** their team is `marketing`. The website's own doc says only the flag counts, but that's wrong. The app asks the website when the page opens and shows the tab only if the website says yes, so the rule lives in one place. Keepers still have to be on this list to open the page at all.
+
+Keepers can't publish, and there's no publish button anywhere in the app. Saving a published stop changes the website immediately. A photo they add waits for marketing, and a photo that's already live can't be replaced from the app.
+
+> **Known gap:** when marketing declines *only the photo* on a stop that's already live, the person who filed it still sees **On the site** under My submissions. Nothing tells them the photo was turned down. Only the Schedule tab shows the photo back to missing, with the reason. Until the website reports photo declines to submitters, tell them directly.
+
+> **HEIC:** the app converts every photo to JPEG before uploading, because the website publishes the file unchanged and Chrome, Firefox and Android can't show HEIC. Anything that uploads to the website some other way can still put a HEIC on the public page. The website should reject or convert HEIC itself.
+
 > **Not usable until anchorp.com is cut over.** The endpoints the app calls live on the new website, which isn't serving that domain yet. Until it is, anyone assigned gets a plain "the showcase isn't live on anchorp.com yet" message rather than a confusing failure — but there is no point assigning anybody before then.
 
 > **Second gate:** the person also has to be an authorized portal user for the website to accept their submission. See Portal Access — which is itself behind `site_live` (Section 5), so that list can't be managed in-app today.
