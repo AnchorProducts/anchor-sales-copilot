@@ -84,7 +84,7 @@ export const SALES_TOOLS: SalesTool[] = [
     // on the road with the truck.
     key: "showcase",
     label: "Showcase Stop",
-    description: "File a mobile showcase stop — where it went, what happened, and a photo.",
+    description: "Mobile showcase stops and photos from the road — add, update, and see what marketing published.",
     icon: "camera",
     audiences: ["internal"],
     restricted: true,

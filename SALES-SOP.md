@@ -214,42 +214,47 @@ There's a QR code at the marketing aisle. Scan it, and you can self-report what 
 
 **This tile is a named list, not a role.** An admin assigns specific people to it in Manage Tools, and if you're not one of them you won't see it at all — that's normal, not a fault. It's for whoever is actually on the road with the mobile showcase.
 
-If you are on the list, `/dashboard/showcase` has two tabs, **File a stop** and **My submissions**, plus a third, **Schedule**, if you keep the schedule.
+If you are on the list, `/dashboard/showcase` is the showcase's home page. What's on it depends on whether you keep the schedule.
 
-**File a stop**
+**Adding a stop:** tap **+ Add a stop**.
 
 - **Date** — defaults to today, because most stops are filed the day they happen
 - **City** and **Event** — both required
 - **Note** — optional, up to 1000 characters
-- **One photo** — optional, from the camera or camera roll
+- **Photos** — optional, up to 10 at a time, from the camera or camera roll
 
-Then tap **File this stop**. You land on My submissions with "Sent to marketing for review."
+Then tap **File this stop**. You're taken back to the home page with "Sent to marketing for review."
 
-**Filing is not publishing.** Every stop is filed *pending*. Marketing publishes or declines it on anchorp.com, and the public schedule only ever shows published stops — so nothing you file appears on the website on its own, and you can't make it.
+**Filing is not publishing.** Every stop and every photo is filed *pending*. Marketing publishes or declines each one on anchorp.com, and the public page only ever shows what they published — so nothing you add appears on the website on its own, and you can't make it.
 
-**My submissions** lists what you've filed, newest first, each marked **Pending review**, **On the site**, or **Declined**. A declined stop shows marketing's reason right in the list. Read it: it's usually something you can fix by filing again with a better photo or a clearer note. You can't edit or remove a stop after filing; file a new one and marketing declines the first. The list refreshes whenever you come back to the app, or tap **Refresh**.
+### If you don't keep the schedule
+
+The home page lists **your stops**, newest first, each marked **Pending review**, **On the site** or **Declined**, with your photos underneath marked **Live**, **In review** or **Declined**. When marketing declines a stop or a single photo, the reason shows right there. Read it: it's usually something you can fix by filing again with a better photo or a clearer note. You can't edit or remove a stop after filing; file a new one and marketing declines the first.
+
+### If you keep the schedule
+
+Marketing decides who keeps it (see the Admin SOP). You get the whole schedule on one page:
+
+- **Totals** at the top: stops coming up, things waiting on marketing, and past stops that need photos. Tap one to jump to it.
+- **Needs photos:** stops on the site that have happened but have nothing from the day.
+- **Coming up** and **Past stops:** every stop, pending and declined ones included.
+- **Waiting on marketing:** pending stops, and stops with photos in review.
+- **Photos:** every photo on every stop, grouped by stop. Filter to Live, In review or Declined, and tap one to open its stop.
+
+Tap a stop to open it. From there you can:
+
+- **Fix its date, city, event or note.** Saving a stop that's on the site changes the website immediately. There's no second review, and the screen warns you.
+- **Add photos.** They wait for marketing. The usual case: a stop booked months ago is already on the site, the van goes, and you add the photos afterwards.
+- **Remove a photo** that's in review or was declined. A live photo can't be changed from the app; ask marketing.
+- **Remove the stop.** It always asks first, because it can't be undone, and removing a live stop takes it and its photos off the website.
+
+Status and "Requested" are marketing's. You can see them but not change them. There's no publish button anywhere.
 
 ### Filing from a yard with one bar
 
-The screen is built for exactly that. **The photo uploads the moment you choose it**, not when you submit — so by the time you hit File, the slow part is already done. If the submit itself fails, the photo stays uploaded: tap File again and it re-sends the form only. If the photo upload fails, tap **Try again** — you don't have to find the photo again. You never upload the same picture twice.
+The screens are built for exactly that. **Each photo uploads the moment you choose it**, one at a time, not when you tap File or Save — so by then the slow part is done. If the submit itself fails, the photos stay uploaded: tap again and it re-sends the form only. If a photo fails to upload, tap **Try again** under it — you don't have to find it again.
 
 Photos are converted to JPEG and shrunk to a sensible size before they upload. That makes the upload faster, and it means an iPhone photo shows properly on every browser once it's on the site.
-
-One photo per stop. If you shot five, pick the one that shows the crowd or the truck.
-
-### Schedule — only if you keep it
-
-The website decides who keeps the schedule (marketing sets it). If you do, you also get **Schedule**: every stop, upcoming first and then past, including ones that are pending or declined. Each shows its status, **Requested** if marketing booked it, and whether its photo is live, awaiting review, or missing. The chips narrow it to **Pending** or **Needs a photo** (past stops on the site with no photo).
-
-Tap a stop to fix its date, city, event or note, or to add its photo. The usual case: a stop booked months ago is already on the site, the van goes, and you add the photo afterwards.
-
-- **Saving a stop that's on the site changes the website immediately.** There's no second review, and the screen warns you.
-- **A photo you add waits for marketing** before it appears. Until then you can replace or remove it.
-- **A photo that's already live can't be changed from the app.** Ask marketing.
-- Status and "Requested" are marketing's. You can see them but not change them.
-- **Remove stop** is at the bottom. It always asks first, because it can't be undone, and removing a live stop takes it off the website.
-
-There's no add button and no publish button. New stops, yours included, go through File a stop and marketing's review.
 
 > **Not live yet.** Until anchorp.com is switched over to the new site, filing a stop returns "The showcase isn't live on anchorp.com yet." Nothing is broken and nothing is lost — the feature simply isn't reachable until that cutover happens.
 

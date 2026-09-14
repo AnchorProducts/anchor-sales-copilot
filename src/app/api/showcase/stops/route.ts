@@ -3,13 +3,14 @@ import { proxyToPortal } from "@/lib/showcase/portal";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* The whole showcase schedule, for the people who keep it.
+/* The whole showcase schedule, with every photo, for the people who keep it.
  *
  * Who counts as a keeper is decided by the website (403 for everyone else), not
  * here — this route only adds our own assigned-list gate in front of it. There
- * is no POST: new stops go through /api/showcase/submit and marketing's review. */
+ * is no POST: new stops go through /api/showcase/submit and marketing's review.
+ * Photos have their own route, /api/showcase/photos. */
 
-const EDITABLE = ["date", "city", "event", "note", "photoPath"] as const;
+const EDITABLE = ["date", "city", "event", "note"] as const;
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -25,10 +26,9 @@ export async function GET(req: Request) {
 }
 
 /* Correct one stop. Only fields the caller actually sent are forwarded, and
- * only the five that describe the stop — `status`, `requested` and the public
- * photo are marketing's, and never leave this route even if a client sends
- * them. An empty string is kept: `note: ""` clears the note and
- * `photoPath: ""` removes a photo awaiting review. */
+ * only the four that describe the stop — `status` and `requested` are
+ * marketing's, and never leave this route even if a client sends them. An empty
+ * string is kept: `note: ""` clears the note. */
 export async function PATCH(req: Request) {
   const body = await readBody(req);
   if (!body) return Response.json({ error: "Expected a JSON body." }, { status: 400 });

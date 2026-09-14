@@ -704,7 +704,7 @@ export default function DashboardPage() {
       actions.push({ key: "consults", href: "/dashboard/opportunities", label: "Active Consults", desc: "Triage rooftop equipment consults submitted by external reps in your region.", icon: "clipboard", badge: "Triage" });
       // Filed here, published on anchorp.com. Internal only — external partner
       // reps have nothing to do with the showcase schedule.
-      actions.push({ key: "showcase", href: "/dashboard/showcase", label: "Showcase Stop", desc: "File a mobile showcase stop — where it went, what happened, and a photo.", icon: "camera", badge: "Showcase" });
+      actions.push({ key: "showcase", href: "/dashboard/showcase", label: "Showcase Stop", desc: "Mobile showcase stops and photos from the road — add, update, and see what marketing published.", icon: "camera", badge: "Showcase" });
     }
   } else {
     if (heroLink !== "/chat") {

@@ -5,12 +5,12 @@ export const dynamic = "force-dynamic";
 
 /* File a showcase stop.
  *
- * Only the four content fields are forwarded. `status` is deliberately not in
- * that list and never will be: a stop is filed pending, publishing is
- * marketing's call on the website, and the website ignores the field anyway.
- * `requested` is likewise not settable — it means "we've been asked to come",
- * which is marketing's word about a booking, not a description of a stop
- * somebody drove to. */
+ * Only the content fields are forwarded. `status` is deliberately not in that
+ * list and never will be: a stop is filed pending, publishing is marketing's
+ * call on the website, and the website ignores the field anyway. `requested` is
+ * likewise not settable — it means "we've been asked to come", which is
+ * marketing's word about a booking, not a description of a stop somebody drove
+ * to. */
 export async function POST(req: Request) {
   let body: Record<string, unknown>;
   try {
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   }
 
   const str = (v: unknown) => String(v ?? "").trim();
-  const payload: Record<string, string> = {
+  const payload: Record<string, string | string[]> = {
     date: str(body.date),
     city: str(body.city),
     event: str(body.event),
@@ -29,8 +29,10 @@ export async function POST(req: Request) {
   // null note instead of an empty string.
   const note = str(body.note);
   if (note) payload.note = note;
-  const photoPath = str(body.photoPath);
-  if (photoPath) payload.photoPath = photoPath;
+  // Storage paths from upload-url. The website checks each is the caller's own
+  // and really in the bucket, and refuses more than it allows in one request.
+  const photoPaths = Array.isArray(body.photoPaths) ? body.photoPaths.map(str).filter(Boolean) : [];
+  if (photoPaths.length) payload.photoPaths = photoPaths;
 
   return proxyToPortal(req, "/api/showcase/submit", { method: "POST", body: payload });
 }
