@@ -256,6 +256,77 @@ export function stockedKits(items: readonly PackagingPieceItem[]): PackagingKit[
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Pre-assembled pizza boxes
+//
+// Marketing builds pizza boxes ahead of time so a rep takes a finished box off
+// the shelf instead of five pieces and a brochure. Each box type — one per
+// anchor sample offered with a pizza box — gets ONE QR label, shared by every
+// box of that type; scanning it counts one box.
+//
+// Assembling moves no stock. A box's contents stay on their own counts until
+// the box is scanned out, and then everything in it comes off at once: the
+// anchor, that series' pieces, and the printables every box gets (an app
+// setting — see settings/pizzaBoxExtras). Whatever the rep pulls back out isn't
+// subtracted, so the loose counts stay true without anyone recording assembly.
+// ────────────────────────────────────────────────────────────────────────────
+
+// A sample that can be a pre-assembled box: offered with one, and its series is
+// known — without a series there's no telling which pieces are inside.
+export function isBoxType(item: PackagingPieceItem & { pizza_box?: boolean | null }): boolean {
+  return !!item.pizza_box && !item.packaging_role && isPackagingKit(item.packaging_kit);
+}
+
+export type BoxPartKind = "anchor" | "piece" | "extra";
+
+// One thing inside a box, and how many of it each box holds.
+export type BoxPart = {
+  item_id: string;
+  name: string;
+  kind: BoxPartKind;
+  per_box: number;
+};
+
+const BOX_PART_ORDER: Record<BoxPartKind, number> = { anchor: 0, piece: 1, extra: 2 };
+
+// Everything a set of scanned boxes holds, added up per item — two box types
+// that share a brochure put it on one line. Anchors, then pieces, then
+// printables, each in the order first met. The scan page shows this sum and the
+// API subtracts it, so the two can't disagree about what was in the boxes.
+export function boxTotals(
+  boxes: readonly { count: number; parts: readonly BoxPart[] }[]
+): (BoxPart & { packed: number })[] {
+  const lines = new Map<string, BoxPart & { packed: number }>();
+  for (const b of boxes) {
+    const count = Math.max(0, Math.floor(b.count) || 0);
+    if (!count) continue;
+    for (const p of b.parts) {
+      const line = lines.get(p.item_id);
+      if (line) line.packed += p.per_box * count;
+      else lines.set(p.item_id, { ...p, packed: p.per_box * count });
+    }
+  }
+  return [...lines.values()].sort((a, b) => BOX_PART_ORDER[a.kind] - BOX_PART_ORDER[b.kind]);
+}
+
+// The label on a box type: the aisle link (which carries the shared token) plus
+// the box. Rotating the aisle token retires these along with every other code.
+export function boxScanUrl(aisleUrl: string, boxId: string): string {
+  return `${aisleUrl.replace(/\/+$/, "")}/boxes?box=${encodeURIComponent(boxId)}`;
+}
+
+// Which box a scanned code names, or "" when it isn't a box label — an item's
+// shelf code, or a stray QR on a delivery.
+export function boxIdFromScan(text: string): string {
+  try {
+    const url = new URL(text.trim());
+    if (!/\/grab\/[^/]+\/boxes\/?$/.test(url.pathname)) return "";
+    return (url.searchParams.get("box") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Overlays
 //
 // A plastic overlay reaches a customer two ways: on its own (the pool item is

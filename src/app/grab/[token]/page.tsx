@@ -498,6 +498,14 @@ export default function GrabPage({
               ? "Set how many of each you're taking, add your name once, and tap Take."
               : "Bringing some back? Look up what you have out and put it back on the count."}
           </p>
+          {mode === "take" && (
+            <a
+              href={`/grab/${encodeURIComponent(token)}/boxes`}
+              className="mt-2 inline-block text-xs font-semibold text-[var(--anchor-green,#1f8a4c)] underline"
+            >
+              Taking pre-assembled pizza boxes? Scan them instead →
+            </a>
+          )}
         </header>
 
         {/* Take / Return — the same aisle, both directions. */}

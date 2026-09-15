@@ -163,6 +163,56 @@ export async function notifyGrab(args: {
   }
 }
 
+// One alert for a pizza-box scan: how many boxes of which kind, then anything
+// pulled back out of them and any count that came up short of a box someone was
+// holding. Same "inventory_grab" channel as every other aisle pickup — a new
+// topic would notify nobody until someone was assigned to it. Best-effort.
+export async function notifyBoxPickup(args: {
+  by: string;
+  email: string;
+  boxes: { name: string; count: number }[];
+  lines: { name: string; quantity: number; removed: number; remaining: number; short: number }[];
+}): Promise<void> {
+  if (!args.boxes.length) return;
+  const url = "/admin/inventory";
+
+  const totalBoxes = args.boxes.reduce((n, b) => n + b.count, 0);
+  const boxList = args.boxes.map((b) => `${b.count} × ${b.name}`);
+  const pulled = args.lines.filter((l) => l.removed > 0).map((l) => `${l.removed} × ${l.name}`);
+  const short = args.lines.filter((l) => l.short > 0).map((l) => `${l.name} (short ${l.short})`);
+
+  const pushBody =
+    `${args.by} took ${totalBoxes} pizza box${totalBoxes === 1 ? "" : "es"}: ${boxList.join(", ")}.` +
+    (pulled.length ? ` Pulled out: ${pulled.join(", ")}.` : "") +
+    (short.length ? ` Recount: ${short.join(", ")}.` : "");
+  const subject = `Pizza boxes taken — ${totalBoxes} box${totalBoxes === 1 ? "" : "es"}`;
+  const emailText =
+    `${args.by} <${args.email}> scanned out:\n` +
+    boxList.map((b) => `  • ${b}`).join("\n") +
+    `\n\nCame off inventory:\n` +
+    args.lines
+      .filter((l) => l.quantity > 0)
+      .map((l) => `  • ${l.quantity} × ${l.name} (${l.remaining} left)`)
+      .join("\n") +
+    (pulled.length ? `\n\nPulled out of the boxes (not subtracted):\n${pulled.map((p) => `  • ${p}`).join("\n")}` : "") +
+    (short.length
+      ? `\n\nThe count was lower than what was in the boxes — worth a recount:\n${short.map((s) => `  • ${s}`).join("\n")}`
+      : "") +
+    `\n\nInventory: ${internalAppUrl(url)}`;
+
+  try {
+    void sendPushToTool("inventory_grab", {
+      title: "Pizza boxes taken",
+      body: pushBody,
+      url,
+      tag: `inv-box-${args.email}`,
+    });
+    void emailToolUsers("inventory_grab", { subject, text: emailText });
+  } catch (e: any) {
+    console.warn("inventory box notify failed", e?.message || e);
+  }
+}
+
 // Atomically move `qty` units available -> out for a checkout. Guarded on the
 // item's current counts (optimistic concurrency): if another write changed them
 // between read and write, the update affects 0 rows and we report a conflict so
