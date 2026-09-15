@@ -23,7 +23,17 @@ import {
   resolveInsideRepsFor,
 } from "@/lib/marketing/territory";
 import { consumeStock, notifyLowStockIfCrossed } from "@/lib/inventory/server";
-import { isOverlayPool, overlayUnits } from "@/lib/inventory";
+import {
+  boxParts,
+  buildableBoxes,
+  describeBoxContents,
+  isOverlayPool,
+  orderStockPlan,
+  overlayUnits,
+  resolvePackaging,
+  type OrderPackaging,
+} from "@/lib/inventory";
+import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExtras";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -468,12 +478,16 @@ export async function POST(req: Request) {
     // overlay item and the total alone doesn't say which count to pull from.
     let overlay_units = 0;
     let overlay_kits: Record<string, number> = {};
+    // Pizza boxes on the order, and everything it pulls from stock per item —
+    // what fulfillment pre-fills. See orderStockPlan.
+    let pizza_boxes = 0;
+    let stock_plan: Record<string, number> = {};
 
     if (body.requested_items !== undefined) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
       const otherRequest = clean(body.other_request);
 
-      const picks: { item_id: string; quantity: number; plastic_overlay: boolean }[] = [];
+      const picks: { item_id: string; quantity: number; packaging: string }[] = [];
       for (const raw of rawPicks) {
         const id = clean((raw as any)?.item_id);
         const q = Math.floor(Number((raw as any)?.quantity));
@@ -481,21 +495,31 @@ export async function POST(req: Request) {
         picks.push({
           item_id: id,
           quantity: q,
-          plastic_overlay: (raw as any)?.plastic_overlay === true,
+          // How a sample ships: "box", "overlay" or "none". A client from before
+          // pizza boxes sends only the overlay flag.
+          packaging: clean((raw as any)?.packaging) || ((raw as any)?.plastic_overlay === true ? "overlay" : "none"),
         });
       }
 
       const lines: string[] = [];
       let total = 0;
       if (picks.length) {
-        const { data: invRows, error: invErr } = await supabaseAdmin
-          .from("marketing_inventory_items")
-          .select("id,name,category,quantity_available,plastic_overlay,packaging_role,packaging_kit")
-          .in("id", picks.map((p) => p.item_id));
+        // The whole catalog, not just the picks: a pizza box pulls pieces and
+        // printables nobody picked by name.
+        const [{ data: invRows, error: invErr }, { data: extrasRow }] = await Promise.all([
+          supabaseAdmin
+            .from("marketing_inventory_items")
+            .select("id,name,category,quantity_available,pizza_box,plastic_overlay,packaging_role,packaging_kit")
+            .limit(1000),
+          supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle(),
+        ]);
         if (invErr) {
           return NextResponse.json({ error: invErr.message }, { status: 500 });
         }
-        const byId = new Map((invRows || []).map((r: any) => [r.id, r]));
+        const catalog = (invRows || []) as any[];
+        const extras = parseBoxExtras((extrasRow as any)?.value);
+        const byId = new Map(catalog.map((r: any) => [r.id, r]));
+        const resolved: { item: any; quantity: number; packaging: OrderPackaging }[] = [];
         for (const p of picks) {
           const row: any = byId.get(p.item_id);
           if (!row) {
@@ -504,20 +528,30 @@ export async function POST(req: Request) {
               { status: 400 }
             );
           }
+          // The client's choice is a request, not a fact: a box only for an
+          // anchor that is one, an overlay only for a sample that offers one.
+          const packaging = resolvePackaging(row, p.packaging);
+          resolved.push({ item: row, quantity: p.quantity, packaging });
+
           // Asking for more than we have on the shelf doesn't reject the order —
           // it's a normal thing to want. Note the shortfall on the line so the
-          // team sees at a glance that it can't be filled from stock alone.
-          // An overlay rides along only if this item actually offers one — the
-          // client's flag is a request, not a fact.
-          const paired = p.plastic_overlay && !!row.plastic_overlay;
-          const short = p.quantity - row.quantity_available;
-          lines.push(
-            [
-              `${p.quantity} × ${row.name}`,
-              paired ? " + plastic overlay" : "",
-              short > 0 ? ` (only ${row.quantity_available} in stock)` : "",
-            ].join("")
-          );
+          // team sees at a glance that it can't be filled from stock alone. For a
+          // box that means complete boxes, since any one piece can run out.
+          let line = `${p.quantity} × ${row.name}`;
+          if (packaging === "box") {
+            const parts = boxParts(row, catalog, extras);
+            const contents = describeBoxContents(parts);
+            const buildable = buildableBoxes(parts, catalog).count;
+            line += ` — pizza box${contents ? ` (${contents})` : ""}`;
+            if (p.quantity > buildable) {
+              line += ` (stock for only ${buildable} complete box${buildable === 1 ? "" : "es"})`;
+            }
+          } else {
+            if (packaging === "overlay") line += " + plastic overlay";
+            const short = p.quantity - row.quantity_available;
+            if (short > 0) line += ` (only ${row.quantity_available} in stock)`;
+          }
+          lines.push(line);
           total += p.quantity;
           const cat = clean(row.category) || "other";
           unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
@@ -527,21 +561,22 @@ export async function POST(req: Request) {
         // ordered on their own. Recomputed here from live item data so the count
         // recorded on the order is the server's, not the browser's — including
         // which series each overlay comes off, which the item knows and the
-        // browser only echoes.
+        // browser only echoes. A box's overlay is part of the box's plan below.
         const overlays = overlayUnits(
-          picks.map((p) => {
-            const row: any = byId.get(p.item_id);
-            return {
-              quantity: p.quantity,
-              offersOverlay: !!row?.plastic_overlay,
-              isOverlayPool: isOverlayPool(row),
-              kit: row?.packaging_kit ?? null,
-              wantsOverlay: p.plastic_overlay,
-            };
-          })
+          resolved.map(({ item, quantity, packaging }) => ({
+            quantity,
+            offersOverlay: !!item.plastic_overlay,
+            isOverlayPool: isOverlayPool(item),
+            kit: item.packaging_kit ?? null,
+            wantsOverlay: packaging === "overlay",
+          }))
         );
         overlay_units = overlays.total;
         overlay_kits = overlays.byKit;
+
+        const plan = orderStockPlan(resolved, catalog, extras);
+        stock_plan = plan.plan;
+        pizza_boxes = plan.boxes;
         // Spell the shared total out on the order, since it's the number the
         // fulfiller pulls and it isn't obvious from the lines alone.
         if (overlays.paired > 0 && overlays.standalone > 0) {
@@ -594,26 +629,39 @@ export async function POST(req: Request) {
     const submitter_phone = clean(profile.phone) || null;
     const submitter_email = clean(profile.email) || clean(user.email) || null;
 
-    const { data: row, error: insErr } = await supabaseAdmin
+    const orderRow = {
+      created_by: user.id,
+      submitter_name,
+      submitter_company,
+      submitter_email,
+      submitter_phone,
+      categories,
+      items,
+      quantity,
+      needed_by,
+      ship_to,
+      notes,
+      status: "new",
+      overlay_units,
+      overlay_kits,
+      pizza_boxes,
+      stock_plan,
+    };
+    let { data: row, error: insErr } = await supabaseAdmin
       .from("marketing_orders")
-      .insert({
-        created_by: user.id,
-        submitter_name,
-        submitter_company,
-        submitter_email,
-        submitter_phone,
-        categories,
-        items,
-        quantity,
-        needed_by,
-        ship_to,
-        notes,
-        status: "new",
-        overlay_units,
-        overlay_kits,
-      })
+      .insert(orderRow)
       .select("id")
       .single();
+    // Before 20260915_000001 there are no box columns. The order still files —
+    // its lines say what's in each box — it just has no plan to pre-fill from.
+    if (insErr && (insErr.code === "42703" || /pizza_boxes|stock_plan/.test(insErr.message || ""))) {
+      const { pizza_boxes: _boxes, stock_plan: _plan, ...legacy } = orderRow;
+      ({ data: row, error: insErr } = await supabaseAdmin
+        .from("marketing_orders")
+        .insert(legacy)
+        .select("id")
+        .single());
+    }
 
     if (insErr || !row?.id) {
       return NextResponse.json({ error: insErr?.message || "Failed to create order." }, { status: 500 });
@@ -775,19 +823,26 @@ export async function GET() {
     // and the coordination log. External reps only ever see their own orders.
     const isFulfiller = role === "admin" || role === "anchor_rep";
 
-    let query = supabaseAdmin
-      .from("marketing_orders")
-      .select(
-        "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,overlay_units,overlay_kits,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at"
-      )
-      .order("created_at", { ascending: false })
-      .limit(500);
+    const ORDER_COLS =
+      "id,created_by,categories,items,quantity,needed_by,ship_to,notes,status,needs_custom_order,custom_order_tagged_at,overlay_units,overlay_kits,projected_ship_date,delay_notes,submitter_name,submitter_company,submitter_email,submitter_phone,created_at,updated_at,updated_by,assigned_to,assigned_at";
+    const listOrders = (cols: string) => {
+      let query = supabaseAdmin
+        .from("marketing_orders")
+        .select(cols)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (!isFulfiller) {
+        query = query.eq("created_by", auth.user.id);
+      }
+      return query;
+    };
 
-    if (!isFulfiller) {
-      query = query.eq("created_by", auth.user.id);
+    // pizza_boxes + stock_plan arrive with 20260915_000001. Until then the queue
+    // loads without them rather than not at all.
+    let { data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan`);
+    if (error && (error.code === "42703" || /pizza_boxes|stock_plan/.test(error.message || ""))) {
+      ({ data, error } = await listOrders(ORDER_COLS));
     }
-
-    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let orders = (data || []) as any[];

@@ -17,6 +17,7 @@ import {
   notifyLowStockIfCrossed,
   INVENTORY_BUCKET,
 } from "@/lib/inventory/server";
+import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExtras";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,7 +124,15 @@ export async function GET() {
       }))
     );
 
-    return NextResponse.json({ items, role });
+    // The printables every pizza box gets, so every page that shows a box — the
+    // order form, both inventory views — builds it the same way.
+    const { data: extrasRow } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", PIZZA_BOX_EXTRAS_KEY)
+      .maybeSingle();
+
+    return NextResponse.json({ items, role, box_extras: parseBoxExtras((extrasRow as any)?.value) });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load inventory." }, { status: 500 });
   }

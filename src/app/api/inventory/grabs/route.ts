@@ -2,7 +2,7 @@
 // and what came back. Fulfillment team only (admins + inside reps), same gate as
 // checkouts.
 //
-//   GET → { items: [...pickups], returns: [...drop-offs] }
+//   GET → { items: [...pickups], returns: [...drop-offs], box_scans: [...passes] }
 //
 // Each pickup carries the pizza-box pieces that went out with it (`components`),
 // which series they came from (`packaging_kit`), and how much of it has been
@@ -23,9 +23,14 @@ const GRAB_COLS_BASE =
 // Columns added by 20260831_000001. Split out so a deploy that lands before the
 // migration still shows the log instead of 500ing the whole Inventory page.
 const GRAB_COLS = `${GRAB_COLS_BASE},components,packaging_kit,quantity_returned`;
+// Added by 20260915_000001: the box scan a line came from.
+const GRAB_COLS_BOX = `${GRAB_COLS},box_scan_id`;
 
 function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
-  return !!error && (error.code === "42703" || /components|quantity_returned|packaging_kit/.test(error.message || ""));
+  return (
+    !!error &&
+    (error.code === "42703" || /components|quantity_returned|packaging_kit|box_scan_id/.test(error.message || ""))
+  );
 }
 
 export async function GET() {
@@ -45,7 +50,8 @@ export async function GET() {
         .order("created_at", { ascending: false })
         .limit(500);
 
-    let { data, error } = await listGrabs(GRAB_COLS);
+    let { data, error } = await listGrabs(GRAB_COLS_BOX);
+    if (isMissingColumn(error)) ({ data, error } = await listGrabs(GRAB_COLS));
     if (isMissingColumn(error)) ({ data, error } = await listGrabs(GRAB_COLS_BASE));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -65,9 +71,18 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(500);
 
+    // Box scans, one entry per pass. Best-effort like returns: before
+    // 20260915_000001 there's no table and simply no scans to show.
+    const { data: scans } = await supabaseAdmin
+      .from("marketing_box_scans")
+      .select("id,scanned_by_name,scanned_by_email,box_count,boxes,lines,created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
     return NextResponse.json({
       items,
       returns: (returns || []).map((row: any) => ({ ...row, components: normalizeComponents(row.components) })),
+      box_scans: scans || [],
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load pickups." }, { status: 500 });

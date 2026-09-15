@@ -41,6 +41,11 @@ type MarketingOrder = {
   // The overlay total split by anchor series ({"2000": 12}), since each series
   // has its own overlay item and the total alone doesn't say which to pull.
   overlay_kits?: Record<string, number> | null;
+  // Pizza boxes on the order, and everything it pulls from stock per item id —
+  // picked items, paired overlays, and every box's pieces and printables. Both
+  // are absent on orders placed before pizza boxes could be ordered.
+  pizza_boxes?: number | null;
+  stock_plan?: Record<string, number> | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   submitter_name: string | null;
@@ -132,6 +137,7 @@ function printOrder(o: MarketingOrder) {
     ["Ordered", o.created_at ? new Date(o.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"],
     ["Status", marketingOrderStatusLabel(o.status)],
     ["Type", marketingCategoriesLabel(o.categories)],
+    ...(o.pizza_boxes ? [["Pizza boxes", String(o.pizza_boxes)]] : []),
     ...(o.overlay_units ? [["Plastic overlays", String(o.overlay_units)]] : []),
     ...(o.assigned_to_name ? [["Assigned to", o.assigned_to_name]] : []),
   ]
@@ -383,6 +389,16 @@ export default function AdminMarketingOrdersPage({
     [overlayPoolFor]
   );
 
+  // The order's stock plan as rows, keeping only items that still exist — a
+  // deleted brochure can't be decremented, and a row for it would only fail.
+  const planRowsFor = useCallback(
+    (o: MarketingOrder) =>
+      Object.entries(o.stock_plan || {})
+        .filter(([id, n]) => (n || 0) > 0 && inventory.some((it) => it.id === id))
+        .map(([item_id, n]) => ({ item_id, quantity: n as number })),
+    [inventory]
+  );
+
   // Stage a phase change: the admin picks a new status, but nothing is saved until
   // they describe what they did. Re-selecting the current status cancels.
   function stageStatus(o: MarketingOrder, status: string) {
@@ -394,17 +410,23 @@ export default function AdminMarketingOrdersPage({
     }
     setPendingStatus((d) => ({ ...d, [o.id]: status }));
 
-    // Shipping or fulfilling an order that carries overlays: pre-fill the overlay
-    // line so the count is confirmed rather than worked out by hand. The order
-    // already knows the total across both routes. A custom order consumes no
-    // stock at all, so it gets nothing.
-    const overlayRows = overlayRowsFor(o).filter((r) => r.pool);
-    if (recordsStock(status) && overlayRows.length > 0 && !o.needs_custom_order) {
+    // Shipping or fulfilling: pre-fill what the order pulls from stock so the
+    // counts are confirmed rather than worked out by hand. An order placed since
+    // pizza boxes carries its whole plan — every item, paired overlay, and box
+    // piece and printable. An older one only knows its overlays. A custom order
+    // consumes no stock at all, so it gets nothing.
+    const planned = planRowsFor(o);
+    const prefill = planned.length
+      ? planned.map((r) => ({ item_id: r.item_id, quantity: String(r.quantity) }))
+      : overlayRowsFor(o)
+          .filter((r) => r.pool)
+          .map((r) => ({ item_id: r.pool!.id, quantity: String(r.units) }));
+    if (recordsStock(status) && prefill.length > 0 && !o.needs_custom_order) {
       setConsumeDrafts((d) => {
         let rows = d[o.id] || [];
-        for (const r of overlayRows) {
-          if (rows.some((x) => x.item_id === r.pool!.id)) continue;
-          rows = [...rows, { item_id: r.pool!.id, quantity: String(r.units) }];
+        for (const r of prefill) {
+          if (rows.some((x) => x.item_id === r.item_id)) continue;
+          rows = [...rows, r];
         }
         return { ...d, [o.id]: rows };
       });
@@ -794,6 +816,11 @@ export default function AdminMarketingOrdersPage({
                             Custom order
                           </span>
                         )}
+                        {(o.pizza_boxes || 0) > 0 && (
+                          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
+                            🍕 {o.pizza_boxes} pizza box{o.pizza_boxes === 1 ? "" : "es"}
+                          </span>
+                        )}
                         {unread[o.id] > 0 && openChatId !== o.id && (
                           <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-bold text-white">
                             {unread[o.id]} new message{unread[o.id] === 1 ? "" : "s"}
@@ -893,6 +920,17 @@ export default function AdminMarketingOrdersPage({
                             </dt>
                             <dd className="mt-0.5 text-sm text-black">{formatDate(o.needed_by)}</dd>
                           </div>
+                          {(o.pizza_boxes || 0) > 0 && (
+                            <div>
+                              <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
+                                Pizza boxes
+                              </dt>
+                              <dd className="mt-0.5 text-sm text-black">
+                                🍕 {o.pizza_boxes}
+                                <span className="ml-1 text-[var(--anchor-gray)]">— contents are on each line</span>
+                              </dd>
+                            </div>
+                          )}
                           {(o.overlay_units || 0) > 0 && (
                             <div>
                               <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
@@ -1185,7 +1223,17 @@ export default function AdminMarketingOrdersPage({
                                 <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
                                   Pick the stock item(s) this order consumed to decrement inventory.
                                 </p>
-                                {(o.overlay_units || 0) > 0 && (
+                                {planRowsFor(o).length > 0 && (
+                                  <p className="mt-1 text-[11px] font-medium text-[var(--anchor-deep)]">
+                                    Pre-filled from the order — {planRowsFor(o).length} item
+                                    {planRowsFor(o).length === 1 ? "" : "s"}
+                                    {(o.pizza_boxes || 0) > 0
+                                      ? `, including everything in ${o.pizza_boxes} pizza box${o.pizza_boxes === 1 ? "" : "es"}`
+                                      : ""}
+                                    . Lower anything that didn&apos;t go out.
+                                  </p>
+                                )}
+                                {(o.overlay_units || 0) > 0 && planRowsFor(o).length === 0 && (
                                   <div className="mt-1 text-[11px] font-medium text-[var(--anchor-deep)]">
                                     {overlayRowsFor(o).length === 0 ? (
                                       <p>
