@@ -263,11 +263,11 @@ export function stockedKits(items: readonly PackagingPieceItem[]): PackagingKit[
 // anchor sample offered with a pizza box — gets ONE QR label, shared by every
 // box of that type; scanning it counts one box.
 //
-// Assembling moves no stock. A box's contents stay on their own counts until
-// the box is scanned out, and then everything in it comes off at once: the
-// anchor, that series' pieces, and the printables every box gets (an app
-// setting — see settings/pizzaBoxExtras). Whatever the rep pulls back out isn't
-// subtracted, so the loose counts stay true without anyone recording assembly.
+// Assembling reserves a box's contents: the anchor, that series' pieces and the
+// printables every box gets (an app setting — see settings/pizzaBoxExtras) come
+// off their loose counts, and the box goes on a ready count of its own (see
+// Assembled boxes below). Scanning a box out takes it off that count, and
+// whatever the rep pulls back out goes back on the loose counts.
 // ────────────────────────────────────────────────────────────────────────────
 
 // A sample that can be a pre-assembled box: offered with one, and its series is
@@ -328,7 +328,7 @@ export function boxIdFromScan(text: string): string {
   }
 }
 
-type CatalogItem = PackagingPieceItem & { id: string; name: string };
+type CatalogItem = PackagingPieceItem & { id: string; name: string; box_of?: string | null };
 
 // What one box of a type holds: the anchor, that series' pieces in assembly
 // order, then the printables every box gets. The scanner, the order form and
@@ -361,9 +361,8 @@ export function describeBoxContents(parts: readonly BoxPart[]): string {
   return out.join(" + ");
 }
 
-// How many complete boxes the shelf holds parts for, and what runs out first.
-// Nothing counts assembled boxes — assembling moves no stock — so this is the
-// honest reading of "boxes available": the scarcest part decides it.
+// How many more boxes the loose stock could be assembled into, and what runs
+// out first — the scarcest part decides it.
 export function buildableBoxes(
   parts: readonly BoxPart[],
   items: readonly { id: string; quantity_available: number }[]
@@ -386,6 +385,32 @@ export function buildableBoxes(
 export function seriesFromName(name: string): PackagingKit | null {
   const d = name.trim().charAt(0);
   return d === "2" ? "2000" : d === "3" ? "3000" : d === "5" ? "5000" : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Assembled boxes
+//
+// An assembled box is its own stock. Each box type has one inventory item —
+// "2400 IB PVC — Pizza Box" — pointing at its anchor through box_of, whose
+// quantity_available is the boxes built and ready. Assembling takes the box's
+// contents off their loose counts and adds to it; unboxing reverses that. So
+// the order form, the aisle and the rep page, which all read loose counts, only
+// ever see stock that's actually free: an OEM order for 100 anchors can't be
+// filled by quietly opening boxes.
+//
+// Being an ordinary item means orders, fulfillment, aisle returns and low-stock
+// alerts already work on boxes without learning anything new.
+// ────────────────────────────────────────────────────────────────────────────
+
+// The ready-box item for an anchor, if any has ever been assembled.
+export function findReadyBox<T extends { box_of?: string | null }>(items: readonly T[], anchorId: string): T | null {
+  return items.find((i) => i.box_of === anchorId) || null;
+}
+
+// What a ready-box item is called — named after its anchor, so it reads right
+// in the item list, on a pick sheet and in the aisle log.
+export function readyBoxName(anchorName: string): string {
+  return `${anchorName} — Pizza Box`;
 }
 
 // One pass of the box scanner, as the admin log reads it.
@@ -449,7 +474,12 @@ export function orderStockPlan(
     if (!qty) continue;
     if (l.packaging === "box" && isBoxType(l.item)) {
       boxes += qty;
-      for (const p of boxParts(l.item, items, extras)) add(p.item_id, p.per_box * qty);
+      // Assembled boxes are their own stock, and an order draws on those. Only
+      // a box type nobody has ever assembled falls back to the parts it would
+      // be built from.
+      const ready = findReadyBox(items, l.item.id);
+      if (ready) add(ready.id, qty);
+      else for (const p of boxParts(l.item, items, extras)) add(p.item_id, p.per_box * qty);
       continue;
     }
     add(l.item.id, qty);
@@ -556,6 +586,10 @@ export type InventoryItem = {
   // Which pizza box kit this item belongs to: the piece's own kit when it IS a
   // piece, or the kit a sample's box comes from. Null when neither applies.
   packaging_kit: PackagingKit | null;
+  // Set on an assembled-box item: the anchor whose pizza boxes it counts. Its
+  // quantity_available is the boxes assembled and ready. Null everywhere else,
+  // and absent before 20260915_000002.
+  box_of?: string | null;
   created_at: string;
   updated_at: string;
   // Convenience flag computed by the API.

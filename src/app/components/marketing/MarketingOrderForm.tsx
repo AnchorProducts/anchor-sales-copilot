@@ -13,8 +13,8 @@ import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/produc
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
 import {
   boxParts,
-  buildableBoxes,
   describeBoxContents,
+  findReadyBox,
   inventoryCategoryLabel,
   isBoxType,
   isOverlayPool,
@@ -45,6 +45,9 @@ type InvItem = {
   // Whether this anchor is offered as a pizza box — with its series set, it can
   // ship as one.
   pizza_box?: boolean;
+  // Set on an assembled-box item: the anchor it counts ready boxes of. Those
+  // are ordered through their anchor's "Pizza box" choice, not picked alone.
+  box_of?: string | null;
   // Set on an item that IS one of a kit's packaging pieces — the overlay is
   // orderable on its own.
   packaging_role?: string | null;
@@ -291,7 +294,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     const active = new Set(categories);
     const wantPotm = active.has(POTM_KEY);
     let list = inventory.filter(
-      (it) => active.has(it.category || "other") || (wantPotm && !!it.product_of_month)
+      (it) =>
+        !it.box_of && (active.has(it.category || "other") || (wantPotm && !!it.product_of_month))
     );
     if (q) list = list.filter((it) => it.name.toLowerCase().includes(q));
     const groups: Record<string, InvItem[]> = {};
@@ -348,13 +352,15 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   );
 
   // Every box type, built the way its label and the scanner build it: what's in
-  // it past the anchor, and how many complete boxes the shelf can make.
+  // it past the anchor, and how many are assembled and ready to send.
   const boxInfo = useMemo(() => {
-    const out = new Map<string, { contents: string; buildable: number }>();
+    const out = new Map<string, { contents: string; ready: number }>();
     for (const it of inventory) {
       if (!isBoxType(it)) continue;
-      const parts = boxParts(it, inventory, boxExtras);
-      out.set(it.id, { contents: describeBoxContents(parts), buildable: buildableBoxes(parts, inventory).count });
+      out.set(it.id, {
+        contents: describeBoxContents(boxParts(it, inventory, boxExtras)),
+        ready: findReadyBox(inventory, it.id)?.quantity_available ?? 0,
+      });
     }
     return out;
   }, [inventory, boxExtras]);
@@ -572,11 +578,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
           </span>
           {pizzaBoxLines[0]?.contents && <> — each the anchor + {pizzaBoxLines[0].contents}</>}
           {pizzaBoxLines
-            .filter((l) => l.quantity > l.buildable)
+            .filter((l) => l.quantity > l.ready)
             .map((l) => (
               <span key={l.id} className="mt-0.5 block font-medium text-amber-700">
-                {l.name}: stock for only {l.buildable} complete box{l.buildable === 1 ? "" : "es"} — the rest
-                have to be made up.
+                {l.name}: only {l.ready} assembled — the rest have to be assembled or ordered in.
               </span>
             ))}
         </div>
@@ -828,7 +833,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                             </div>
                             {box && (
                               <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
-                                🍕 Pizza box · stock for {box.buildable}
+                                🍕 Pizza box · {box.ready} ready
                               </div>
                             )}
                             {isOverlayPool(it) && (

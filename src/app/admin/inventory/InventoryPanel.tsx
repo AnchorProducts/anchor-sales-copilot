@@ -1628,6 +1628,11 @@ function ItemsList({
                       <span className="hidden sm:inline">★ Product of the Month</span>
                     </span>
                   )}
+                  {it.box_of && (
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
+                      🍕 Assembled boxes
+                    </span>
+                  )}
                   {it.packaging_role && (
                     <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-800">
                       {packagingKitLabel(it.packaging_kit)} {packagingRoleShort(it.packaging_role).toLowerCase()}

@@ -25,8 +25,8 @@ import {
 import { consumeStock, notifyLowStockIfCrossed } from "@/lib/inventory/server";
 import {
   boxParts,
-  buildableBoxes,
   describeBoxContents,
+  findReadyBox,
   isOverlayPool,
   orderStockPlan,
   overlayUnits,
@@ -506,13 +506,20 @@ export async function POST(req: Request) {
       if (picks.length) {
         // The whole catalog, not just the picks: a pizza box pulls pieces and
         // printables nobody picked by name.
-        const [{ data: invRows, error: invErr }, { data: extrasRow }] = await Promise.all([
-          supabaseAdmin
-            .from("marketing_inventory_items")
-            .select("id,name,category,quantity_available,pizza_box,plastic_overlay,packaging_role,packaging_kit")
-            .limit(1000),
-          supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle(),
-        ]);
+        const CATALOG_COLS = "id,name,category,quantity_available,pizza_box,plastic_overlay,packaging_role,packaging_kit";
+        const readCatalog = (cols: string) =>
+          supabaseAdmin.from("marketing_inventory_items").select(cols).limit(1000);
+        const extrasQuery = supabaseAdmin
+          .from("app_settings")
+          .select("value")
+          .eq("key", PIZZA_BOX_EXTRAS_KEY)
+          .maybeSingle();
+        let { data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of`);
+        // box_of arrives with 20260915_000002; before it nothing is assembled.
+        if (invErr && (invErr.code === "42703" || /box_of/.test(invErr.message || ""))) {
+          ({ data: invRows, error: invErr } = await readCatalog(CATALOG_COLS));
+        }
+        const { data: extrasRow } = await extrasQuery;
         if (invErr) {
           return NextResponse.json({ error: invErr.message }, { status: 500 });
         }
@@ -539,13 +546,11 @@ export async function POST(req: Request) {
           // box that means complete boxes, since any one piece can run out.
           let line = `${p.quantity} × ${row.name}`;
           if (packaging === "box") {
-            const parts = boxParts(row, catalog, extras);
-            const contents = describeBoxContents(parts);
-            const buildable = buildableBoxes(parts, catalog).count;
+            const contents = describeBoxContents(boxParts(row, catalog, extras));
+            // Assembled boxes are what's actually on the shelf to send.
+            const ready = findReadyBox(catalog, row.id)?.quantity_available ?? 0;
             line += ` — pizza box${contents ? ` (${contents})` : ""}`;
-            if (p.quantity > buildable) {
-              line += ` (stock for only ${buildable} complete box${buildable === 1 ? "" : "es"})`;
-            }
+            if (p.quantity > ready) line += ` (only ${ready} assembled)`;
           } else {
             if (packaging === "overlay") line += " + plastic overlay";
             const short = p.quantity - row.quantity_available;

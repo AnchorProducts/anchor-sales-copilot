@@ -1,19 +1,20 @@
 "use client";
 
 // The Pizza boxes tab of Marketing Inventory: everything about pre-assembled
-// boxes in one place. It used to be a kit card over the item list, a labels
-// window behind a button, and box scans scattered through the pickup log.
+// boxes in one place.
 //
-//   Box types        — every anchor that ships as a box, how many complete boxes
-//                      the shelf holds parts for and what runs out first, and
-//                      how many labels to print.
+//   Box types        — every anchor that ships as a box: how many are assembled
+//                      and ready, how many more the loose stock could make, the
+//                      Assemble / Unbox controls, and how many labels to print.
 //   Not set up yet   — samples that aren't boxes, one tap from being one.
 //   Box scans        — each pass of the scanner as one entry.
 //   What's in a box  — each series' pieces, one dropdown per slot, and the
 //                      printables every box gets (an app setting).
 //   Kit pieces       — each series' four pieces, counted in place.
 //
-// Assembling moves no stock; scanning a box out does. See lib/inventory.
+// Assembling reserves a box's contents: they come off the loose counts and the
+// box goes on its own ready count, so nothing else in the app can hand them
+// out. Scanning a box out takes it off that count. See lib/inventory.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
@@ -25,6 +26,7 @@ import {
   boxScanUrl,
   buildableBoxes,
   findKitPiece,
+  findReadyBox,
   isBoxType,
   packagingKitLabel,
   PIZZA_BOX_COMPONENTS,
@@ -98,12 +100,14 @@ export default function PizzaBoxesTab({
   const [base, setBase] = useState("");
   const [extras, setExtras] = useState<BoxExtra[]>(savedExtras);
   const [copies, setCopies] = useState<Record<string, string>>({});
+  const [assembleQty, setAssembleQty] = useState<Record<string, string>>({});
   const [setupKit, setSetupKit] = useState<Record<string, string>>({});
   const [scanLimit, setScanLimit] = useState(SCAN_PAGE);
   const [working, setWorking] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; warn: boolean } | null>(null);
 
   // A save reloads the catalog, and so does anyone else's; the stored list is
   // the new starting point for the editor.
@@ -129,33 +133,38 @@ export default function PizzaBoxesTab({
     };
   }, []);
 
-  // Built from the SAVED printables — that's what a scan subtracts.
+  // Each box type: boxes ready, and how many more the loose stock could make —
+  // from the SAVED printables, since that's what assembling takes.
   const boxes = useMemo(
     () =>
       items
         .filter(isBoxType)
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((it) => ({ it, ...buildableBoxes(boxParts(it, items, savedExtras), items) })),
+        .map((it) => {
+          const { count, limitedBy } = buildableBoxes(boxParts(it, items, savedExtras), items);
+          return { it, ready: findReadyBox(items, it.id)?.quantity_available ?? 0, canAssemble: count, limitedBy };
+        }),
     [items, savedExtras]
   );
+  const totalReady = boxes.reduce((n, b) => n + b.ready, 0);
 
   // Samples that could be boxes but aren't set up as one: offered with a box
-  // but no series, or not offered at all. The kit pieces are samples too, and
-  // are never a box.
+  // but no series, or not offered at all. Kit pieces and assembled-box items
+  // are samples too, and are never a box type.
   const notSetUp = useMemo(
     () =>
       items
-        .filter((it) => it.category === "samples" && !it.packaging_role && !isBoxType(it))
+        .filter((it) => it.category === "samples" && !it.packaging_role && !it.box_of && !isBoxType(it))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [items]
   );
 
-  // Anything that can ride along in every box — not a kit piece (already in it)
-  // and not an anchor that is itself a box. Printables first.
+  // Anything that can ride along in every box — not a kit piece (already in
+  // it), not an anchor that is itself a box, not a box. Printables first.
   const extraChoices = useMemo(
     () =>
       items
-        .filter((it) => !it.packaging_role && !isBoxType(it))
+        .filter((it) => !it.packaging_role && !it.box_of && !isBoxType(it))
         .sort(
           (a, b) =>
             Number(b.category === "brochures") - Number(a.category === "brochures") ||
@@ -171,12 +180,12 @@ export default function PizzaBoxesTab({
   );
 
   // What can fill one slot of a series' box: whatever holds it now, or any item
-  // that isn't already a piece somewhere or an anchor that is itself a box.
+  // that isn't already a piece somewhere, a box, or an anchor that is one.
   // That series' own items first ("3000 Series — …"), then samples.
   function slotChoices(kit: PackagingKit, role: PackagingRole): InventoryItem[] {
     const current = findKitPiece(items, kit, role);
     return items
-      .filter((it) => it.id === current?.id || (!it.packaging_role && !isBoxType(it)))
+      .filter((it) => it.id === current?.id || (!it.packaging_role && !it.box_of && !isBoxType(it)))
       .sort(
         (a, b) =>
           Number(b.name.startsWith(kit)) - Number(a.name.startsWith(kit)) ||
@@ -185,39 +194,50 @@ export default function PizzaBoxesTab({
       );
   }
 
-  // Point one slot of a series' box at a different item — or at nothing. The
-  // (kit, role) pair is unique, so whatever holds the slot gives it up first;
-  // the scanner, the order form and the labels all follow the new item.
-  async function assignSlot(kit: PackagingKit, role: PackagingRole, itemId: string) {
-    const current = findKitPiece(items, kit, role);
-    if ((current?.id || "") === itemId) return;
-    setWorking(true);
-    setErr(null);
-    const patch = async (body: Record<string, unknown>) => {
-      const res = await fetch("/api/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.error || "Couldn't change that piece.");
-      }
-    };
-    try {
-      if (current) await patch({ id: current.id, packaging_role: null, packaging_kit: null });
-      if (itemId) await patch({ id: itemId, packaging_role: role, packaging_kit: kit });
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't change that piece.");
-    } finally {
-      await onChanged();
-      setWorking(false);
-    }
-  }
-
   const copyCount = (id: string) =>
     Math.max(0, Math.min(MAX_COPIES, Math.floor(Number(copies[id] || 0)) || 0));
   const totalLabels = boxes.reduce((n, b) => n + copyCount(b.it.id), 0);
+  const assembleCount = (id: string) => Math.max(0, Math.floor(Number(assembleQty[id] || 0)) || 0);
+
+  async function send(url: string, method: string, body: Record<string, unknown>) {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error || "That didn't work.");
+    return json;
+  }
+
+  // Record boxes built (direction 1) or opened (-1). The server moves the
+  // contents between the loose counts and the ready count.
+  async function assemble(it: InventoryItem, direction: 1 | -1) {
+    const n = assembleCount(it.id);
+    if (!n) return;
+    setWorking(true);
+    setErr(null);
+    setNotice(null);
+    try {
+      const json = await send("/api/inventory/boxes", "POST", { anchor_id: it.id, quantity: n * direction });
+      const done = Math.abs(json?.boxes || 0);
+      const short: { name: string; short: number }[] = json?.short || [];
+      setNotice({
+        text:
+          `${direction > 0 ? "Assembled" : "Unboxed"} ${done} × ${it.name} — ${json?.ready ?? 0} ready.` +
+          (short.length
+            ? ` Recount ${short.map((s) => `${s.name} (short ${s.short})`).join(", ")}: the count didn't cover what went into the boxes.`
+            : ""),
+        warn: short.length > 0,
+      });
+      setAssembleQty((prev) => ({ ...prev, [it.id]: "" }));
+      await onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't record that.");
+    } finally {
+      setWorking(false);
+    }
+  }
 
   async function setUpBox(it: InventoryItem) {
     const kit = setupKit[it.id] || it.packaging_kit || seriesFromName(it.name) || "";
@@ -228,20 +248,30 @@ export default function PizzaBoxesTab({
     setWorking(true);
     setErr(null);
     try {
-      const res = await fetch("/api/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: it.id, pizza_box: true, packaging_kit: kit }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        setErr(json?.error || `Couldn't set up ${it.name}.`);
-        return;
-      }
+      await send("/api/inventory", "PATCH", { id: it.id, pizza_box: true, packaging_kit: kit });
       await onChanged();
-    } catch {
-      setErr("Couldn't reach the server.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : `Couldn't set up ${it.name}.`);
     } finally {
+      setWorking(false);
+    }
+  }
+
+  // Point one slot of a series' box at a different item — or at nothing. The
+  // (kit, role) pair is unique, so whatever holds the slot gives it up first;
+  // the scanner, the order form and the labels all follow the new item.
+  async function assignSlot(kit: PackagingKit, role: PackagingRole, itemId: string) {
+    const current = findKitPiece(items, kit, role);
+    if ((current?.id || "") === itemId) return;
+    setWorking(true);
+    setErr(null);
+    try {
+      if (current) await send("/api/inventory", "PATCH", { id: current.id, packaging_role: null, packaging_kit: null });
+      if (itemId) await send("/api/inventory", "PATCH", { id: itemId, packaging_role: role, packaging_kit: kit });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't change that piece.");
+    } finally {
+      await onChanged();
       setWorking(false);
     }
   }
@@ -250,20 +280,11 @@ export default function PizzaBoxesTab({
     setWorking(true);
     setErr(null);
     try {
-      const res = await fetch("/api/inventory/box-extras", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extras }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        setErr(json?.error || "Couldn't save what's in a box.");
-        return;
-      }
+      await send("/api/inventory/box-extras", "POST", { extras });
       setSaved(true);
       await onChanged();
-    } catch {
-      setErr("Couldn't reach the server.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't save what's in a box.");
     } finally {
       setWorking(false);
     }
@@ -334,12 +355,21 @@ export default function PizzaBoxesTab({
   return (
     <div className="grid gap-3">
       {err && <Card className="border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</Card>}
+      {notice && (
+        <Card
+          className={`p-3 text-sm ${
+            notice.warn ? "border-amber-200 bg-amber-50 text-amber-900" : "border-green-200 bg-green-50 text-green-800"
+          }`}
+        >
+          {notice.text}
+        </Card>
+      )}
 
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="grid min-w-0 gap-3">
           <Section
-            title="🍕 Box types"
-            hint="One label per anchor, shared by every box of it. “Can make” is the complete boxes the shelf holds parts for — assembling doesn't change counts, scanning a box out does."
+            title={`🍕 Box types · ${totalReady} ready`}
+            hint="Record boxes as you build them: Assemble takes the anchor, its pieces and the printables off the loose counts, so they can't be handed out twice. Scanning a box out takes it off Ready; Unbox puts the contents back."
             action={
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={copyScannerLink} disabled={!base}>
@@ -363,48 +393,78 @@ export default function PizzaBoxesTab({
                 No box types yet — set a sample up as a pizza box below.
               </p>
             ) : (
-              <div className="grid gap-1.5">
-                {boxes.map(({ it, count, limitedBy }) => (
-                  <div
-                    key={it.id}
-                    className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2"
-                  >
-                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
-                      {it.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.image_url} alt="" className="h-full w-full object-cover" />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(it)}
-                        className="block max-w-full truncate text-left text-sm font-semibold text-[var(--anchor-deep)] hover:underline"
-                      >
-                        {it.name}
-                      </button>
-                      <div className="text-[11px] text-[var(--anchor-gray)]">{packagingKitLabel(it.packaging_kit)}</div>
-                      <div className={`truncate text-[11px] font-semibold ${count > 0 ? "text-green-700" : "text-amber-700"}`}>
-                        {count > 0
-                          ? `Can make ${count} · ${limitedBy} runs out first`
-                          : `Can't make any — out of ${limitedBy}`}
+              <div className="grid gap-2">
+                {boxes.map(({ it, ready, canAssemble, limitedBy }) => {
+                  const n = assembleCount(it.id);
+                  return (
+                    <div key={it.id} className="rounded-xl border border-[var(--border-default)] p-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                          {it.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => onEdit(it)}
+                            className="block max-w-full truncate text-left text-sm font-semibold text-[var(--anchor-deep)] hover:underline"
+                          >
+                            {it.name}
+                          </button>
+                          <div className="text-[11px] text-[var(--anchor-gray)]">
+                            {packagingKitLabel(it.packaging_kit)} · {it.quantity_available} loose anchor
+                            {it.quantity_available === 1 ? "" : "s"}
+                          </div>
+                          <div className="truncate text-[11px]">
+                            <strong className={ready > 0 ? "text-green-700" : "text-[var(--anchor-gray)]"}>
+                              {ready} ready
+                            </strong>
+                            <span className="text-[var(--anchor-gray)]">
+                              {" "}
+                              · loose stock for {canAssemble} more
+                              {canAssemble === 0 && limitedBy ? ` (out of ${limitedBy})` : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <label className="flex w-16 shrink-0 flex-col items-center text-[10px] text-[var(--anchor-gray)]">
+                          Labels
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={MAX_COPIES}
+                            placeholder="0"
+                            className="text-center"
+                            value={copies[it.id] || ""}
+                            onChange={(ev) => setCopies((prev) => ({ ...prev, [it.id]: ev.target.value }))}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--border-default)] pt-2">
+                        <div className="w-20 shrink-0">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            placeholder="Boxes"
+                            className="text-center"
+                            value={assembleQty[it.id] || ""}
+                            onChange={(ev) => setAssembleQty((prev) => ({ ...prev, [it.id]: ev.target.value }))}
+                            aria-label={`How many ${it.name} boxes`}
+                          />
+                        </div>
+                        <Button variant="secondary" onClick={() => assemble(it, 1)} disabled={disabled || !n}>
+                          Assemble
+                        </Button>
+                        <Button variant="ghost" onClick={() => assemble(it, -1)} disabled={disabled || !n || ready === 0}>
+                          Unbox
+                        </Button>
                       </div>
                     </div>
-                    <label className="flex w-16 shrink-0 flex-col items-center text-[10px] text-[var(--anchor-gray)]">
-                      Labels
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={MAX_COPIES}
-                        placeholder="0"
-                        className="text-center"
-                        value={copies[it.id] || ""}
-                        onChange={(ev) => setCopies((prev) => ({ ...prev, [it.id]: ev.target.value }))}
-                      />
-                    </label>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Section>
@@ -451,7 +511,7 @@ export default function PizzaBoxesTab({
 
           <Section
             title="Box scans"
-            hint="Each pass of the box scanner — who took how many boxes, and what they pulled back out."
+            hint="Each pass of the box scanner — who took how many boxes, what they pulled back out, and any count that needs a recount."
           >
             {scans.length === 0 ? (
               <p className="text-sm text-[var(--anchor-gray)]">No boxes scanned out yet.</p>
@@ -625,7 +685,6 @@ export default function PizzaBoxesTab({
               {saved && !dirty && <span className="text-xs font-semibold text-green-700">Saved</span>}
               {dirty && <span className="text-xs text-amber-700">Not saved yet</span>}
             </div>
-
           </Section>
 
           {kitsCard}

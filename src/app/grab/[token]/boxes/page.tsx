@@ -11,7 +11,8 @@
 //             camera on one box can't count it twice.
 //   Review  — everything those boxes hold, added up: anchors, each series'
 //             pieces, the printables every box gets. Pulled a brochure out to
-//             leave behind? Lower that line. Only what's left is subtracted.
+//             leave behind? Lower that line, and it goes back on the shelf
+//             count — the box's contents were reserved when it was built.
 //
 // The pass lives in localStorage, so a label scanned with the phone's own
 // camera app (which opens a fresh tab per code) adds to the same pass instead
@@ -444,7 +445,7 @@ export default function BoxScanPage({
           <p className="mt-1 text-sm text-[var(--anchor-gray,#5b6b66)]">
             {step === "scan"
               ? "Scan the label on every box you're taking, then review what's inside."
-              : "Took something out of the boxes to leave behind? Lower it — only what you keep comes off inventory."}
+              : "Took something out of the boxes to leave behind? Lower it — it goes back on the shelf count."}
           </p>
         </header>
 
