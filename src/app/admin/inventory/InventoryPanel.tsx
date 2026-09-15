@@ -11,7 +11,8 @@ import Sheet from "@/app/components/ui/Sheet";
 import Button from "@/app/components/ui/Button";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import BoxLabelsModal from "./BoxLabelsModal";
+import PizzaBoxesTab from "./PizzaBoxesTab";
+import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 import {
   INVENTORY_CATEGORIES,
   defaultLocationForCategory,
@@ -25,6 +26,8 @@ import {
   packagingRoleShort,
   PIZZA_BOX_COMPONENTS,
   PIZZA_BOX_KITS,
+  isBoxType,
+  type BoxScanRow,
   type InventoryItem,
   type ItemCheckout,
   type PackagingKit,
@@ -177,11 +180,14 @@ export default function AdminInventoryPage({
   const [accessError, setAccessError] = useState<string | null>(null);
   const [role, setRole] = useState<string>("");
 
-  const [tab, setTab] = useState<"items" | "checkouts" | "pickups">("items");
+  const [tab, setTab] = useState<"items" | "boxes" | "checkouts" | "pickups">("items");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [checkouts, setCheckouts] = useState<ItemCheckout[]>([]);
   const [grabs, setGrabs] = useState<GrabRow[]>([]);
   const [returns, setReturns] = useState<ReturnRow[]>([]);
+  // The printables every pizza box gets, and each pass of the box scanner.
+  const [boxExtras, setBoxExtras] = useState<BoxExtra[]>([]);
+  const [boxScans, setBoxScans] = useState<BoxScanRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -194,7 +200,6 @@ export default function AdminInventoryPage({
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState("");
   const [itemQrOpen, setItemQrOpen] = useState(false);
-  const [boxLabelsOpen, setBoxLabelsOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
   // Items tab filters (search + category + status + sort) so long lists stay
@@ -226,12 +231,14 @@ export default function AdminInventoryPage({
     }
     setLoadErr(null);
     setItems(itemsJson?.items || []);
+    setBoxExtras(itemsJson?.box_extras || []);
     const coJson = await coRes.json().catch(() => null);
     if (coRes.ok) setCheckouts(coJson?.items || []);
     const grabJson = await grabRes.json().catch(() => null);
     if (grabRes.ok) {
       setGrabs(grabJson?.items || []);
       setReturns(grabJson?.returns || []);
+      setBoxScans(grabJson?.box_scans || []);
     }
   }, []);
 
@@ -269,10 +276,8 @@ export default function AdminInventoryPage({
   const overdueCount = useMemo(() => checkouts.filter((c) => c.overdue).length, [checkouts]);
   const openCount = useMemo(() => checkouts.filter((c) => c.status === "out").length, [checkouts]);
 
-  // Browsing = no search box, no category chip, no status filter. The kit card
-  // is a summary, so it only shows while you're browsing; once you've asked a
-  // question, the list is the answer.
-  const browsingItems = !itemSearch.trim() && !itemCat && !itemFlag;
+  // Anchors that ship as pre-assembled pizza boxes — the count on their tab.
+  const boxTypeCount = useMemo(() => items.filter(isBoxType).length, [items]);
 
   // Every item the aisle log has ever seen leave the shelf.
   const pickedIds = useMemo(
@@ -699,9 +704,6 @@ export default function AdminInventoryPage({
               <Button variant="secondary" onClick={() => setItemQrOpen(true)} disabled={busy}>
                 Item QR codes
               </Button>
-              <Button variant="secondary" onClick={() => setBoxLabelsOpen(true)} disabled={busy}>
-                Pizza box labels
-              </Button>
             </div>
 
             {/* Tabs. Short labels on a phone so three tabs and their counts fit
@@ -709,6 +711,12 @@ export default function AdminInventoryPage({
             <div className="mb-2 flex gap-1.5 sm:gap-2">
               <TabButton active={tab === "items"} onClick={() => setTab("items")}>
                 Items <TabCount>{items.length}</TabCount>
+              </TabButton>
+              {/* Pizza boxes get a tab of their own: box types, labels, what's
+                  in a box, the kit pieces and the scan log all live there. */}
+              <TabButton active={tab === "boxes"} onClick={() => setTab("boxes")}>
+                <span aria-hidden>🍕</span>
+                <span className="sr-only sm:not-sr-only">&nbsp;Pizza boxes</span> <TabCount>{boxTypeCount}</TabCount>
               </TabButton>
               <TabButton active={tab === "checkouts"} onClick={() => setTab("checkouts")}>
                 <span className="sm:hidden">Loans</span>
@@ -763,14 +771,7 @@ export default function AdminInventoryPage({
                   </AttentionPill>
                 )}
                 {missingPieces > 0 && (
-                  <AttentionPill
-                    tone="amber"
-                    active={tab === "items" && itemFlag === "pieces"}
-                    onClick={() => {
-                      setTab("items");
-                      setItemFlag(itemFlag === "pieces" ? "" : "pieces");
-                    }}
-                  >
+                  <AttentionPill tone="amber" active={tab === "boxes"} onClick={() => setTab("boxes")}>
                     🍕 {missingPieces} kit {missingPieces === 1 ? "piece" : "pieces"} not set up
                   </AttentionPill>
                 )}
@@ -877,15 +878,6 @@ export default function AdminInventoryPage({
                     </button>
                   </div>
                 )}
-                {browsingItems && (
-                  <PizzaBoxKits
-                    kits={kits}
-                    onAdjust={adjustStock}
-                    onEdit={openEdit}
-                    onCreate={openCreatePiece}
-                    busy={busy}
-                  />
-                )}
                 <ItemsList
                   items={filteredItems}
                   onAdjust={adjustStock}
@@ -898,6 +890,24 @@ export default function AdminInventoryPage({
                   busy={busy}
                 />
               </>
+            ) : tab === "boxes" ? (
+              <PizzaBoxesTab
+                items={items}
+                extras={boxExtras}
+                scans={boxScans}
+                busy={busy}
+                onEdit={openEdit}
+                onChanged={loadAll}
+                kitsCard={
+                  <PizzaBoxKits
+                    kits={kits}
+                    onAdjust={adjustStock}
+                    onEdit={openEdit}
+                    onCreate={openCreatePiece}
+                    busy={busy}
+                  />
+                }
+              />
             ) : tab === "checkouts" ? (
               <CheckoutsList checkouts={checkouts} onCheckin={openCheckin} busy={busy} />
             ) : (
@@ -1262,14 +1272,6 @@ export default function AdminInventoryPage({
             title="Item QR codes"
             hint="A printable code per item, for labelling the shelf."
           />
-          <SheetAction
-            onClick={() => {
-              setMoreOpen(false);
-              setBoxLabelsOpen(true);
-            }}
-            title="Pizza box labels"
-            hint="What goes in a pre-assembled box, and the code that goes on it."
-          />
         </div>
       </Sheet>
 
@@ -1278,9 +1280,6 @@ export default function AdminInventoryPage({
 
       {/* Item QR export modal */}
       <ItemQrModal open={itemQrOpen} onClose={() => setItemQrOpen(false)} items={items} />
-
-      {/* Pre-assembled pizza boxes: contents + labels */}
-      <BoxLabelsModal open={boxLabelsOpen} onClose={() => setBoxLabelsOpen(false)} items={items} />
 
       {/* Restock modal */}
       <Modal open={!!restockItem} className="max-w-sm">
@@ -1787,6 +1786,8 @@ type GrabRow = {
   pizza_box?: boolean;
   plastic_overlay?: boolean;
   product_of_month?: boolean;
+  // Set when the line came off a pizza-box scan.
+  box_scan_id?: string | null;
   created_at: string;
 };
 
@@ -2513,6 +2514,11 @@ function PickupsList({
                   {pieces && (
                     <span className="ml-2 text-xs text-[var(--anchor-gray)]">
                       + {series ? `${series} ` : ""}{pieces}
+                    </span>
+                  )}
+                  {g.box_scan_id && (
+                    <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
+                      🍕 box scan
                     </span>
                   )}
                   {back > 0 && (

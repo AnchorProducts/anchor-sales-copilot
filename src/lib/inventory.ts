@@ -284,6 +284,8 @@ export type BoxPart = {
   name: string;
   kind: BoxPartKind;
   per_box: number;
+  // Which kit piece this is, on a piece.
+  role?: PackagingRole;
 };
 
 const BOX_PART_ORDER: Record<BoxPartKind, number> = { anchor: 0, piece: 1, extra: 2 };
@@ -324,6 +326,139 @@ export function boxIdFromScan(text: string): string {
   } catch {
     return "";
   }
+}
+
+type CatalogItem = PackagingPieceItem & { id: string; name: string };
+
+// What one box of a type holds: the anchor, that series' pieces in assembly
+// order, then the printables every box gets. The scanner, the order form and
+// both inventory pages all build a box through here, so none of them can list
+// a different box. An extra whose item has been deleted drops out.
+export function boxParts(
+  anchor: { id: string; name: string; packaging_kit?: string | null },
+  items: readonly CatalogItem[],
+  extras: readonly { item_id: string; quantity: number }[]
+): BoxPart[] {
+  const parts: BoxPart[] = [{ item_id: anchor.id, name: anchor.name, kind: "anchor", per_box: 1 }];
+  for (const c of PIZZA_BOX_COMPONENTS) {
+    const piece = findKitPiece(items, anchor.packaging_kit, c.key);
+    if (piece) parts.push({ item_id: piece.id, name: piece.name, kind: "piece", per_box: 1, role: c.key });
+  }
+  for (const e of extras) {
+    const it = items.find((i) => i.id === e.item_id);
+    if (it) parts.push({ item_id: it.id, name: it.name, kind: "extra", per_box: e.quantity });
+  }
+  return parts;
+}
+
+// A box's contents past the anchor, as one line: "under insert + overlay +
+// over insert + box + 1 × Booklet (New)".
+export function describeBoxContents(parts: readonly BoxPart[]): string {
+  const out: string[] = [];
+  const pieces = describeComponents(parts.filter((p) => p.kind === "piece" && p.role).map((p) => p.role!));
+  if (pieces) out.push(pieces);
+  for (const p of parts) if (p.kind === "extra") out.push(`${p.per_box} × ${p.name}`);
+  return out.join(" + ");
+}
+
+// How many complete boxes the shelf holds parts for, and what runs out first.
+// Nothing counts assembled boxes — assembling moves no stock — so this is the
+// honest reading of "boxes available": the scarcest part decides it.
+export function buildableBoxes(
+  parts: readonly BoxPart[],
+  items: readonly { id: string; quantity_available: number }[]
+): { count: number; limitedBy: string | null } {
+  let count = Infinity;
+  let limitedBy: string | null = null;
+  for (const p of parts) {
+    const have = items.find((i) => i.id === p.item_id)?.quantity_available ?? 0;
+    const n = Math.floor(Math.max(0, have) / p.per_box);
+    if (n < count) {
+      count = n;
+      limitedBy = p.name;
+    }
+  }
+  return { count: Number.isFinite(count) ? count : 0, limitedBy };
+}
+
+// The series an anchor's name says it is — "3400 …" is a 3000 Series anchor.
+// A suggestion when setting a sample up as a box, never applied on its own.
+export function seriesFromName(name: string): PackagingKit | null {
+  const d = name.trim().charAt(0);
+  return d === "2" ? "2000" : d === "3" ? "3000" : d === "5" ? "5000" : null;
+}
+
+// One pass of the box scanner, as the admin log reads it.
+export type BoxScanRow = {
+  id: string;
+  scanned_by_name: string;
+  scanned_by_email: string;
+  box_count: number;
+  boxes: { item_id: string; name: string; count: number }[];
+  lines: { item_id: string; name: string; packed: number; quantity: number; removed: number; short: number }[];
+  created_at: string;
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Ordering samples as pizza boxes
+//
+// A sample on a marketing order ships one of three ways: as a whole pizza box,
+// with a plastic overlay, or on its own. The rep must say which whenever there
+// is a choice, and the server only honours an answer the item supports.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type OrderPackaging = "box" | "overlay" | "none";
+
+type PackagingChoiceItem = PackagingPieceItem & {
+  pizza_box?: boolean | null;
+  plastic_overlay?: boolean | null;
+};
+
+// The ways this item can ship, or none when there's nothing to ask.
+export function packagingOptions(item: PackagingChoiceItem): OrderPackaging[] {
+  const out: OrderPackaging[] = [];
+  if (isBoxType(item)) out.push("box");
+  if (item.plastic_overlay) out.push("overlay");
+  if (out.length) out.push("none");
+  return out;
+}
+
+// A requested answer, kept only if the item supports it.
+export function resolvePackaging(item: PackagingChoiceItem, requested: unknown): OrderPackaging {
+  if (requested === "box" && isBoxType(item)) return "box";
+  if (requested === "overlay" && item.plastic_overlay) return "overlay";
+  return "none";
+}
+
+// Everything an order pulls from stock, per item id: each picked item, a
+// paired overlay off that sample's series, and the whole contents of every
+// pizza box. Recorded on the order so fulfillment pre-fills it instead of the
+// fulfiller rebuilding a box from free text.
+export function orderStockPlan(
+  lines: readonly { item: CatalogItem & PackagingChoiceItem; quantity: number; packaging: OrderPackaging }[],
+  items: readonly CatalogItem[],
+  extras: readonly { item_id: string; quantity: number }[]
+): { plan: Record<string, number>; boxes: number } {
+  const plan: Record<string, number> = {};
+  let boxes = 0;
+  const add = (id: string, n: number) => {
+    plan[id] = (plan[id] || 0) + n;
+  };
+  for (const l of lines) {
+    const qty = Math.max(0, Math.floor(l.quantity) || 0);
+    if (!qty) continue;
+    if (l.packaging === "box" && isBoxType(l.item)) {
+      boxes += qty;
+      for (const p of boxParts(l.item, items, extras)) add(p.item_id, p.per_box * qty);
+      continue;
+    }
+    add(l.item.id, qty);
+    if (l.packaging === "overlay" && l.item.plastic_overlay) {
+      const overlay = findKitPiece(items, l.item.packaging_kit, "overlay");
+      if (overlay) add(overlay.id, qty);
+    }
+  }
+  return { plan, boxes };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

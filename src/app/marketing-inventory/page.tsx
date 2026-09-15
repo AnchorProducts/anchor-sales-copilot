@@ -10,11 +10,21 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useFormAccess } from "@/lib/role/useFormAccess";
 import {
   INVENTORY_CATEGORIES,
+  PIZZA_BOX_KITS,
   TRADESHOW_CATEGORY,
+  boxParts,
+  buildableBoxes,
+  describeBoxContents,
   inventoryCategoryLabel,
+  isBoxType,
+  packagingKitLabel,
   todayISODate,
   type InventoryItem,
 } from "@/lib/inventory";
+import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
+
+// The chip for pre-assembled pizza boxes on their own — not a real category.
+const BOXES_FILTER = "boxes";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +36,18 @@ export default function MarketingInventoryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("");
+  // The printables every pizza box gets, and — for inside reps — the box
+  // scanner's link.
+  const [boxExtras, setBoxExtras] = useState<BoxExtra[]>([]);
+  const [scannerUrl, setScannerUrl] = useState("");
 
   // ?cat=<key> so the order form's "check out tradeshow items" link lands on
-  // the tradeshow shelf rather than on everything.
+  // the tradeshow shelf rather than on everything. ?cat=boxes opens on the
+  // pizza boxes.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const cat = new URLSearchParams(window.location.search).get("cat") || "";
-    if (INVENTORY_CATEGORIES.some((c) => c.key === cat)) setCatFilter(cat);
+    if (cat === BOXES_FILTER || INVENTORY_CATEGORIES.some((c) => c.key === cat)) setCatFilter(cat);
   }, []);
 
   // Tradeshow stock goes out on loan and comes back, and inside reps are the
@@ -108,7 +123,10 @@ export default function MarketingInventoryPage() {
   async function reload() {
     const res = await fetch("/api/inventory", { cache: "no-store" });
     const json = await res.json().catch(() => null);
-    if (res.ok) setItems(json?.items || []);
+    if (res.ok) {
+      setItems(json?.items || []);
+      setBoxExtras(json?.box_extras || []);
+    }
   }
 
   const filteredItems = useMemo(() => {
@@ -124,6 +142,44 @@ export default function MarketingInventoryPage() {
     });
   }, [items, search, catFilter]);
 
+  // Pre-assembled pizza boxes, one per anchor that ships as one. Nothing counts
+  // assembled boxes — assembling moves no stock — so "can be made" is the
+  // complete boxes the shelf holds parts for, decided by what runs out first.
+  const hasBoxes = useMemo(() => items.some(isBoxType), [items]);
+  const boxes = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items
+      .filter(isBoxType)
+      .filter((it) => !q || it.name.toLowerCase().includes(q))
+      .map((it) => ({ it, ...buildableBoxes(boxParts(it, items, boxExtras), items) }));
+  }, [items, boxExtras, search]);
+  const boxContents = useMemo(
+    () =>
+      PIZZA_BOX_KITS.filter((k) => boxes.some((b) => b.it.packaging_kit === k.key)).map((k) => ({
+        key: k.key,
+        label: k.label,
+        contents: describeBoxContents(boxParts({ id: "", name: "", packaging_kit: k.key }, items, boxExtras)),
+      })),
+    [boxes, items, boxExtras]
+  );
+  const showBoxes =
+    boxes.length > 0 && (catFilter === "" || catFilter === BOXES_FILTER || catFilter === "samples");
+
+  // Inside reps take boxes off the shelf themselves, so they get the scanner.
+  // Its link carries the aisle token, which only the fulfillment team can read.
+  useEffect(() => {
+    if (!ready || !canCheckOut) return;
+    let alive = true;
+    (async () => {
+      const res = await fetch("/api/inventory/aisle-qr", { cache: "no-store" }).catch(() => null);
+      const json = res ? await res.json().catch(() => null) : null;
+      if (alive && res?.ok && json?.url) setScannerUrl(`${json.url}/boxes`);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [ready, canCheckOut]);
+
   useEffect(() => {
     if (!ready) return;
     let alive = true;
@@ -137,6 +193,7 @@ export default function MarketingInventoryPage() {
           return;
         }
         setItems(json?.items || []);
+        setBoxExtras(json?.box_extras || []);
       } finally {
         if (alive) setLoading(false);
       }
@@ -191,6 +248,19 @@ export default function MarketingInventoryPage() {
                 >
                   All
                 </button>
+                {hasBoxes && (
+                  <button
+                    type="button"
+                    onClick={() => setCatFilter(BOXES_FILTER)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      catFilter === BOXES_FILTER
+                        ? "bg-[var(--anchor-green)] text-white"
+                        : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                    }`}
+                  >
+                    🍕 Pizza boxes
+                  </button>
+                )}
                 {orderedCategories.map((c) => (
                   <button
                     key={c.key}
@@ -208,6 +278,63 @@ export default function MarketingInventoryPage() {
               </div>
             </div>
 
+            {showBoxes && (
+              <Card className="mb-4 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-[var(--anchor-deep)]">🍕 Pizza boxes</h2>
+                    <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
+                      Ready-made boxes, one per anchor. Order them as pizza boxes on a marketing order
+                      {canCheckOut ? ", or scan them out when you take them from the shelf." : "."}
+                    </p>
+                    {boxContents.map((k) => (
+                      <p key={k.key} className="mt-0.5 text-xs text-[var(--anchor-deep)]">
+                        <strong>{k.label}:</strong> the anchor{k.contents ? ` + ${k.contents}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {scannerUrl && (
+                      <a
+                        href={scannerUrl}
+                        className="inline-flex items-center rounded-xl bg-[var(--anchor-green)] px-3 py-2 text-xs font-semibold text-white"
+                      >
+                        📷 Scan boxes out
+                      </a>
+                    )}
+                    <a
+                      href="/marketing-orders"
+                      className="inline-flex items-center rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)]"
+                    >
+                      Order boxes
+                    </a>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {boxes.map(({ it, count, limitedBy }) => (
+                    <div
+                      key={it.id}
+                      className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2.5"
+                    >
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                        {it.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{it.name}</div>
+                        <div className="text-[11px] text-[var(--anchor-gray)]">{packagingKitLabel(it.packaging_kit)}</div>
+                        <div className={`truncate text-xs font-semibold ${count > 0 ? "text-green-700" : "text-amber-700"}`}>
+                          {count > 0 ? `${count} can be made` : `None — out of ${limitedBy}`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {canCheckOut && catFilter === TRADESHOW_CATEGORY && (
               <Card className="mb-3 border-[var(--anchor-deep)]/20 bg-[var(--anchor-mint)]/30 p-3 text-sm text-[var(--anchor-deep)]">
                 Tradeshow gear is a loan, not an order: check it out for the show, and marketing books
@@ -221,7 +348,11 @@ export default function MarketingInventoryPage() {
               </Card>
             )}
 
-            {filteredItems.length === 0 ? (
+            {catFilter === BOXES_FILTER ? (
+              !showBoxes && (
+                <Card className="p-6 text-sm text-[var(--anchor-gray)]">No pizza boxes match your search.</Card>
+              )
+            ) : filteredItems.length === 0 ? (
               <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items match your search.</Card>
             ) : (
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

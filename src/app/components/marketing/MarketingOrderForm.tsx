@@ -11,7 +11,19 @@ import { useEffectiveRole } from "@/lib/role/viewAs";
 import { trackEvent } from "@/lib/analytics/track";
 import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/productOfMonth";
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
-import { inventoryCategoryLabel, isOverlayPool, overlayUnits, packagingKitLabel } from "@/lib/inventory";
+import {
+  boxParts,
+  buildableBoxes,
+  describeBoxContents,
+  inventoryCategoryLabel,
+  isBoxType,
+  isOverlayPool,
+  overlayUnits,
+  packagingKitLabel,
+  packagingOptions,
+  type OrderPackaging,
+} from "@/lib/inventory";
+import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 import { US_STATES } from "@/lib/sales/states";
 import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 
@@ -30,6 +42,9 @@ type InvItem = {
   image_url?: string | null;
   // Whether this sample can be ordered with a plastic overlay alongside it.
   plastic_overlay?: boolean;
+  // Whether this anchor is offered as a pizza box — with its series set, it can
+  // ship as one.
+  pizza_box?: boolean;
   // Set on an item that IS one of a kit's packaging pieces — the overlay is
   // orderable on its own.
   packaging_role?: string | null;
@@ -55,6 +70,12 @@ const CATEGORY_ORDER = ["swag", "brochures", "samples", "tradeshow", "other"];
 // legitimate request, which inside sales fills by having more made. This ceiling
 // is only a fat-finger guard.
 const MAX_QTY_PER_ITEM = 100000;
+
+const PACKAGING_LABELS: Record<OrderPackaging, string> = {
+  box: "🍕 Pizza box",
+  overlay: "+ Plastic overlay",
+  none: "Anchor only",
+};
 
 // A numbered section heading. The form is three decisions — what type, which
 // items, where it goes — and saying so beats one undifferentiated column of
@@ -92,12 +113,16 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const [invError, setInvError] = useState<string | null>(null);
   const [itemSearch, setItemSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, number>>({});
-  // The overlay answer per picked item: "yes", "no", or absent for not-yet-
-  // answered. Absent is deliberately NOT the same as "no" — a rep has to say
-  // either way, so an order without overlays is a decision rather than a
-  // checkbox nobody noticed. One overlay per unit, off the same stock as
-  // ordering overlays on their own.
-  const [withOverlay, setWithOverlay] = useState<Record<string, "yes" | "no">>({});
+  // How each picked sample ships: as a pizza box, with a plastic overlay, or on
+  // its own — absent until the rep answers. Absent is deliberately NOT the same
+  // as "on its own": a rep has to say, so a bare sample is a decision rather
+  // than a question nobody noticed. Only asked of a sample that offers a box or
+  // an overlay. An overlay is one per unit, off the same stock as ordering
+  // overlays on their own.
+  const [packaging, setPackaging] = useState<Record<string, OrderPackaging>>({});
+  // The printables every pizza box gets, so a box reads the same here as on its
+  // label and at the scanner.
+  const [boxExtras, setBoxExtras] = useState<BoxExtra[]>([]);
   const [otherRequest, setOtherRequest] = useState("");
 
   const [neededBy, setNeededBy] = useState("");
@@ -161,6 +186,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
           setInvError(json?.error || "Couldn't load the catalog.");
         } else {
           setInventory(json?.items || []);
+          setBoxExtras(json?.box_extras || []);
         }
       } catch (e: any) {
         if (alive) setInvError(e?.message || "Couldn't load the catalog.");
@@ -227,7 +253,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       for (const id of Object.keys(next)) if (!stillVisible(id)) delete next[id];
       return next;
     });
-    setWithOverlay((prev) => {
+    setPackaging((prev) => {
       const next = { ...prev };
       for (const id of Object.keys(next)) if (!stillVisible(id)) delete next[id];
       return next;
@@ -242,10 +268,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       else next[id] = clamped;
       return next;
     });
-    // Removing an item takes its overlay with it, so a stale flag can't ride
-    // along on the next order.
+    // Removing an item takes its packaging answer with it, so a stale choice
+    // can't ride along on the next order.
     if (clamped <= 0) {
-      setWithOverlay((prev) => {
+      setPackaging((prev) => {
         if (!prev[id]) return prev;
         const next = { ...prev };
         delete next[id];
@@ -254,8 +280,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     }
   }
 
-  function setOverlayChoice(id: string, choice: "yes" | "no") {
-    setWithOverlay((prev) => ({ ...prev, [id]: choice }));
+  function setPackagingChoice(id: string, choice: OrderPackaging) {
+    setPackaging((prev) => ({ ...prev, [id]: choice }));
   }
 
   // Show only items in the collateral types selected above, then apply the
@@ -307,19 +333,41 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     [inventory]
   );
 
-  // Picked samples that offer an overlay but haven't been answered yet. The
-  // order can't be submitted while any remain.
-  const unansweredOverlays = useMemo(
+  // Picked samples with a packaging choice nobody has made yet. The order can't
+  // be submitted while any remain.
+  const unanswered = useMemo(
     () =>
       selectedEntries
         .filter(([id]) => {
           const it = inventory.find((x) => x.id === id);
-          return !!it?.plastic_overlay && !withOverlay[id];
+          return !!it && packagingOptions(it).length > 0 && !packaging[id];
         })
         .map(([id]) => inventory.find((x) => x.id === id)?.name || "an item"),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, withOverlay, inventory]
+    [selected, packaging, inventory]
   );
+
+  // Every box type, built the way its label and the scanner build it: what's in
+  // it past the anchor, and how many complete boxes the shelf can make.
+  const boxInfo = useMemo(() => {
+    const out = new Map<string, { contents: string; buildable: number }>();
+    for (const it of inventory) {
+      if (!isBoxType(it)) continue;
+      const parts = boxParts(it, inventory, boxExtras);
+      out.set(it.id, { contents: describeBoxContents(parts), buildable: buildableBoxes(parts, inventory).count });
+    }
+    return out;
+  }, [inventory, boxExtras]);
+
+  const pizzaBoxLines = selectedEntries
+    .filter(([id]) => packaging[id] === "box" && boxInfo.has(id))
+    .map(([id, quantity]) => ({
+      id,
+      quantity,
+      name: inventory.find((x) => x.id === id)?.name || "item",
+      ...boxInfo.get(id)!,
+    }));
+  const pizzaBoxes = pizzaBoxLines.reduce((n, l) => n + l.quantity, 0);
 
   // Overlays this order needs, split by where they came from. Computed with the
   // same helper the API uses, so the preview can't disagree with what's recorded.
@@ -333,12 +381,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
             offersOverlay: !!it?.plastic_overlay,
             isOverlayPool: isOverlayPool(it),
             kit: it?.packaging_kit ?? null,
-            wantsOverlay: withOverlay[id] === "yes",
+            wantsOverlay: packaging[id] === "overlay",
           };
         })
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, withOverlay, inventory]
+    [selected, packaging, inventory]
   );
 
   async function submit(e: React.FormEvent) {
@@ -350,10 +398,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     if (selectedEntries.length === 0 && !otherRequest.trim()) {
       return setError("Add at least one item from the catalog, or describe what you need in the Other box.");
     }
-    if (unansweredOverlays.length > 0) {
-      return setError(
-        `Choose an overlay option for ${unansweredOverlays.join(", ")}.`
-      );
+    if (unanswered.length > 0) {
+      return setError(`Choose how ${unanswered.join(", ")} should ship.`);
     }
     if (!neededBy) return setError("A needed-by date is required.");
     if (!shipName.trim()) return setError("A recipient name is required.");
@@ -371,7 +417,9 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     const requested_items = selectedEntries.map(([item_id, quantity]) => ({
       item_id,
       quantity,
-      plastic_overlay: withOverlay[item_id] === "yes",
+      packaging: packaging[item_id] || "none",
+      // Kept for an API that predates pizza boxes.
+      plastic_overlay: packaging[item_id] === "overlay",
     }));
 
     setSubmitting(true);
@@ -401,7 +449,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       setSuccess("Order submitted. The marketing team will be in touch.");
       setCategories([]);
       setSelected({});
-      setWithOverlay({});
+      setPackaging({});
       setItemSearch("");
       setOtherRequest("");
       setNeededBy("");
@@ -426,7 +474,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   const missing: string[] = [];
   if (categories.length === 0) missing.push("a collateral type");
   if (selectedEntries.length === 0 && !otherRequest.trim()) missing.push("at least one item");
-  if (unansweredOverlays.length > 0) missing.push("an overlay answer");
+  if (unanswered.length > 0) missing.push("how each sample ships");
   if (!neededBy) missing.push("a needed-by date");
   if (!shipName.trim()) missing.push("a recipient name");
   if (!shipStreet.trim() || !shipCity.trim() || !shipState.trim() || !shipZip.trim()) {
@@ -457,8 +505,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         <ul className="mt-2 grid gap-1.5 text-sm">
           {selectedEntries.map(([id, q]) => {
             const it = inventory.find((x) => x.id === id);
-            const paired = withOverlay[id] === "yes" && !!it?.plastic_overlay;
-            const needsAnswer = !!it?.plastic_overlay && !withOverlay[id];
+            const choice = packaging[id];
+            const paired = choice === "overlay" && !!it?.plastic_overlay;
+            const boxed = choice === "box" && boxInfo.has(id);
+            const needsAnswer = !!it && packagingOptions(it).length > 0 && !choice;
             return (
               <li key={id} className="flex items-start justify-between gap-2">
                 <span className="min-w-0">
@@ -466,9 +516,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                   {paired && (
                     <span className="block text-[11px] text-[var(--anchor-gray)]">+ plastic overlay</span>
                   )}
+                  {boxed && (
+                    <span className="block text-[11px] text-[var(--anchor-gray)]">🍕 as pizza boxes</span>
+                  )}
                   {needsAnswer && (
                     <span className="block text-[11px] font-medium text-amber-700">
-                      Overlay not answered
+                      Choose how it ships
                     </span>
                   )}
                 </span>
@@ -510,6 +563,25 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         </div>
       )}
 
+      {/* A pizza box is more than its anchor — say what goes out with them, and
+          which ones the shelf can't make up in full. */}
+      {pizzaBoxes > 0 && (
+        <div className="mt-3 border-t border-black/10 pt-2 text-xs text-[var(--anchor-gray)]">
+          <span className="font-semibold text-[var(--anchor-deep)]">
+            🍕 {pizzaBoxes} pizza box{pizzaBoxes !== 1 ? "es" : ""}
+          </span>
+          {pizzaBoxLines[0]?.contents && <> — each the anchor + {pizzaBoxLines[0].contents}</>}
+          {pizzaBoxLines
+            .filter((l) => l.quantity > l.buildable)
+            .map((l) => (
+              <span key={l.id} className="mt-0.5 block font-medium text-amber-700">
+                {l.name}: stock for only {l.buildable} complete box{l.buildable === 1 ? "" : "es"} — the rest
+                have to be made up.
+              </span>
+            ))}
+        </div>
+      )}
+
       {missing.length > 0 && (
         <div className="mt-3 border-t border-black/10 pt-2">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
@@ -536,13 +608,13 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
 
       <Button
         type="submit"
-        disabled={submitting || unansweredOverlays.length > 0}
+        disabled={submitting || unanswered.length > 0}
         className="mt-3 w-full"
       >
         {submitting
           ? "Submitting…"
-          : unansweredOverlays.length > 0
-            ? "Answer the overlay question"
+          : unanswered.length > 0
+            ? "Choose how each sample ships"
             : "Submit order"}
       </Button>
 
@@ -706,8 +778,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                       // Past what's on the shelf — still orderable, just made to
                       // order rather than pulled.
                       const overStock = qty > avail;
-                      // undefined until the rep answers the overlay question.
-                      const overlayChoice = withOverlay[it.id];
+                      // undefined until the rep answers how it ships.
+                      const choice = packaging[it.id];
+                      const options = packagingOptions(it);
+                      const box = boxInfo.get(it.id);
                       return (
                         <div
                           key={it.id}
@@ -752,6 +826,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                             <div className="text-xs text-[var(--anchor-gray)]">
                               {out ? "None in stock" : `${avail} in stock`}
                             </div>
+                            {box && (
+                              <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+                                🍕 Pizza box · stock for {box.buildable}
+                              </div>
+                            )}
                             {isOverlayPool(it) && (
                               <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
                                 Overlays on their own. Same stock as the ones added to a{" "}
@@ -764,33 +843,31 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                               </div>
                             )}
 
-                            {/* An overlay pairs one-per-unit with this sample,
-                                off the same count as ordering overlays alone.
-                                Both answers are explicit — nothing is
-                                preselected, so no rep silently gets neither. */}
-                            {picked && it.plastic_overlay && (
+                            {/* How it ships: a whole pizza box (the anchor, its
+                                series' pieces and the printables), with a plastic
+                                overlay, or on its own. Every answer is explicit —
+                                nothing is preselected, so no rep silently gets
+                                none of them. */}
+                            {picked && options.length > 0 && (
                               <div
                                 className={
                                   "rounded-lg px-2 py-1.5 " +
-                                  (overlayChoice
+                                  (choice
                                     ? "bg-[var(--surface-soft)]"
                                     : "border border-amber-300 bg-amber-50")
                                 }
                               >
                                 <div className="text-[11px] font-medium text-[var(--anchor-deep)]">
-                                  Plastic overlay?
+                                  How should {qty > 1 ? "these" : "it"} ship?
                                 </div>
-                                <div className="mt-1 grid grid-cols-2 gap-1">
-                                  {([
-                                    { key: "yes", label: qty > 1 ? `Yes (${qty})` : "Yes" },
-                                    { key: "no", label: "No" },
-                                  ] as const).map((opt) => {
-                                    const on = overlayChoice === opt.key;
+                                <div className="mt-1 grid gap-1">
+                                  {options.map((key) => ({ key, label: PACKAGING_LABELS[key] })).map((opt) => {
+                                    const on = choice === opt.key;
                                     return (
                                       <button
                                         key={opt.key}
                                         type="button"
-                                        onClick={() => setOverlayChoice(it.id, opt.key)}
+                                        onClick={() => setPackagingChoice(it.id, opt.key)}
                                         aria-pressed={on}
                                         className={
                                           "rounded-md px-1.5 py-1 text-[11px] font-semibold transition " +
@@ -804,6 +881,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                     );
                                   })}
                                 </div>
+                                {choice === "box" && box && (
+                                  <div className="mt-1 text-[10px] leading-snug text-[var(--anchor-gray)]">
+                                    Anchor + {box.contents || "its series' pieces"}
+                                  </div>
+                                )}
                               </div>
                             )}
 

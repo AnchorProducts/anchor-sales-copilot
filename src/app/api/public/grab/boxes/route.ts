@@ -23,27 +23,14 @@
 // be, so a short count never refuses the scan — it takes what's recorded, logs
 // the full amount, and flags the shortfall for a recount.
 //
-// Each item is logged as its own pickup line, so the Return tab can put a
-// brochure or an overlay back on its own.
+// The pass is logged once in marketing_box_scans, and each item as its own
+// pickup line pointing back at it — so the admin log reads "5 boxes" while the
+// Return tab can still put a single brochure back.
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import {
-  clean,
-  consumeStock,
-  getGrabConfig,
-  getPackagingPools,
-  kitPools,
-  notifyBoxPickup,
-  signItemImage,
-} from "@/lib/inventory/server";
-import {
-  boxTotals,
-  isBoxType,
-  packagingKitLabel,
-  PIZZA_BOX_COMPONENTS,
-  type BoxPart,
-} from "@/lib/inventory";
+import { clean, consumeStock, getGrabConfig, notifyBoxPickup, signItemImage } from "@/lib/inventory/server";
+import { boxParts, boxTotals, isBoxType, packagingKitLabel, type BoxPart } from "@/lib/inventory";
 import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExtras";
 
 export const runtime = "nodejs";
@@ -84,61 +71,30 @@ type BoxType = {
   parts: BoxPart[];
 };
 
-// The printables every box gets, with their names. An extra whose item has
-// since been deleted drops out rather than failing every scan.
-async function loadExtras(): Promise<BoxPart[]> {
-  const { data } = await supabaseAdmin
-    .from("app_settings")
-    .select("value")
-    .eq("key", PIZZA_BOX_EXTRAS_KEY)
-    .maybeSingle();
-  const extras = parseBoxExtras((data as any)?.value);
-  if (!extras.length) return [];
-  const { data: rows } = await supabaseAdmin
-    .from("marketing_inventory_items")
-    .select("id,name")
-    .in(
-      "id",
-      extras.map((e) => e.item_id)
-    );
-  const names = new Map(((rows || []) as any[]).map((r) => [r.id as string, clean(r.name)]));
-  return extras
-    .filter((e) => names.has(e.item_id))
-    .map((e) => ({ item_id: e.item_id, name: names.get(e.item_id)!, kind: "extra" as const, per_box: e.quantity }));
-}
-
-// Every box type and what one box of it holds.
+// Every box type and what one box of it holds, built by boxParts from the whole
+// catalog — the same way the order form and the inventory pages build a box.
 async function loadBoxTypes(): Promise<BoxType[]> {
-  const [{ data, error }, pools, extras] = await Promise.all([
+  const [{ data, error }, { data: extrasRow }] = await Promise.all([
     supabaseAdmin
       .from("marketing_inventory_items")
       .select("id,name,image_path,pizza_box,packaging_kit,packaging_role")
-      .eq("pizza_box", true)
-      .is("packaging_role", null)
-      .not("packaging_kit", "is", null)
-      .order("name", { ascending: true }),
-    getPackagingPools(),
-    loadExtras(),
+      .limit(1000),
+    supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle(),
   ]);
   if (error) throw new Error("Failed to load pizza boxes.");
 
-  return ((data || []) as any[]).filter(isBoxType).map((row) => {
-    const kit = clean(row.packaging_kit);
-    const forKit = kitPools(pools, kit);
-    const pieces: BoxPart[] = PIZZA_BOX_COMPONENTS.filter((c) => forKit[c.key]).map((c) => ({
-      item_id: forKit[c.key]!.id,
-      name: forKit[c.key]!.name,
-      kind: "piece",
-      per_box: 1,
-    }));
-    return {
+  const catalog = ((data || []) as any[]).map((r) => ({ ...r, name: clean(r.name) }));
+  const extras = parseBoxExtras((extrasRow as any)?.value);
+  return catalog
+    .filter(isBoxType)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((row) => ({
       id: row.id,
-      name: clean(row.name),
-      kit,
+      name: row.name,
+      kit: clean(row.packaging_kit),
       image_path: clean(row.image_path) || null,
-      parts: [{ item_id: row.id, name: clean(row.name), kind: "anchor", per_box: 1 }, ...pieces, ...extras],
-    };
-  });
+      parts: boxParts(row, catalog, extras),
+    }));
 }
 
 // GET — the box types a label can name, and what's in each.
@@ -229,7 +185,24 @@ export async function POST(req: Request) {
     }
 
     const boxes = [...counts].map(([id, count]) => ({ ...typeById.get(id)!, count }));
+    const boxSummary = boxes.map((b) => ({ item_id: b.id, name: b.name, count: b.count }));
     const take = (body.take && typeof body.take === "object" ? body.take : {}) as Record<string, unknown>;
+
+    // One row for the whole pass, so the admin log reads "5 boxes" rather than
+    // six unrelated pickups. Best-effort: before 20260915_000001 there's no
+    // table, and the pickup still goes through with its lines logged alone.
+    const { data: scanRow } = await supabaseAdmin
+      .from("marketing_box_scans")
+      .insert({
+        scanned_by_name: name,
+        scanned_by_email: email,
+        box_count: boxes.reduce((n, b) => n + b.count, 0),
+        boxes: boxSummary,
+        ip,
+      })
+      .select("id")
+      .maybeSingle();
+    const scanId: string | null = (scanRow as any)?.id || null;
 
     const lines = [];
     const failed = [];
@@ -255,6 +228,8 @@ export async function POST(req: Request) {
         grabbed_by_email: email,
         quantity,
         ip,
+        // Only present when the scan table is, which means the column is too.
+        ...(scanId ? { box_scan_id: scanId } : {}),
       });
 
       lines.push({
@@ -268,8 +243,29 @@ export async function POST(req: Request) {
       });
     }
 
-    const boxSummary = boxes.map((b) => ({ name: b.name, count: b.count }));
-    if (lines.some((l) => l.quantity > 0)) {
+    const tookSomething = lines.some((l) => l.quantity > 0);
+    if (scanId) {
+      if (tookSomething) {
+        await supabaseAdmin
+          .from("marketing_box_scans")
+          .update({
+            lines: lines.map((l) => ({
+              item_id: l.item_id,
+              name: l.item_name,
+              packed: l.packed,
+              quantity: l.quantity,
+              removed: l.removed,
+              short: l.short,
+            })),
+          })
+          .eq("id", scanId);
+      } else {
+        // Nothing moved, so there's no pass to log.
+        await supabaseAdmin.from("marketing_box_scans").delete().eq("id", scanId);
+      }
+    }
+
+    if (tookSomething) {
       void notifyBoxPickup({
         by: name,
         email,
