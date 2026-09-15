@@ -11,6 +11,7 @@ import Sheet from "@/app/components/ui/Sheet";
 import Button from "@/app/components/ui/Button";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import BoxLabelsModal from "./BoxLabelsModal";
 import {
   INVENTORY_CATEGORIES,
   defaultLocationForCategory,
@@ -193,6 +194,7 @@ export default function AdminInventoryPage({
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState("");
   const [itemQrOpen, setItemQrOpen] = useState(false);
+  const [boxLabelsOpen, setBoxLabelsOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
   // Items tab filters (search + category + status + sort) so long lists stay
@@ -696,6 +698,9 @@ export default function AdminInventoryPage({
               </Button>
               <Button variant="secondary" onClick={() => setItemQrOpen(true)} disabled={busy}>
                 Item QR codes
+              </Button>
+              <Button variant="secondary" onClick={() => setBoxLabelsOpen(true)} disabled={busy}>
+                Pizza box labels
               </Button>
             </div>
 
@@ -1257,6 +1262,14 @@ export default function AdminInventoryPage({
             title="Item QR codes"
             hint="A printable code per item, for labelling the shelf."
           />
+          <SheetAction
+            onClick={() => {
+              setMoreOpen(false);
+              setBoxLabelsOpen(true);
+            }}
+            title="Pizza box labels"
+            hint="What goes in a pre-assembled box, and the code that goes on it."
+          />
         </div>
       </Sheet>
 
@@ -1265,6 +1278,9 @@ export default function AdminInventoryPage({
 
       {/* Item QR export modal */}
       <ItemQrModal open={itemQrOpen} onClose={() => setItemQrOpen(false)} items={items} />
+
+      {/* Pre-assembled pizza boxes: contents + labels */}
+      <BoxLabelsModal open={boxLabelsOpen} onClose={() => setBoxLabelsOpen(false)} items={items} />
 
       {/* Restock modal */}
       <Modal open={!!restockItem} className="max-w-sm">
