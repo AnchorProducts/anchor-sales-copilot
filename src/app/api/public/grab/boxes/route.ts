@@ -4,34 +4,53 @@
 // as /api/public/grab.
 //
 // Marketing pre-assembles pizza boxes, and each box type carries one QR label
-// (/grab/<t>/boxes?box=<sample id>). A rep scans every box they take, then
-// says what they pulled back out, and only what's left comes off inventory.
+// (/grab/<t>/boxes?box=<anchor id>). A rep scans every box they take, then says
+// what they pulled back out of them.
 //
 //   GET  /api/public/grab/boxes?token=<t>
-//     → { boxes: [{ id, name, kit, kit_label, image_url, parts: [BoxPart] }] }
-//        every box type and what one box holds: the anchor, that series' pieces
-//        as they're set up in the aisle, and the printables every box gets.
+//     → { boxes: [{ id, name, kit, kit_label, image_url, ready, parts: [BoxPart] }] }
+//        every box type, how many are assembled and ready, and what one holds.
 //
 //   POST /api/public/grab/boxes
 //        { token, name, email, boxes: [{ item_id, count }], take: { [item_id]: n }, website? }
 //     → { ok, boxes, lines: [{ item_id, item_name, packed, quantity, removed, remaining, short }], failed }
 //
-// Stock moves at the scan, never at assembly, so a pulled-out brochure is simply
-// never subtracted. `take` can only lower a line: it's capped at what the boxes
-// held, and the server recomputes that from the box types rather than trusting
-// the page. A box in someone's hands is real even when the count says it can't
-// be, so a short count never refuses the scan — it takes what's recorded, logs
-// the full amount, and flags the shortfall for a recount.
+// An assembled box is its own stock (see "Assembled boxes" in lib/inventory):
+// its contents came off the loose counts when it was built. So a scanned box
+// comes off the ready count, and anything pulled back out goes back on the
+// loose counts. `take` can only lower a line — it's capped at what the boxes
+// held, recomputed here from the box types rather than trusted from the page.
 //
-// The pass is logged once in marketing_box_scans, and each item as its own
-// pickup line pointing back at it — so the admin log reads "5 boxes" while the
-// Return tab can still put a single brochure back.
+// A box in someone's hands is real even when the ready count says it isn't —
+// someone built it without recording it. Its contents were never reserved, so
+// they come off the loose counts instead, and the short ready count is flagged
+// for a recount. Before 20260915_000002 nothing can be assembled, so every box
+// works that way, just as it did before assembled boxes existed.
+//
+// The pass is logged once in marketing_box_scans, and each thing that left as
+// its own pickup line pointing back at it — boxes and loose parts alike — so
+// the Return tab can put a whole box, or a single brochure, back.
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { clean, consumeStock, getGrabConfig, notifyBoxPickup, signItemImage } from "@/lib/inventory/server";
-import { boxParts, boxTotals, isBoxType, packagingKitLabel, type BoxPart } from "@/lib/inventory";
-import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExtras";
+import {
+  clean,
+  getGrabConfig,
+  loadBoxCatalog,
+  notifyBoxPickup,
+  shiftStock,
+  signItemImage,
+  type BoxCatalogItem,
+} from "@/lib/inventory/server";
+import {
+  boxParts,
+  boxTotals,
+  findReadyBox,
+  isBoxType,
+  packagingKitLabel,
+  readyBoxName,
+  type BoxPart,
+} from "@/lib/inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,32 +88,26 @@ type BoxType = {
   kit: string;
   image_path: string | null;
   parts: BoxPart[];
+  // The ready-box item, once anyone has assembled this anchor.
+  readyBox: BoxCatalogItem | null;
 };
 
-// Every box type and what one box of it holds, built by boxParts from the whole
-// catalog — the same way the order form and the inventory pages build a box.
-async function loadBoxTypes(): Promise<BoxType[]> {
-  const [{ data, error }, { data: extrasRow }] = await Promise.all([
-    supabaseAdmin
-      .from("marketing_inventory_items")
-      .select("id,name,image_path,pizza_box,packaging_kit,packaging_role")
-      .limit(1000),
-    supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle(),
-  ]);
-  if (error) throw new Error("Failed to load pizza boxes.");
-
-  const catalog = ((data || []) as any[]).map((r) => ({ ...r, name: clean(r.name) }));
-  const extras = parseBoxExtras((extrasRow as any)?.value);
-  return catalog
+// Every box type, what one box holds, and its ready-box item — built by
+// boxParts from the whole catalog, the same way every other page builds a box.
+async function loadBoxTypes(): Promise<{ types: BoxType[]; hasBoxOf: boolean }> {
+  const { catalog, extras, hasBoxOf } = await loadBoxCatalog();
+  const types = catalog
     .filter(isBoxType)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((row) => ({
       id: row.id,
       name: row.name,
       kit: clean(row.packaging_kit),
-      image_path: clean(row.image_path) || null,
+      image_path: row.image_path,
       parts: boxParts(row, catalog, extras),
+      readyBox: findReadyBox(catalog, row.id),
     }));
+  return { types, hasBoxOf };
 }
 
 // GET — the box types a label can name, and what's in each.
@@ -104,7 +117,7 @@ export async function GET(req: Request) {
     if (!token || !(await tokenOk(token))) {
       return NextResponse.json({ error: "This pickup link is invalid or disabled." }, { status: 404 });
     }
-    const types = await loadBoxTypes();
+    const { types } = await loadBoxTypes();
     const boxes = await Promise.all(
       types.map(async (t) => ({
         id: t.id,
@@ -112,6 +125,7 @@ export async function GET(req: Request) {
         kit: t.kit,
         kit_label: packagingKitLabel(t.kit),
         image_url: await signItemImage(t.image_path),
+        ready: t.readyBox?.quantity_available ?? 0,
         parts: t.parts,
       }))
     );
@@ -121,30 +135,19 @@ export async function GET(req: Request) {
   }
 }
 
-// Subtract up to `qty`, never below zero, with the same optimistic-concurrency
-// guard as every other stock write. Reports how many actually came off.
-async function takeUpTo(
-  itemId: string,
-  qty: number
-): Promise<{ ok: true; taken: number; remaining: number } | { ok: false; error: string }> {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const { data } = await supabaseAdmin
-      .from("marketing_inventory_items")
-      .select("quantity_available")
-      .eq("id", itemId)
-      .maybeSingle();
-    if (!data) return { ok: false, error: "No longer exists." };
-    const avail = (data as any).quantity_available as number;
-    const taken = Math.min(qty, Math.max(0, avail));
-    if (taken === 0) return { ok: true, taken: 0, remaining: avail };
-    const moved = await consumeStock(itemId, taken, avail);
-    if (moved.ok) return { ok: true, taken, remaining: moved.available };
-    // conflict → retry with a fresh read
-  }
-  return { ok: false, error: "Stock changed — retry." };
-}
+type ResultLine = {
+  item_id: string;
+  item_name: string;
+  packed: number;
+  // What left inventory on this line: ready boxes for a box line, loose units
+  // for a part.
+  quantity: number;
+  removed: number;
+  remaining: number;
+  short: number;
+};
 
-// POST — take the scanned boxes, less whatever was pulled out of them.
+// POST — take the scanned boxes, and put back whatever was pulled out of them.
 export async function POST(req: Request) {
   try {
     const ip = clientIp(req);
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
     if (!name) return NextResponse.json({ error: "Enter your name." }, { status: 400 });
     if (!EMAIL_RE.test(email)) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
 
-    const types = await loadBoxTypes();
+    const { types, hasBoxOf } = await loadBoxTypes();
     const typeById = new Map(types.map((t) => [t.id, t]));
 
     // Merge duplicate lines; drop anything that isn't a box type (anymore).
@@ -184,8 +187,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "That's more boxes than one pickup can hold." }, { status: 400 });
     }
 
-    const boxes = [...counts].map(([id, count]) => ({ ...typeById.get(id)!, count }));
-    const boxSummary = boxes.map((b) => ({ item_id: b.id, name: b.name, count: b.count }));
+    const scanned = [...counts].map(([id, count]) => ({ ...typeById.get(id)!, count, fromReady: 0 }));
+    const boxSummary = scanned.map((b) => ({ item_id: b.id, name: b.name, count: b.count }));
     const take = (body.take && typeof body.take === "object" ? body.take : {}) as Record<string, unknown>;
 
     // One row for the whole pass, so the admin log reads "5 boxes" rather than
@@ -196,7 +199,7 @@ export async function POST(req: Request) {
       .insert({
         scanned_by_name: name,
         scanned_by_email: email,
-        box_count: boxes.reduce((n, b) => n + b.count, 0),
+        box_count: scanned.reduce((n, b) => n + b.count, 0),
         boxes: boxSummary,
         ip,
       })
@@ -204,26 +207,10 @@ export async function POST(req: Request) {
       .maybeSingle();
     const scanId: string | null = (scanRow as any)?.id || null;
 
-    const lines = [];
-    const failed = [];
-    for (const line of boxTotals(boxes)) {
-      const asked = line.item_id in take ? Math.floor(Number(take[line.item_id])) : line.packed;
-      const quantity = Number.isFinite(asked) ? Math.max(0, Math.min(asked, line.packed)) : line.packed;
-      const removed = line.packed - quantity;
-      if (quantity === 0) {
-        lines.push({ item_id: line.item_id, item_name: line.name, packed: line.packed, quantity, removed, remaining: 0, short: 0 });
-        continue;
-      }
-
-      const moved = await takeUpTo(line.item_id, quantity);
-      if (!moved.ok) {
-        failed.push({ item_id: line.item_id, item_name: line.name, quantity, error: moved.error });
-        continue;
-      }
-
-      await supabaseAdmin.from("marketing_item_grabs").insert({
-        item_id: line.item_id,
-        item_name: line.name,
+    const logPickup = (itemId: string, itemName: string, quantity: number) =>
+      supabaseAdmin.from("marketing_item_grabs").insert({
+        item_id: itemId,
+        item_name: itemName,
         grabbed_by_name: name,
         grabbed_by_email: email,
         quantity,
@@ -232,15 +219,78 @@ export async function POST(req: Request) {
         ...(scanId ? { box_scan_id: scanId } : {}),
       });
 
+    const lines: ResultLine[] = [];
+    const failed: { item_id: string; item_name: string; quantity: number; error: string }[] = [];
+
+    // 1. Boxes off the ready count. Any the count didn't know about still left
+    //    the shelf; their contents come off the loose counts in step 2.
+    for (const b of scanned) {
+      if (!b.readyBox) {
+        // Assembled boxes exist but nobody recorded building these: flag it.
+        if (hasBoxOf) {
+          lines.push({
+            item_id: b.id,
+            item_name: readyBoxName(b.name),
+            packed: b.count,
+            quantity: 0,
+            removed: 0,
+            remaining: 0,
+            short: b.count,
+          });
+        }
+        continue;
+      }
+      const moved = await shiftStock(b.readyBox.id, -b.count);
+      if (!moved.ok) {
+        failed.push({ item_id: b.readyBox.id, item_name: b.readyBox.name, quantity: b.count, error: moved.error });
+        continue;
+      }
+      b.fromReady = b.count - moved.short;
+      if (b.fromReady > 0) await logPickup(b.readyBox.id, b.readyBox.name, b.fromReady);
       lines.push({
-        item_id: line.item_id,
-        item_name: line.name,
-        packed: line.packed,
-        quantity,
-        removed,
-        remaining: moved.remaining,
-        short: quantity - moved.taken,
+        item_id: b.readyBox.id,
+        item_name: b.readyBox.name,
+        packed: b.count,
+        quantity: b.fromReady,
+        removed: 0,
+        remaining: moved.available,
+        short: moved.short,
       });
+    }
+
+    // 2. What was in the boxes, per item. Parts of a ready box were reserved
+    //    when it was built, so pulling one out puts it back on the shelf. Parts
+    //    of an unrecorded box never left the loose count, so what's kept comes
+    //    off it and what's pulled out simply stays.
+    const reserved = new Map(
+      boxTotals(scanned.map((b) => ({ count: b.fromReady, parts: b.parts }))).map((l) => [l.item_id, l.packed])
+    );
+    for (const line of boxTotals(scanned.map((b) => ({ count: b.count, parts: b.parts })))) {
+      const asked = line.item_id in take ? Math.floor(Number(take[line.item_id])) : line.packed;
+      const kept = Number.isFinite(asked) ? Math.max(0, Math.min(asked, line.packed)) : line.packed;
+      const removed = line.packed - kept;
+
+      const fromLoose = line.packed - (reserved.get(line.item_id) || 0);
+      const removedFromLoose = Math.min(removed, fromLoose);
+      const backToShelf = removed - removedFromLoose;
+      const offLoose = fromLoose - removedFromLoose;
+      const delta = backToShelf - offLoose;
+
+      let remaining = 0;
+      let short = 0;
+      if (delta !== 0) {
+        const moved = await shiftStock(line.item_id, delta);
+        if (!moved.ok) {
+          failed.push({ item_id: line.item_id, item_name: line.name, quantity: offLoose, error: moved.error });
+          continue;
+        }
+        remaining = moved.available;
+        short = moved.short;
+      }
+      if (offLoose > 0) await logPickup(line.item_id, line.name, offLoose);
+      if (offLoose > 0 || removed > 0 || short > 0) {
+        lines.push({ item_id: line.item_id, item_name: line.name, packed: line.packed, quantity: offLoose, removed, remaining, short });
+      }
     }
 
     const tookSomething = lines.some((l) => l.quantity > 0);

@@ -106,7 +106,12 @@ export async function GET() {
         .order("name", { ascending: true })
         .limit(1000);
 
-    let { data, error } = await listItems(ITEM_COLS);
+    // box_of (20260915_000002) first: before that migration nothing is
+    // assembled, and the catalog loads without it.
+    let { data, error } = await listItems(`${ITEM_COLS},box_of`);
+    if (error && (error.code === "42703" || /box_of/.test(error.message || ""))) {
+      ({ data, error } = await listItems(ITEM_COLS));
+    }
     // Retry without the newest columns so an un-migrated database degrades to
     // "nothing is flagged, no kits" rather than knocking out the whole catalog.
     if (isMissingLaterColumn(error)) {

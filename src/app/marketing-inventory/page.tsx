@@ -13,8 +13,8 @@ import {
   PIZZA_BOX_KITS,
   TRADESHOW_CATEGORY,
   boxParts,
-  buildableBoxes,
   describeBoxContents,
+  findReadyBox,
   inventoryCategoryLabel,
   isBoxType,
   packagingKitLabel,
@@ -132,6 +132,9 @@ export default function MarketingInventoryPage() {
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((it) => {
+      // Assembled boxes are shown as boxes, in the section above — not as a
+      // second copy of each anchor in the stock list.
+      if (it.box_of) return false;
       if (catFilter && it.category !== catFilter) return false;
       if (!q) return true;
       return (
@@ -142,17 +145,17 @@ export default function MarketingInventoryPage() {
     });
   }, [items, search, catFilter]);
 
-  // Pre-assembled pizza boxes, one per anchor that ships as one. Nothing counts
-  // assembled boxes — assembling moves no stock — so "can be made" is the
-  // complete boxes the shelf holds parts for, decided by what runs out first.
+  // Pre-assembled pizza boxes, one per anchor that ships as one. An assembled
+  // box is its own stock — its anchor and pieces already came off the loose
+  // counts below — so "ready" is exactly the boxes on the shelf.
   const hasBoxes = useMemo(() => items.some(isBoxType), [items]);
   const boxes = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items
       .filter(isBoxType)
       .filter((it) => !q || it.name.toLowerCase().includes(q))
-      .map((it) => ({ it, ...buildableBoxes(boxParts(it, items, boxExtras), items) }));
-  }, [items, boxExtras, search]);
+      .map((it) => ({ it, ready: findReadyBox(items, it.id)?.quantity_available ?? 0 }));
+  }, [items, search]);
   const boxContents = useMemo(
     () =>
       PIZZA_BOX_KITS.filter((k) => boxes.some((b) => b.it.packaging_kit === k.key)).map((k) => ({
@@ -311,7 +314,7 @@ export default function MarketingInventoryPage() {
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {boxes.map(({ it, count, limitedBy }) => (
+                  {boxes.map(({ it, ready }) => (
                     <div
                       key={it.id}
                       className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2.5"
@@ -325,8 +328,8 @@ export default function MarketingInventoryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{it.name}</div>
                         <div className="text-[11px] text-[var(--anchor-gray)]">{packagingKitLabel(it.packaging_kit)}</div>
-                        <div className={`truncate text-xs font-semibold ${count > 0 ? "text-green-700" : "text-amber-700"}`}>
-                          {count > 0 ? `${count} can be made` : `None — out of ${limitedBy}`}
+                        <div className={`truncate text-xs font-semibold ${ready > 0 ? "text-green-700" : "text-amber-700"}`}>
+                          {ready > 0 ? `${ready} ready` : "None assembled right now"}
                         </div>
                       </div>
                     </div>

@@ -12,6 +12,7 @@ import {
   type PackagingKit,
   type PackagingRole,
 } from "@/lib/inventory";
+import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras, type BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 
 // Item photos live in the same bucket as notable-project photos.
 export const INVENTORY_BUCKET = "lead-uploads";
@@ -194,7 +195,7 @@ export async function notifyBoxPickup(args: {
       .filter((l) => l.quantity > 0)
       .map((l) => `  • ${l.quantity} × ${l.name} (${l.remaining} left)`)
       .join("\n") +
-    (pulled.length ? `\n\nPulled out of the boxes (not subtracted):\n${pulled.map((p) => `  • ${p}`).join("\n")}` : "") +
+    (pulled.length ? `\n\nPulled out of the boxes (back on the shelf):\n${pulled.map((p) => `  • ${p}`).join("\n")}` : "") +
     (short.length
       ? `\n\nThe count was lower than what was in the boxes — worth a recount:\n${short.map((s) => `  • ${s}`).join("\n")}`
       : "") +
@@ -393,6 +394,93 @@ export async function returnStock(
     .maybeSingle();
   if (error || !data) return { ok: false, reason: "conflict" };
   return { ok: true, available: (data as any).quantity_available as number };
+}
+
+// Move an item's available count by `delta`, never below zero, with the same
+// optimistic-concurrency guard as every other stock write. Reports where it
+// landed and how much of a take the count couldn't cover: a box someone built
+// or is holding is real even when a count says it can't be, so a short count
+// means a recount, not a refusal.
+export async function shiftStock(
+  itemId: string,
+  delta: number
+): Promise<{ ok: true; available: number; short: number } | { ok: false; error: string }> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .select("quantity_available")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (!data) return { ok: false, error: "No longer exists." };
+    const avail = (data as any).quantity_available as number;
+    const next = Math.max(0, avail + delta);
+    const short = delta < 0 ? Math.max(0, -delta - avail) : 0;
+    if (next === avail) return { ok: true, available: avail, short };
+    const { data: moved } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .update({ quantity_available: next, updated_at: new Date().toISOString() })
+      .eq("id", itemId)
+      .eq("quantity_available", avail)
+      .select("quantity_available")
+      .maybeSingle();
+    if (moved) return { ok: true, available: (moved as any).quantity_available as number, short };
+    // conflict → retry with a fresh read
+  }
+  return { ok: false, error: "Stock changed — retry." };
+}
+
+// ── Pizza boxes ─────────────────────────────────────────────────────────────
+
+export type BoxCatalogItem = {
+  id: string;
+  name: string;
+  location: string | null;
+  image_path: string | null;
+  quantity_available: number;
+  pizza_box: boolean;
+  packaging_kit: string | null;
+  packaging_role: string | null;
+  box_of: string | null;
+};
+
+// True when a query failed only because box_of (20260915_000002) isn't there.
+export function isMissingBoxOf(error: { code?: string; message?: string } | null): boolean {
+  return !!error && (error.code === "42703" || /box_of/.test(error.message || ""));
+}
+
+// Everything needed to build a box: the whole catalog (a box pulls pieces and
+// printables nobody picked by name) and the printables every box gets.
+// `hasBoxOf` is false before 20260915_000002 — nothing can be assembled yet, so
+// a scanned box comes off its loose parts the way it did before.
+export async function loadBoxCatalog(): Promise<{
+  catalog: BoxCatalogItem[];
+  extras: BoxExtra[];
+  hasBoxOf: boolean;
+}> {
+  const cols = "id,name,location,image_path,quantity_available,pizza_box,packaging_kit,packaging_role";
+  const read = (c: string) => supabaseAdmin.from("marketing_inventory_items").select(c).limit(1000);
+  const extrasQuery = supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle();
+
+  let { data, error } = await read(`${cols},box_of`);
+  let hasBoxOf = !error;
+  if (isMissingBoxOf(error)) {
+    ({ data, error } = await read(cols));
+    hasBoxOf = false;
+  }
+  if (error) throw new Error("Failed to load pizza boxes.");
+
+  const { data: extrasRow } = await extrasQuery;
+  return {
+    catalog: ((data || []) as any[]).map((r) => ({
+      ...r,
+      name: clean(r.name),
+      location: clean(r.location) || null,
+      image_path: clean(r.image_path) || null,
+      box_of: r.box_of ?? null,
+    })),
+    extras: parseBoxExtras((extrasRow as any)?.value),
+    hasBoxOf,
+  };
 }
 
 // Tell the pickup channel that stock came BACK to the aisle. Deliberately the
