@@ -394,7 +394,9 @@ export default function AdminMarketingOrdersPage({
   const planRowsFor = useCallback(
     (o: MarketingOrder) =>
       Object.entries(o.stock_plan || {})
-        .filter(([id, n]) => (n || 0) > 0 && inventory.some((it) => it.id === id))
+        // Negative entries stay: they put what was taken out of an opened box
+        // back on the shelf.
+        .filter(([id, n]) => (n || 0) !== 0 && inventory.some((it) => it.id === id))
         .map(([item_id, n]) => ({ item_id, quantity: n as number })),
     [inventory]
   );
@@ -464,7 +466,7 @@ export default function AdminMarketingOrdersPage({
       status === "fulfilled"
         ? (consumeDrafts[id] || [])
             .map((r) => ({ item_id: r.item_id, quantity: Math.floor(Number(r.quantity)) }))
-            .filter((r) => r.item_id && Number.isFinite(r.quantity) && r.quantity > 0)
+            .filter((r) => r.item_id && Number.isFinite(r.quantity) && r.quantity !== 0)
         : [];
 
     setSavingId(id);
@@ -1230,7 +1232,8 @@ export default function AdminMarketingOrdersPage({
                                     {(o.pizza_boxes || 0) > 0
                                       ? `, including everything in ${o.pizza_boxes} pizza box${o.pizza_boxes === 1 ? "" : "es"}`
                                       : ""}
-                                    . Lower anything that didn&apos;t go out.
+                                    . Lower anything that didn&apos;t go out; a negative row puts what came
+                                    out of an opened box back on the shelf.
                                   </p>
                                 )}
                                 {(o.overlay_units || 0) > 0 && planRowsFor(o).length === 0 && (
@@ -1267,16 +1270,23 @@ export default function AdminMarketingOrdersPage({
                                           </option>
                                         ))}
                                       </Select>
-                                      <Input
-                                        type="number"
-                                        min="1"
-                                        step="1"
-                                        max={picked ? picked.quantity_available : undefined}
-                                        value={row.quantity}
-                                        onChange={(e) => setConsumeRow(o.id, idx, { quantity: e.target.value })}
-                                        className="h-9 w-20 text-sm"
-                                        aria-label="Quantity used"
-                                      />
+                                      {/* Width on a wrapper — .ds-input's width:100% beats a
+                                          w-* on the field. A negative row puts stock back:
+                                          what was taken out of an opened pizza box. */}
+                                      <div className="w-24 shrink-0">
+                                        <Input
+                                          type="number"
+                                          step="1"
+                                          max={picked && Number(row.quantity) > 0 ? picked.quantity_available : undefined}
+                                          value={row.quantity}
+                                          onChange={(e) => setConsumeRow(o.id, idx, { quantity: e.target.value })}
+                                          className="h-9 text-sm"
+                                          aria-label={Number(row.quantity) < 0 ? "Quantity put back" : "Quantity used"}
+                                        />
+                                        {Number(row.quantity) < 0 && (
+                                          <span className="block text-[10px] font-semibold text-green-700">back on shelf</span>
+                                        )}
+                                      </div>
                                       <button
                                         type="button"
                                         onClick={() => removeConsumeRow(o.id, idx)}

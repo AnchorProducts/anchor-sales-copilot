@@ -212,9 +212,24 @@ export default function PizzaBoxesTab({
 
   // Record boxes built (direction 1) or opened (-1). The server moves the
   // contents between the loose counts and the ready count.
-  async function assemble(it: InventoryItem, direction: 1 | -1) {
+  async function assemble(it: InventoryItem, direction: 1 | -1, canAssemble: number, limitedBy: string | null) {
     const n = assembleCount(it.id);
     if (!n) return;
+    // Assemble records boxes just BUILT — their contents come off the loose
+    // counts. When those counts can't cover it, the usual cause is a count typed
+    // in for boxes that are already recorded, so say so before anything moves.
+    // Built-but-short is still allowed: the boxes exist, the counts get a recount.
+    if (
+      direction > 0 &&
+      n > canAssemble &&
+      !window.confirm(
+        `Loose stock only covers ${canAssemble} of these ${n} boxes (${limitedBy || "a piece"} runs out).\n\n` +
+          `Assemble is for boxes you just built: their contents come off the loose counts and the shortfall is flagged for a recount. ` +
+          `If these boxes are already counted as ready, cancel.\n\nRecord ${n} newly built boxes anyway?`
+      )
+    ) {
+      return;
+    }
     setWorking(true);
     setErr(null);
     setNotice(null);
@@ -353,7 +368,7 @@ export default function PizzaBoxesTab({
   const disabled = busy || working;
 
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-1 gap-3">
       {err && <Card className="border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</Card>}
       {notice && (
         <Card
@@ -365,8 +380,12 @@ export default function PizzaBoxesTab({
         </Card>
       )}
 
-      <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="grid min-w-0 gap-3">
+      {/* grid-cols-1 on every grid here, not a bare `grid`: an implicit track
+          sizes to max-content, and the truncated names below are nowrap, so a
+          long name stretched the column past a phone's edge and cut the cards
+          off. grid-cols-1 is minmax(0, 1fr), which caps it at the container. */}
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="grid min-w-0 grid-cols-1 gap-3">
           <Section
             title={`🍕 Box types · ${totalReady} ready`}
             hint="Record boxes as you build them: Assemble takes the anchor, its pieces and the printables off the loose counts, so they can't be handed out twice. Scanning a box out takes it off Ready; Unbox puts the contents back."
@@ -393,7 +412,7 @@ export default function PizzaBoxesTab({
                 No box types yet — set a sample up as a pizza box below.
               </p>
             ) : (
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 {boxes.map(({ it, ready, canAssemble, limitedBy }) => {
                   const n = assembleCount(it.id);
                   return (
@@ -417,15 +436,19 @@ export default function PizzaBoxesTab({
                             {packagingKitLabel(it.packaging_kit)} · {it.quantity_available} loose anchor
                             {it.quantity_available === 1 ? "" : "s"}
                           </div>
-                          <div className="truncate text-[11px]">
+                          {/* Two facts, two lines, wrapping rather than cut off. As
+                              one truncated line, "loose stock for 0 more (out of
+                              2000 Series - Pi…" read as "no loose anchors" when
+                              it meant the loose boxes had run out. */}
+                          <div className="text-[11px]">
                             <strong className={ready > 0 ? "text-green-700" : "text-[var(--anchor-gray)]"}>
-                              {ready} ready
+                              {ready} box{ready === 1 ? "" : "es"} ready
                             </strong>
-                            <span className="text-[var(--anchor-gray)]">
-                              {" "}
-                              · loose stock for {canAssemble} more
-                              {canAssemble === 0 && limitedBy ? ` (out of ${limitedBy})` : ""}
-                            </span>
+                          </div>
+                          <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
+                            {canAssemble > 0
+                              ? `Loose parts for ${canAssemble} more box${canAssemble === 1 ? "" : "es"}`
+                              : `Can't build more: out of ${limitedBy || "a piece"}`}
                           </div>
                         </div>
                         <label className="flex w-16 shrink-0 flex-col items-center text-[10px] text-[var(--anchor-gray)]">
@@ -455,10 +478,20 @@ export default function PizzaBoxesTab({
                             aria-label={`How many ${it.name} boxes`}
                           />
                         </div>
-                        <Button variant="secondary" onClick={() => assemble(it, 1)} disabled={disabled || !n}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => assemble(it, 1, canAssemble, limitedBy)}
+                          disabled={disabled || !n}
+                        >
                           Assemble
                         </Button>
-                        <Button variant="ghost" onClick={() => assemble(it, -1)} disabled={disabled || !n || ready === 0}>
+                        {/* secondary, not ghost: ghost is white text for dark
+                            backgrounds and all but vanished on this card. */}
+                        <Button
+                          variant="secondary"
+                          onClick={() => assemble(it, -1, canAssemble, limitedBy)}
+                          disabled={disabled || !n || ready === 0}
+                        >
                           Unbox
                         </Button>
                       </div>
@@ -474,7 +507,7 @@ export default function PizzaBoxesTab({
               title="Samples not set up as boxes"
               hint="An anchor gets a label, a place in the scanner and a Pizza box option on the order form once it has a series. The series is guessed from the name — 3400 is a 3000 Series anchor."
             >
-              <div className="grid gap-1.5">
+              <div className="grid grid-cols-1 gap-1.5">
                 {notSetUp.map((it) => (
                   <div
                     key={it.id}
@@ -516,7 +549,7 @@ export default function PizzaBoxesTab({
             {scans.length === 0 ? (
               <p className="text-sm text-[var(--anchor-gray)]">No boxes scanned out yet.</p>
             ) : (
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 {scans.slice(0, scanLimit).map((s) => {
                   const pulled = (s.lines || []).filter((l) => l.removed > 0);
                   const short = (s.lines || []).filter((l) => l.short > 0);
@@ -557,18 +590,18 @@ export default function PizzaBoxesTab({
           </Section>
         </div>
 
-        <div className="grid min-w-0 gap-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3">
           <Section
             title="What's in a box"
             hint="The anchor is whichever sample is on the label. Choose the item that fills each piece for each series — pieces save as you pick them."
           >
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {slotKits.map((k) => (
                 <div key={k.key} className="rounded-xl border border-[var(--border-default)] p-3">
                   <div className="text-xs font-bold uppercase tracking-wide text-[var(--anchor-deep)]">
                     {k.label} box
                   </div>
-                  <div className="mt-2 grid gap-1.5">
+                  <div className="mt-2 grid grid-cols-1 gap-1.5">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="w-24 shrink-0 text-xs text-[var(--anchor-gray)]">Anchor</span>
                       <span className="min-w-0 flex-1 truncate text-xs text-[var(--anchor-deep)]">
@@ -606,7 +639,7 @@ export default function PizzaBoxesTab({
             <h3 className="mt-4 text-xs font-bold uppercase tracking-wide text-[var(--anchor-deep)]">
               Printables — the same in every box
             </h3>
-            <div className="mt-2 grid gap-2">
+            <div className="mt-2 grid grid-cols-1 gap-2">
               {extras.map((e, i) => (
                 <div key={`${e.item_id}-${i}`} className="flex min-w-0 items-center gap-2">
                   <Select

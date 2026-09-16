@@ -328,7 +328,12 @@ export function boxIdFromScan(text: string): string {
   }
 }
 
-type CatalogItem = PackagingPieceItem & { id: string; name: string; box_of?: string | null };
+type CatalogItem = PackagingPieceItem & {
+  id: string;
+  name: string;
+  box_of?: string | null;
+  quantity_available?: number;
+};
 
 // What one box of a type holds: the anchor, that series' pieces in assembly
 // order, then the printables every box gets. The scanner, the order form and
@@ -359,6 +364,32 @@ export function describeBoxContents(parts: readonly BoxPart[]): string {
   if (pieces) out.push(pieces);
   for (const p of parts) if (p.kind === "extra") out.push(`${p.per_box} × ${p.name}`);
   return out.join(" + ");
+}
+
+// How a boxed sample ships, once the rep has taken anything out of its box:
+// "pizza box (…everything…)", "pizza box without 1 × Tri-Fold Brochure",
+// "anchor + overlay, no box", or "anchor only". Used on the order form and in
+// the order's own line, so what the rep picked is what fulfillment reads.
+export function describeBoxChoice(parts: readonly BoxPart[], removed: readonly string[]): string {
+  const gone = new Set(removed);
+  const kept = parts.filter((p) => p.kind !== "anchor" && !gone.has(p.item_id));
+  const dropped = parts.filter((p) => p.kind !== "anchor" && gone.has(p.item_id));
+  if (!dropped.length) {
+    const contents = describeBoxContents(parts);
+    return `pizza box${contents ? ` (${contents})` : ""}`;
+  }
+  if (!kept.length) return "anchor only";
+  if (kept.some((p) => p.role === "pizza_box")) return `pizza box without ${describeBoxContents(dropped)}`;
+  return `anchor + ${describeBoxContents(kept)}, no box`;
+}
+
+// The quick choices on a boxed sample, as the items taken out of the box:
+// everything but the anchor ("anchor"), or everything but the anchor and its
+// plastic overlay ("overlay").
+export function boxPresetRemoval(parts: readonly BoxPart[], preset: "overlay" | "anchor"): string[] {
+  return parts
+    .filter((p) => p.kind !== "anchor" && !(preset === "overlay" && p.role === "overlay"))
+    .map((p) => p.item_id);
 }
 
 // How many more boxes the loose stock could be assembled into, and what runs
@@ -460,7 +491,13 @@ export function resolvePackaging(item: PackagingChoiceItem, requested: unknown):
 // pizza box. Recorded on the order so fulfillment pre-fills it instead of the
 // fulfiller rebuilding a box from free text.
 export function orderStockPlan(
-  lines: readonly { item: CatalogItem & PackagingChoiceItem; quantity: number; packaging: OrderPackaging }[],
+  lines: readonly {
+    item: CatalogItem & PackagingChoiceItem;
+    quantity: number;
+    packaging: OrderPackaging;
+    // Item ids taken out of a boxed sample's pizza box.
+    remove?: readonly string[];
+  }[],
   items: readonly CatalogItem[],
   extras: readonly { item_id: string; quantity: number }[]
 ): { plan: Record<string, number>; boxes: number } {
@@ -473,13 +510,24 @@ export function orderStockPlan(
     const qty = Math.max(0, Math.floor(l.quantity) || 0);
     if (!qty) continue;
     if (l.packaging === "box" && isBoxType(l.item)) {
-      boxes += qty;
-      // Assembled boxes are their own stock, and an order draws on those. Only
-      // a box type nobody has ever assembled falls back to the parts it would
-      // be built from.
+      const parts = boxParts(l.item, items, extras);
+      const removed = new Set(
+        (l.remove || []).filter((id) => parts.some((p) => p.kind !== "anchor" && p.item_id === id))
+      );
+      if (!parts.some((p) => p.role === "pizza_box" && removed.has(p.item_id))) boxes += qty;
       const ready = findReadyBox(items, l.item.id);
-      if (ready) add(ready.id, qty);
-      else for (const p of boxParts(l.item, items, extras)) add(p.item_id, p.per_box * qty);
+      const looseAnchors = l.item.quantity_available ?? 0;
+      if (ready && (removed.size === 0 || looseAnchors < qty)) {
+        // Send assembled boxes — they're their own stock. A trimmed-down sample
+        // opens one only when loose anchors can't cover it: the box comes off
+        // whole, and what was taken out goes back on the shelf (a negative line).
+        add(ready.id, qty);
+        for (const p of parts) if (removed.has(p.item_id)) add(p.item_id, -p.per_box * qty);
+      } else {
+        // Nothing assembled to open, or loose anchors cover a trimmed-down
+        // sample: build it from the loose parts that are kept.
+        for (const p of parts) if (!removed.has(p.item_id)) add(p.item_id, p.per_box * qty);
+      }
       continue;
     }
     add(l.item.id, qty);
@@ -488,6 +536,8 @@ export function orderStockPlan(
       if (overlay) add(overlay.id, qty);
     }
   }
+  // A put-back and a take of the same item can cancel out; a zero is no row.
+  for (const [id, n] of Object.entries(plan)) if (!n) delete plan[id];
   return { plan, boxes };
 }
 

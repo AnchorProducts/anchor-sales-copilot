@@ -26,6 +26,19 @@ import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 // The chip for pre-assembled pizza boxes on their own — not a real category.
 const BOXES_FILTER = "boxes";
 
+// A boxed anchor's stock: the pizza boxes it's already packed in, plus any loose
+// anchors. "Out of stock" for 41 anchors sitting in boxes told reps the wrong
+// thing.
+function BoxedStock({ ready, loose }: { ready: number; loose: number }) {
+  if (ready + loose <= 0) return <span className="font-semibold text-[var(--anchor-gray)]">Out of stock</span>;
+  return (
+    <span className="font-semibold text-green-700">
+      🍕 {ready} in pizza boxes
+      {loose > 0 && <span className="font-normal text-[var(--anchor-gray)]"> · {loose} loose</span>}
+    </span>
+  );
+}
+
 export const dynamic = "force-dynamic";
 
 export default function MarketingInventoryPage() {
@@ -287,8 +300,9 @@ export default function MarketingInventoryPage() {
                   <div className="min-w-0">
                     <h2 className="text-base font-bold text-[var(--anchor-deep)]">🍕 Pizza boxes</h2>
                     <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
-                      Ready-made boxes, one per anchor. Order them as pizza boxes on a marketing order
-                      {canCheckOut ? ", or scan them out when you take them from the shelf." : "."}
+                      Anchor samples are packed in their pizza boxes. On a marketing order a sample ships in its
+                      box — take anything out of it, or ask for just the anchor
+                      {canCheckOut ? ". Taking boxes off the shelf yourself? Scan them out." : "."}
                     </p>
                     {boxContents.map((k) => (
                       <p key={k.key} className="mt-0.5 text-xs text-[var(--anchor-deep)]">
@@ -329,7 +343,10 @@ export default function MarketingInventoryPage() {
                         <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">{it.name}</div>
                         <div className="text-[11px] text-[var(--anchor-gray)]">{packagingKitLabel(it.packaging_kit)}</div>
                         <div className={`truncate text-xs font-semibold ${ready > 0 ? "text-green-700" : "text-amber-700"}`}>
-                          {ready > 0 ? `${ready} ready` : "None assembled right now"}
+                          {ready > 0 ? `${ready} in pizza boxes` : "None boxed right now"}
+                          {it.quantity_available > 0 && (
+                            <span className="font-normal text-[var(--anchor-gray)]"> · {it.quantity_available} loose</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -386,7 +403,12 @@ export default function MarketingInventoryPage() {
                         <p className="mt-0.5 text-sm text-[var(--anchor-gray)]">{it.description}</p>
                       )}
                       <p className="mt-2 text-sm">
-                        {it.quantity_available > 0 ? (
+                        {isBoxType(it) ? (
+                          <BoxedStock
+                            ready={findReadyBox(items, it.id)?.quantity_available ?? 0}
+                            loose={it.quantity_available}
+                          />
+                        ) : it.quantity_available > 0 ? (
                           <span className="font-semibold text-green-700">
                             In stock: {it.quantity_available}
                           </span>
