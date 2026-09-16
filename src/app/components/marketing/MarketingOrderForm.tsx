@@ -13,7 +13,8 @@ import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/produc
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
 import {
   boxParts,
-  describeBoxContents,
+  boxPresetRemoval,
+  describeBoxChoice,
   findReadyBox,
   inventoryCategoryLabel,
   isBoxType,
@@ -21,6 +22,7 @@ import {
   overlayUnits,
   packagingKitLabel,
   packagingOptions,
+  type BoxPart,
   type OrderPackaging,
 } from "@/lib/inventory";
 import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
@@ -80,6 +82,22 @@ const PACKAGING_LABELS: Record<OrderPackaging, string> = {
   none: "Anchor only",
 };
 
+// The quick choices on a boxed sample, as what each takes out of the box. The
+// overlay choice only exists when that series' box has an overlay in it.
+function boxPresets(parts: BoxPart[]): { key: string; label: string; remove: string[] }[] {
+  return [
+    { key: "full", label: "Full pizza box", remove: [] },
+    ...(parts.some((p) => p.role === "overlay")
+      ? [{ key: "overlay", label: "Anchor + overlay", remove: boxPresetRemoval(parts, "overlay") }]
+      : []),
+    { key: "anchor", label: "Anchor only", remove: boxPresetRemoval(parts, "anchor") },
+  ];
+}
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
 // A numbered section heading. The form is three decisions — what type, which
 // items, where it goes — and saying so beats one undifferentiated column of
 // fields where a rep can't tell how much is left.
@@ -126,6 +144,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   // The printables every pizza box gets, so a box reads the same here as on its
   // label and at the scanner.
   const [boxExtras, setBoxExtras] = useState<BoxExtra[]>([]);
+  // Every boxed anchor ships in its pizza box. Per picked item: what the rep
+  // took out of the box (item ids), whether its contents list is open, and a
+  // note — present, even empty, once "Add a note" is tapped.
+  const [boxRemove, setBoxRemove] = useState<Record<string, string[]>>({});
+  const [openContents, setOpenContents] = useState<Record<string, boolean>>({});
+  const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [otherRequest, setOtherRequest] = useState("");
 
   const [neededBy, setNeededBy] = useState("");
@@ -261,6 +285,19 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       for (const id of Object.keys(next)) if (!stillVisible(id)) delete next[id];
       return next;
     });
+    const keepVisible = <T,>(prev: Record<string, T>) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => stillVisible(id)));
+    setBoxRemove(keepVisible);
+    setOpenContents(keepVisible);
+    setItemNotes(keepVisible);
+  }
+
+  // Take one item out of (or put it back into) a boxed sample's pizza box.
+  function toggleBoxPart(id: string, partId: string) {
+    setBoxRemove((prev) => {
+      const cur = prev[id] || [];
+      return { ...prev, [id]: cur.includes(partId) ? cur.filter((x) => x !== partId) : [...cur, partId] };
+    });
   }
 
   function setQty(id: string, qty: number) {
@@ -280,6 +317,15 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         delete next[id];
         return next;
       });
+      const drop = <T,>(prev: Record<string, T>) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      };
+      setBoxRemove(drop);
+      setOpenContents(drop);
+      setItemNotes(drop);
     }
   }
 
@@ -344,36 +390,45 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       selectedEntries
         .filter(([id]) => {
           const it = inventory.find((x) => x.id === id);
-          return !!it && packagingOptions(it).length > 0 && !packaging[id];
+          // A boxed anchor never asks: it ships in its box unless told otherwise.
+          return !!it && !isBoxType(it) && packagingOptions(it).length > 0 && !packaging[id];
         })
         .map(([id]) => inventory.find((x) => x.id === id)?.name || "an item"),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selected, packaging, inventory]
   );
 
-  // Every box type, built the way its label and the scanner build it: what's in
-  // it past the anchor, and how many are assembled and ready to send.
+  // Every boxed anchor, built the way its label and the scanner build it: what's
+  // in the box, how many are assembled and ready, and any loose anchors.
   const boxInfo = useMemo(() => {
-    const out = new Map<string, { contents: string; ready: number }>();
+    const out = new Map<string, { parts: BoxPart[]; ready: number; loose: number }>();
     for (const it of inventory) {
       if (!isBoxType(it)) continue;
       out.set(it.id, {
-        contents: describeBoxContents(boxParts(it, inventory, boxExtras)),
+        parts: boxParts(it, inventory, boxExtras),
         ready: findReadyBox(inventory, it.id)?.quantity_available ?? 0,
+        loose: it.quantity_available,
       });
     }
     return out;
   }, [inventory, boxExtras]);
 
+  // Boxed anchors on the order: what's on the shelf to send each from (boxes
+  // plus loose anchors), and whether it still goes out in a box at all.
   const pizzaBoxLines = selectedEntries
-    .filter(([id]) => packaging[id] === "box" && boxInfo.has(id))
-    .map(([id, quantity]) => ({
-      id,
-      quantity,
-      name: inventory.find((x) => x.id === id)?.name || "item",
-      ...boxInfo.get(id)!,
-    }));
-  const pizzaBoxes = pizzaBoxLines.reduce((n, l) => n + l.quantity, 0);
+    .filter(([id]) => boxInfo.has(id))
+    .map(([id, quantity]) => {
+      const b = boxInfo.get(id)!;
+      const removed = boxRemove[id] || [];
+      return {
+        id,
+        quantity,
+        name: inventory.find((x) => x.id === id)?.name || "item",
+        onHand: b.ready + b.loose,
+        inBox: !b.parts.some((p) => p.role === "pizza_box" && removed.includes(p.item_id)),
+      };
+    });
+  const pizzaBoxes = pizzaBoxLines.filter((l) => l.inBox).reduce((n, l) => n + l.quantity, 0);
 
   // Overlays this order needs, split by where they came from. Computed with the
   // same helper the API uses, so the preview can't disagree with what's recorded.
@@ -420,13 +475,20 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       `${shipCity.trim()}, ${shipState.trim()} ${shipZip.trim()}`,
     ].join("\n");
 
-    const requested_items = selectedEntries.map(([item_id, quantity]) => ({
-      item_id,
-      quantity,
-      packaging: packaging[item_id] || "none",
-      // Kept for an API that predates pizza boxes.
-      plastic_overlay: packaging[item_id] === "overlay",
-    }));
+    const requested_items = selectedEntries.map(([item_id, quantity]) => {
+      const boxed = boxInfo.has(item_id);
+      const choice = boxed ? "box" : packaging[item_id] || "none";
+      return {
+        item_id,
+        quantity,
+        packaging: choice,
+        // What the rep took out of the pizza box.
+        ...(boxed ? { remove: boxRemove[item_id] || [] } : {}),
+        note: (itemNotes[item_id] || "").trim(),
+        // Kept for an API that predates pizza boxes.
+        plastic_overlay: choice === "overlay",
+      };
+    });
 
     setSubmitting(true);
     try {
@@ -456,6 +518,9 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       setCategories([]);
       setSelected({});
       setPackaging({});
+      setBoxRemove({});
+      setOpenContents({});
+      setItemNotes({});
       setItemSearch("");
       setOtherRequest("");
       setNeededBy("");
@@ -511,10 +576,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         <ul className="mt-2 grid gap-1.5 text-sm">
           {selectedEntries.map(([id, q]) => {
             const it = inventory.find((x) => x.id === id);
+            const box = boxInfo.get(id);
             const choice = packaging[id];
-            const paired = choice === "overlay" && !!it?.plastic_overlay;
-            const boxed = choice === "box" && boxInfo.has(id);
-            const needsAnswer = !!it && packagingOptions(it).length > 0 && !choice;
+            const paired = !box && choice === "overlay" && !!it?.plastic_overlay;
+            const needsAnswer = !!it && !box && packagingOptions(it).length > 0 && !choice;
+            const note = (itemNotes[id] || "").trim();
             return (
               <li key={id} className="flex items-start justify-between gap-2">
                 <span className="min-w-0">
@@ -522,8 +588,13 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                   {paired && (
                     <span className="block text-[11px] text-[var(--anchor-gray)]">+ plastic overlay</span>
                   )}
-                  {boxed && (
-                    <span className="block text-[11px] text-[var(--anchor-gray)]">🍕 as pizza boxes</span>
+                  {box && (
+                    <span className="block text-[11px] text-[var(--anchor-gray)]">
+                      🍕 {describeBoxChoice(box.parts, boxRemove[id] || [])}
+                    </span>
+                  )}
+                  {note && (
+                    <span className="block text-[11px] italic text-[var(--anchor-gray)]">Note: {note}</span>
                   )}
                   {needsAnswer && (
                     <span className="block text-[11px] font-medium text-amber-700">
@@ -571,17 +642,18 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
 
       {/* A pizza box is more than its anchor — say what goes out with them, and
           which ones the shelf can't make up in full. */}
-      {pizzaBoxes > 0 && (
+      {pizzaBoxLines.length > 0 && (
         <div className="mt-3 border-t border-black/10 pt-2 text-xs text-[var(--anchor-gray)]">
-          <span className="font-semibold text-[var(--anchor-deep)]">
-            🍕 {pizzaBoxes} pizza box{pizzaBoxes !== 1 ? "es" : ""}
-          </span>
-          {pizzaBoxLines[0]?.contents && <> — each the anchor + {pizzaBoxLines[0].contents}</>}
+          {pizzaBoxes > 0 && (
+            <span className="font-semibold text-[var(--anchor-deep)]">
+              🍕 {pizzaBoxes} pizza box{pizzaBoxes !== 1 ? "es" : ""}
+            </span>
+          )}
           {pizzaBoxLines
-            .filter((l) => l.quantity > l.ready)
+            .filter((l) => l.quantity > l.onHand)
             .map((l) => (
               <span key={l.id} className="mt-0.5 block font-medium text-amber-700">
-                {l.name}: only {l.ready} assembled — the rest have to be assembled or ordered in.
+                {l.name}: only {l.onHand} in stock — the rest have to be assembled or ordered in.
               </span>
             ))}
         </div>
@@ -739,6 +811,13 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
             </div>
           )}
 
+          {categories.includes("samples") && boxInfo.size > 0 && (
+            <p className="mt-3 rounded-[12px] bg-[var(--surface-soft)] px-3 py-2 text-xs text-[var(--anchor-deep)]">
+              🍕 <strong>Anchor samples ship in their pizza box</strong> — the anchor, its inserts, overlay and
+              printables. Take anything out of the box, or ask for just the anchor, when you add one.
+            </p>
+          )}
+
           <div className="mt-3">
             <Input
               value={itemSearch}
@@ -777,16 +856,22 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
                     {list.map((it) => {
                       const qty = selected[it.id] || 0;
-                      const avail = it.quantity_available;
+                      // A boxed anchor ships in its pizza box, so its stock is
+                      // its assembled boxes plus any loose anchors.
+                      const box = boxInfo.get(it.id);
+                      const avail = box ? box.ready + box.loose : it.quantity_available;
                       const out = avail <= 0;
                       const picked = qty > 0;
                       // Past what's on the shelf — still orderable, just made to
                       // order rather than pulled.
                       const overStock = qty > avail;
-                      // undefined until the rep answers how it ships.
+                      // Only a sample that isn't boxed asks how it ships;
+                      // undefined until the rep answers.
                       const choice = packaging[it.id];
-                      const options = packagingOptions(it);
-                      const box = boxInfo.get(it.id);
+                      const options = box ? [] : packagingOptions(it);
+                      const removed = boxRemove[it.id] || [];
+                      const presets = box ? boxPresets(box.parts) : [];
+                      const noteOpen = it.id in itemNotes;
                       return (
                         <div
                           key={it.id}
@@ -829,13 +914,12 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                               {it.name}
                             </div>
                             <div className="text-xs text-[var(--anchor-gray)]">
-                              {out ? "None in stock" : `${avail} in stock`}
+                              {out
+                                ? "None in stock"
+                                : box
+                                  ? `🍕 ${box.ready} in pizza boxes${box.loose ? ` · ${box.loose} loose` : ""}`
+                                  : `${avail} in stock`}
                             </div>
-                            {box && (
-                              <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
-                                🍕 Pizza box · {box.ready} ready
-                              </div>
-                            )}
                             {isOverlayPool(it) && (
                               <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
                                 Overlays on their own. Same stock as the ones added to a{" "}
@@ -886,13 +970,100 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                     );
                                   })}
                                 </div>
-                                {choice === "box" && box && (
-                                  <div className="mt-1 text-[10px] leading-snug text-[var(--anchor-gray)]">
-                                    Anchor + {box.contents || "its series' pieces"}
-                                  </div>
-                                )}
                               </div>
                             )}
+
+                            {/* A boxed anchor ships in its pizza box by default.
+                                The quick choices cover what reps ask for most; the
+                                contents list takes out any single thing. */}
+                            {picked && box && (
+                              <div className="rounded-lg bg-[var(--surface-soft)] px-2 py-1.5">
+                                <div className="text-[11px] font-semibold text-[var(--anchor-deep)]">
+                                  🍕 Ships in a pizza box
+                                </div>
+                                <div className="mt-1 grid gap-1">
+                                  {presets.map((preset) => {
+                                    const on = sameSet(removed, preset.remove);
+                                    return (
+                                      <button
+                                        key={preset.key}
+                                        type="button"
+                                        onClick={() => setBoxRemove((prev) => ({ ...prev, [it.id]: preset.remove }))}
+                                        aria-pressed={on}
+                                        className={
+                                          "rounded-md px-1.5 py-1 text-[11px] font-semibold transition " +
+                                          (on
+                                            ? "bg-[var(--anchor-green)] text-white"
+                                            : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:border-[var(--anchor-green)]")
+                                        }
+                                      >
+                                        {preset.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenContents((prev) => ({ ...prev, [it.id]: !prev[it.id] }))}
+                                  aria-expanded={!!openContents[it.id]}
+                                  className="mt-1.5 text-[11px] font-semibold text-[var(--anchor-green)] underline"
+                                >
+                                  {openContents[it.id] ? "Done" : "Take items out of the box"}
+                                </button>
+                                {openContents[it.id] && (
+                                  <div className="mt-1 grid gap-1">
+                                    <label className="flex items-start gap-1.5 text-[11px] text-[var(--anchor-gray)]">
+                                      <input type="checkbox" checked disabled className="mt-0.5" />
+                                      <span>The anchor</span>
+                                    </label>
+                                    {box.parts
+                                      .filter((p) => p.kind !== "anchor")
+                                      .map((p) => (
+                                        <label
+                                          key={p.item_id}
+                                          className="flex items-start gap-1.5 text-[11px] leading-snug text-[var(--anchor-deep)]"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!removed.includes(p.item_id)}
+                                            onChange={() => toggleBoxPart(it.id, p.item_id)}
+                                            className="mt-0.5"
+                                          />
+                                          <span>
+                                            {p.per_box > 1 ? `${p.per_box} × ` : ""}
+                                            {p.name}
+                                          </span>
+                                        </label>
+                                      ))}
+                                  </div>
+                                )}
+                                <div className="mt-1 text-[10px] leading-snug text-[var(--anchor-gray)]">
+                                  {describeBoxChoice(box.parts, removed)}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* A note on any item — what it's for, a color, a
+                                deadline for just this piece. */}
+                            {picked &&
+                              (noteOpen ? (
+                                <textarea
+                                  value={itemNotes[it.id]}
+                                  onChange={(e) => setItemNotes((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                                  placeholder="Notes for this item…"
+                                  rows={2}
+                                  maxLength={500}
+                                  className="w-full rounded-md border border-[var(--border-default)] bg-white px-1.5 py-1 text-[11px]"
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setItemNotes((prev) => ({ ...prev, [it.id]: "" }))}
+                                  className="self-start text-[11px] font-semibold text-[var(--anchor-green)] underline"
+                                >
+                                  + Add a note
+                                </button>
+                              ))}
 
                             <div className="mt-auto pt-1">
                               {qty === 0 ? (
