@@ -42,3 +42,6 @@ next-env.d.ts
 
 # next-pwa build artifacts (content-hashed, regenerated each build)
 public/worker-*.js
+
+# supabase CLI cache (version check etc.)
+supabase/.temp/
