@@ -102,6 +102,7 @@ export default function PizzaBoxesTab({
   const [copies, setCopies] = useState<Record<string, string>>({});
   const [assembleQty, setAssembleQty] = useState<Record<string, string>>({});
   const [setupKit, setSetupKit] = useState<Record<string, string>>({});
+  const [boxKit, setBoxKit] = useState<PackagingKit>("2000");
   const [scanLimit, setScanLimit] = useState(SCAN_PAGE);
   const [working, setWorking] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -146,7 +147,14 @@ export default function PizzaBoxesTab({
         }),
     [items, savedExtras]
   );
-  const totalReady = boxes.reduce((n, b) => n + b.ready, 0);
+  // The box list shows one series at a time, picked the way the Pizza box kits
+  // card picks one — each pill carrying that series' ready boxes.
+  const kitTabs = PIZZA_BOX_KITS.map((k) => {
+    const of = boxes.filter((b) => b.it.packaging_kit === k.key);
+    return { ...k, types: of.length, ready: of.reduce((n, b) => n + b.ready, 0) };
+  });
+  const shownBoxes = boxes.filter((b) => b.it.packaging_kit === boxKit);
+  const shownReady = shownBoxes.reduce((n, b) => n + b.ready, 0);
 
   // Samples that could be boxes but aren't set up as one: offered with a box
   // but no series, or not offered at all. Kit pieces and assembled-box items
@@ -387,33 +395,77 @@ export default function PizzaBoxesTab({
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="grid min-w-0 grid-cols-1 gap-3">
           <Section
-            title={`🍕 Box types · ${totalReady} ready`}
-            hint="Record boxes as you build them: Assemble takes the anchor, its pieces and the printables off the loose counts, so they can't be handed out twice. Scanning a box out takes it off Ready; Unbox puts the contents back."
+            title={`🍕 Box types · ${shownReady} ready`}
+            hint="Assemble takes a box's contents off the loose counts. Scanning a box out takes it off Ready; Unbox puts the contents back."
             action={
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={copyScannerLink} disabled={!base}>
-                  {copied ? "Copied!" : "Copy scanner link"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setCopies(Object.fromEntries(boxes.map((b) => [b.it.id, "1"])))}
-                  disabled={!boxes.length}
+              <button
+                type="button"
+                onClick={copyScannerLink}
+                disabled={!base}
+                className="text-xs font-semibold text-[var(--anchor-green)] hover:underline disabled:opacity-50"
+              >
+                {copied ? "Copied!" : "Copy scanner link"}
+              </button>
+            }
+          >
+            {/* One row: the series pills, then the label controls. Only Print is a
+                full button; the rest are text links so the header stays quiet. */}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {kitTabs.map((k) => (
+                  <button
+                    key={k.key}
+                    type="button"
+                    onClick={() => setBoxKit(k.key)}
+                    aria-pressed={k.key === boxKit}
+                    title={`${k.ready} ${k.label} box${k.ready === 1 ? "" : "es"} ready across ${k.types} box type${k.types === 1 ? "" : "s"}`}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
+                      k.key === boxKit
+                        ? "bg-[var(--anchor-green)] text-white"
+                        : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
+                    }`}
+                  >
+                    {k.key}
+                    <span className={k.key === boxKit ? "ml-1.5 opacity-80" : "ml-1.5 text-[var(--anchor-gray)]"}>
+                      {k.ready}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-3 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCopies((prev) => ({ ...prev, ...Object.fromEntries(shownBoxes.map((b) => [b.it.id, "1"])) }))
+                  }
+                  disabled={!shownBoxes.length}
+                  className="text-[var(--anchor-green)] hover:underline disabled:opacity-50"
                 >
-                  One of each
-                </Button>
+                  One label each
+                </button>
+                {/* Clears every series, not just the one showing: the print
+                    count is the total across all of them. */}
+                {totalLabels > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCopies({})}
+                    className="text-[var(--anchor-gray)] hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
                 <Button onClick={printLabels} disabled={!base || totalLabels === 0}>
                   Print {totalLabels} label{totalLabels === 1 ? "" : "s"}
                 </Button>
               </div>
-            }
-          >
-            {boxes.length === 0 ? (
+            </div>
+            {shownBoxes.length === 0 ? (
               <p className="text-sm text-[var(--anchor-gray)]">
-                No box types yet — set a sample up as a pizza box below.
+                No {packagingKitLabel(boxKit)} box types yet — set a sample up as a pizza box below.
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-2">
-                {boxes.map(({ it, ready, canAssemble, limitedBy }) => {
+                {shownBoxes.map(({ it, ready, canAssemble, limitedBy }) => {
                   const n = assembleCount(it.id);
                   return (
                     <div key={it.id} className="rounded-xl border border-[var(--border-default)] p-2">
