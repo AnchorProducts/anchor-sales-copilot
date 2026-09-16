@@ -2,6 +2,11 @@
 // public /grab QR code. Admins + inside reps can view the link; only admins can
 // rotate it (rotating invalidates every printed QR code).
 //
+// The URL is always on the public external domain, never the current request's
+// origin or NEXT_PUBLIC_APP_URL: codes printed from a local dev server encoded
+// http://localhost:3000, and the internal domain sits behind Vercel SSO — a
+// phone scanning either one can't open the page.
+//
 //   GET  → { url, token, enabled }   the current aisle URL to encode in a QR.
 //   POST { action: "rotate" }        issue a fresh token (admin only).
 //   POST { action: "toggle", enabled } enable/disable the aisle (admin only).
@@ -10,7 +15,7 @@ import { NextResponse } from "next/server";
 import { supabaseRoute } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { clean, getInventoryProfile, canWriteInventory } from "@/lib/inventory/server";
-import { appUrl } from "@/lib/appUrl";
+import { externalAppUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,7 +71,7 @@ export async function GET(req: Request) {
       );
     }
     return NextResponse.json({
-      url: appUrl(`/grab/${cfg.token}`, req),
+      url: externalAppUrl(`/grab/${cfg.token}`),
       token: cfg.token,
       enabled: cfg.enabled,
     });
@@ -109,7 +114,7 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json({
-      url: appUrl(`/grab/${cfg.token}`, req),
+      url: externalAppUrl(`/grab/${cfg.token}`),
       token: cfg.token,
       enabled: cfg.enabled,
     });
