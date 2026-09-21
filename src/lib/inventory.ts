@@ -481,7 +481,17 @@ export type BoxScanRow = {
   scanned_by_email: string;
   box_count: number;
   boxes: { item_id: string; name: string; count: number }[];
-  lines: { item_id: string; name: string; packed: number; quantity: number; removed: number; short: number }[];
+  lines: {
+    item_id: string;
+    name: string;
+    packed: number;
+    quantity: number;
+    removed: number;
+    short: number;
+    // Anchors put in the boxes in place of the ones pulled out. A custom one
+    // isn't stock: its item_id is "" and its quantity 0.
+    swapped_in?: number;
+  }[];
   created_at: string;
 };
 

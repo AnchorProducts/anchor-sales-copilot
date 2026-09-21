@@ -8,12 +8,15 @@
 // what they pulled back out of them.
 //
 //   GET  /api/public/grab/boxes?token=<t>
-//     → { boxes: [{ id, name, kit, kit_label, image_url, ready, parts: [BoxPart] }] }
-//        every box type, how many are assembled and ready, and what one holds.
+//     → { boxes: [{ id, name, kit, kit_label, image_url, ready, parts: [BoxPart] }],
+//         anchors: [{ id, name, loose }] }
+//        every box type, how many are assembled and ready, and what one holds;
+//        plus the loose anchors that can go in a box in place of its own.
 //
 //   POST /api/public/grab/boxes
-//        { token, name, email, boxes: [{ item_id, count }], take: { [item_id]: n }, website? }
-//     → { ok, boxes, lines: [{ item_id, item_name, packed, quantity, removed, remaining, short }], failed }
+//        { token, name, email, boxes: [{ item_id, count }], take: { [item_id]: n },
+//          swaps?: [{ item_id, custom, count }], website? }
+//     → { ok, boxes, lines: [{ item_id, item_name, packed, quantity, removed, remaining, short, swapped_in }], failed }
 //
 // An assembled box is its own stock (see "Assembled boxes" in lib/inventory):
 // its contents came off the loose counts when it was built. So a scanned box
@@ -30,6 +33,10 @@
 // The pass is logged once in marketing_box_scans, and each thing that left as
 // its own pickup line pointing back at it — boxes and loose parts alike — so
 // the Return tab can put a whole box, or a single brochure, back.
+//
+// An anchor pulled out of a box can be replaced: `swaps` names a loose anchor
+// (taken off its count like any pickup) or a custom one described in words
+// (not stock — it's only recorded). They can't outnumber the anchors pulled out.
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -47,6 +54,7 @@ import {
   boxTotals,
   findReadyBox,
   isBoxType,
+  isSwapAnchor,
   packagingKitLabel,
   readyBoxName,
   type BoxPart,
@@ -57,6 +65,7 @@ export const dynamic = "force-dynamic";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_BOXES_PER_TYPE = 500; // sanity ceiling, not a business rule
+const MAX_CUSTOM_LEN = 200;
 
 // Best-effort, per-instance rate limit — the same soft guard as the aisle
 // endpoints; the token is the real gate.
@@ -94,7 +103,7 @@ type BoxType = {
 
 // Every box type, what one box holds, and its ready-box item — built by
 // boxParts from the whole catalog, the same way every other page builds a box.
-async function loadBoxTypes(): Promise<{ types: BoxType[]; hasBoxOf: boolean }> {
+async function loadBoxTypes(): Promise<{ types: BoxType[]; hasBoxOf: boolean; anchors: BoxCatalogItem[] }> {
   const { catalog, extras, hasBoxOf } = await loadBoxCatalog();
   const types = catalog
     .filter(isBoxType)
@@ -107,7 +116,8 @@ async function loadBoxTypes(): Promise<{ types: BoxType[]; hasBoxOf: boolean }> 
       parts: boxParts(row, catalog, extras),
       readyBox: findReadyBox(catalog, row.id),
     }));
-  return { types, hasBoxOf };
+  const anchors = catalog.filter((row) => isSwapAnchor(row, "")).sort((a, b) => a.name.localeCompare(b.name));
+  return { types, hasBoxOf, anchors };
 }
 
 // GET — the box types a label can name, and what's in each.
@@ -117,7 +127,7 @@ export async function GET(req: Request) {
     if (!token || !(await tokenOk(token))) {
       return NextResponse.json({ error: "This pickup link is invalid or disabled." }, { status: 404 });
     }
-    const { types } = await loadBoxTypes();
+    const { types, anchors } = await loadBoxTypes();
     const boxes = await Promise.all(
       types.map(async (t) => ({
         id: t.id,
@@ -129,7 +139,10 @@ export async function GET(req: Request) {
         parts: t.parts,
       }))
     );
-    return NextResponse.json({ boxes });
+    return NextResponse.json({
+      boxes,
+      anchors: anchors.map((a) => ({ id: a.id, name: a.name, loose: a.quantity_available })),
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load pizza boxes." }, { status: 500 });
   }
@@ -145,6 +158,7 @@ type ResultLine = {
   removed: number;
   remaining: number;
   short: number;
+  swapped_in: number;
 };
 
 // POST — take the scanned boxes, and put back whatever was pulled out of them.
@@ -170,7 +184,7 @@ export async function POST(req: Request) {
     if (!name) return NextResponse.json({ error: "Enter your name." }, { status: 400 });
     if (!EMAIL_RE.test(email)) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
 
-    const { types, hasBoxOf } = await loadBoxTypes();
+    const { types, hasBoxOf, anchors } = await loadBoxTypes();
     const typeById = new Map(types.map((t) => [t.id, t]));
 
     // Merge duplicate lines; drop anything that isn't a box type (anymore).
@@ -190,6 +204,48 @@ export async function POST(req: Request) {
     const scanned = [...counts].map(([id, count]) => ({ ...typeById.get(id)!, count, fromReady: 0 }));
     const boxSummary = scanned.map((b) => ({ item_id: b.id, name: b.name, count: b.count }));
     const take = (body.take && typeof body.take === "object" ? body.take : {}) as Record<string, unknown>;
+    // What each line keeps, capped at what the boxes held.
+    const keptOf = (line: { item_id: string; packed: number }) => {
+      const asked = line.item_id in take ? Math.floor(Number(take[line.item_id])) : line.packed;
+      return Number.isFinite(asked) ? Math.max(0, Math.min(asked, line.packed)) : line.packed;
+    };
+    const allParts = boxTotals(scanned.map((b) => ({ count: b.count, parts: b.parts })));
+
+    // Anchors put in place of the ones pulled out, merged per anchor (or per
+    // custom description). Checked before anything moves.
+    const anchorById = new Map(anchors.map((a) => [a.id, a]));
+    const swapCounts = new Map<string, { item: BoxCatalogItem | null; custom: string; count: number }>();
+    for (const r of Array.isArray(body.swaps) ? (body.swaps as unknown[]) : []) {
+      const o = (r || {}) as Record<string, unknown>;
+      const n = Math.floor(Number(o.count));
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const id = clean(o.item_id);
+      const custom = clean(o.custom).slice(0, MAX_CUSTOM_LEN);
+      const item = id ? anchorById.get(id) || null : null;
+      if (id && !item) {
+        return NextResponse.json({ error: "One of the anchors swapped in isn't in inventory anymore." }, { status: 400 });
+      }
+      if (!item && !custom) {
+        return NextResponse.json({ error: "Describe the custom anchor that went in the box." }, { status: 400 });
+      }
+      const key = item ? item.id : `custom:${custom.toLowerCase()}`;
+      const prev = swapCounts.get(key);
+      swapCounts.set(key, { item, custom, count: (prev?.count || 0) + n });
+    }
+    const anchorsOut = allParts
+      .filter((l) => l.kind === "anchor")
+      .reduce((n, l) => n + (l.packed - keptOf(l)), 0);
+    const swapTotal = [...swapCounts.values()].reduce((n, s) => n + s.count, 0);
+    if (swapTotal > anchorsOut) {
+      return NextResponse.json(
+        {
+          error: anchorsOut
+            ? `Only ${anchorsOut} anchor${anchorsOut === 1 ? " was" : "s were"} pulled out, so only ${anchorsOut} can go in instead.`
+            : "Pull an anchor out of the boxes before swapping another one in.",
+        },
+        { status: 400 }
+      );
+    }
 
     // One row for the whole pass, so the admin log reads "5 boxes" rather than
     // six unrelated pickups. Best-effort: before 20260915_000001 there's no
@@ -236,6 +292,7 @@ export async function POST(req: Request) {
             removed: 0,
             remaining: 0,
             short: b.count,
+            swapped_in: 0,
           });
         }
         continue;
@@ -255,6 +312,7 @@ export async function POST(req: Request) {
         removed: 0,
         remaining: moved.available,
         short: moved.short,
+        swapped_in: 0,
       });
     }
 
@@ -265,9 +323,8 @@ export async function POST(req: Request) {
     const reserved = new Map(
       boxTotals(scanned.map((b) => ({ count: b.fromReady, parts: b.parts }))).map((l) => [l.item_id, l.packed])
     );
-    for (const line of boxTotals(scanned.map((b) => ({ count: b.count, parts: b.parts })))) {
-      const asked = line.item_id in take ? Math.floor(Number(take[line.item_id])) : line.packed;
-      const kept = Number.isFinite(asked) ? Math.max(0, Math.min(asked, line.packed)) : line.packed;
+    for (const line of allParts) {
+      const kept = keptOf(line);
       const removed = line.packed - kept;
 
       const fromLoose = line.packed - (reserved.get(line.item_id) || 0);
@@ -289,8 +346,51 @@ export async function POST(req: Request) {
       }
       if (offLoose > 0) await logPickup(line.item_id, line.name, offLoose);
       if (offLoose > 0 || removed > 0 || short > 0) {
-        lines.push({ item_id: line.item_id, item_name: line.name, packed: line.packed, quantity: offLoose, removed, remaining, short });
+        lines.push({
+          item_id: line.item_id,
+          item_name: line.name,
+          packed: line.packed,
+          quantity: offLoose,
+          removed,
+          remaining,
+          short,
+          swapped_in: 0,
+        });
       }
+    }
+
+    // 3. Anchors that went in instead. A loose one comes off its count like
+    //    any pickup; a custom one isn't stock and is only recorded.
+    for (const sw of swapCounts.values()) {
+      if (!sw.item) {
+        lines.push({
+          item_id: "",
+          item_name: `${sw.custom} (custom anchor)`,
+          packed: 0,
+          quantity: 0,
+          removed: 0,
+          remaining: 0,
+          short: 0,
+          swapped_in: sw.count,
+        });
+        continue;
+      }
+      const moved = await shiftStock(sw.item.id, -sw.count);
+      if (!moved.ok) {
+        failed.push({ item_id: sw.item.id, item_name: sw.item.name, quantity: sw.count, error: moved.error });
+        continue;
+      }
+      await logPickup(sw.item.id, sw.item.name, sw.count);
+      lines.push({
+        item_id: sw.item.id,
+        item_name: sw.item.name,
+        packed: 0,
+        quantity: sw.count,
+        removed: 0,
+        remaining: moved.available,
+        short: moved.short,
+        swapped_in: sw.count,
+      });
     }
 
     const tookSomething = lines.some((l) => l.quantity > 0);
@@ -306,6 +406,7 @@ export async function POST(req: Request) {
               quantity: l.quantity,
               removed: l.removed,
               short: l.short,
+              swapped_in: l.swapped_in,
             })),
           })
           .eq("id", scanId);
@@ -326,6 +427,7 @@ export async function POST(req: Request) {
           removed: l.removed,
           remaining: l.remaining,
           short: l.short,
+          swapped_in: l.swapped_in,
         })),
       });
     } else if (failed.length) {

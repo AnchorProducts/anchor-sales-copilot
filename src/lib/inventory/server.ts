@@ -172,7 +172,7 @@ export async function notifyBoxPickup(args: {
   by: string;
   email: string;
   boxes: { name: string; count: number }[];
-  lines: { name: string; quantity: number; removed: number; remaining: number; short: number }[];
+  lines: { name: string; quantity: number; removed: number; remaining: number; short: number; swapped_in?: number }[];
 }): Promise<void> {
   if (!args.boxes.length) return;
   const url = "/admin/inventory";
@@ -181,10 +181,12 @@ export async function notifyBoxPickup(args: {
   const boxList = args.boxes.map((b) => `${b.count} × ${b.name}`);
   const pulled = args.lines.filter((l) => l.removed > 0).map((l) => `${l.removed} × ${l.name}`);
   const short = args.lines.filter((l) => l.short > 0).map((l) => `${l.name} (short ${l.short})`);
+  const swapped = args.lines.filter((l) => (l.swapped_in || 0) > 0).map((l) => `${l.swapped_in} × ${l.name}`);
 
   const pushBody =
     `${args.by} took ${totalBoxes} pizza box${totalBoxes === 1 ? "" : "es"}: ${boxList.join(", ")}.` +
     (pulled.length ? ` Pulled out: ${pulled.join(", ")}.` : "") +
+    (swapped.length ? ` Swapped in: ${swapped.join(", ")}.` : "") +
     (short.length ? ` Recount: ${short.join(", ")}.` : "");
   const subject = `Pizza boxes taken — ${totalBoxes} box${totalBoxes === 1 ? "" : "es"}`;
   const emailText =
@@ -196,6 +198,9 @@ export async function notifyBoxPickup(args: {
       .map((l) => `  • ${l.quantity} × ${l.name} (${l.remaining} left)`)
       .join("\n") +
     (pulled.length ? `\n\nPulled out of the boxes (back on the shelf):\n${pulled.map((p) => `  • ${p}`).join("\n")}` : "") +
+    (swapped.length
+      ? `\n\nPut in the boxes in place of their anchor:\n${swapped.map((s) => `  • ${s}`).join("\n")}`
+      : "") +
     (short.length
       ? `\n\nThe count was lower than what was in the boxes — worth a recount:\n${short.map((s) => `  • ${s}`).join("\n")}`
       : "") +
@@ -434,6 +439,7 @@ export async function shiftStock(
 export type BoxCatalogItem = {
   id: string;
   name: string;
+  category: string | null;
   location: string | null;
   image_path: string | null;
   quantity_available: number;
@@ -457,7 +463,7 @@ export async function loadBoxCatalog(): Promise<{
   extras: BoxExtra[];
   hasBoxOf: boolean;
 }> {
-  const cols = "id,name,location,image_path,quantity_available,pizza_box,packaging_kit,packaging_role";
+  const cols = "id,name,category,location,image_path,quantity_available,pizza_box,packaging_kit,packaging_role";
   const read = (c: string) => supabaseAdmin.from("marketing_inventory_items").select(c).limit(1000);
   const extrasQuery = supabaseAdmin.from("app_settings").select("value").eq("key", PIZZA_BOX_EXTRAS_KEY).maybeSingle();
 

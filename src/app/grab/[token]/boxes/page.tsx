@@ -13,6 +13,8 @@
 //             pieces, the printables every box gets. Pulled a brochure out to
 //             leave behind? Lower that line, and it goes back on the shelf
 //             count — the box's contents were reserved when it was built.
+//             Pulled an anchor out? Another can go in its place: a loose one
+//             off the shelf, or a custom one described in words.
 //
 // The pass lives in localStorage, so a label scanned with the phone's own
 // camera app (which opens a fresh tab per code) adds to the same pass instead
@@ -38,12 +40,20 @@ type BoxType = {
   parts: BoxPart[];
 };
 
-// Box counts per type, and how many of each item were pulled back out.
-type Pass = { at: number; counts: Record<string, number>; removed: Record<string, number> };
+type LooseAnchor = { id: string; name: string; loose: number };
+
+// An anchor put in the boxes in place of ones pulled out. item_id is a loose
+// anchor's id, CUSTOM for one described in `custom`, or "" until picked.
+type Swap = { item_id: string; custom: string; count: number };
+const CUSTOM = "__custom__";
+
+// Box counts per type, how many of each item were pulled back out, and the
+// anchors that went in instead.
+type Pass = { at: number; counts: Record<string, number>; removed: Record<string, number>; swaps: Swap[] };
 
 type Result = {
   boxes: { name: string; count: number }[];
-  lines: { item_id: string; item_name: string; quantity: number; removed: number; short: number }[];
+  lines: { item_id: string; item_name: string; quantity: number; removed: number; short: number; swapped_in?: number }[];
   failed: { item_name: string; error: string }[];
 };
 
@@ -61,7 +71,7 @@ const KIND_LABEL: Record<BoxPartKind, string> = {
 };
 
 function emptyPass(): Pass {
-  return { at: Date.now(), counts: {}, removed: {} };
+  return { at: Date.now(), counts: {}, removed: {}, swaps: [] };
 }
 
 // The stored pass: null when there isn't one (or it's expired), undefined when
@@ -71,7 +81,12 @@ function readStoredPass(): Pass | null | undefined {
   try {
     const p = JSON.parse(localStorage.getItem(PASS_KEY) || "null");
     if (!p || Date.now() - Number(p.at) > PASS_TTL_MS) return null;
-    return { at: Number(p.at), counts: p.counts || {}, removed: p.removed || {} };
+    return {
+      at: Number(p.at),
+      counts: p.counts || {},
+      removed: p.removed || {},
+      swaps: Array.isArray(p.swaps) ? p.swaps : [],
+    };
   } catch {
     return undefined;
   }
@@ -224,11 +239,13 @@ export default function BoxScanPage({
   const openedWith = (box || "").trim();
 
   const [types, setTypes] = useState<BoxType[]>([]);
+  const [anchors, setAnchors] = useState<LooseAnchor[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [removed, setRemoved] = useState<Record<string, number>>({});
+  const [swaps, setSwaps] = useState<Swap[]>([]);
   const memPass = useRef<Pass>(emptyPass());
   const consumedLabel = useRef(false);
 
@@ -252,14 +269,21 @@ export default function BoxScanPage({
   const update = useCallback((fn: (p: Pass) => void) => {
     const stored = readStoredPass();
     const base = stored === undefined ? memPass.current : stored || emptyPass();
-    const pass: Pass = { at: Date.now(), counts: { ...base.counts }, removed: { ...base.removed } };
+    const pass: Pass = {
+      at: Date.now(),
+      counts: { ...base.counts },
+      removed: { ...base.removed },
+      swaps: base.swaps.map((s) => ({ ...s })),
+    };
     fn(pass);
     for (const [k, v] of Object.entries(pass.counts)) if (!(v > 0)) delete pass.counts[k];
     for (const [k, v] of Object.entries(pass.removed)) if (!(v > 0)) delete pass.removed[k];
+    pass.swaps = pass.swaps.filter((s) => s.count > 0);
     memPass.current = pass;
     writeStoredPass(pass);
     setCounts(pass.counts);
     setRemoved(pass.removed);
+    setSwaps(pass.swaps);
   }, []);
 
   // Restore the pass, count the label that opened the page, and strip ?box so a
@@ -289,6 +313,7 @@ export default function BoxScanPage({
       const p = readStoredPass() || emptyPass();
       setCounts(p.counts);
       setRemoved(p.removed);
+      setSwaps(p.swaps);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -316,6 +341,7 @@ export default function BoxScanPage({
           return;
         }
         setTypes(json?.boxes || []);
+        setAnchors(json?.anchors || []);
       } catch {
         if (alive) setLoadErr("Couldn't reach the server. Check your connection and try again.");
       } finally {
@@ -379,6 +405,15 @@ export default function BoxScanPage({
   const taking = (line: { item_id: string; packed: number }) =>
     Math.max(0, line.packed - (removed[line.item_id] || 0));
   const pulledOut = totals.reduce((n, l) => n + (l.packed - taking(l)), 0);
+  // Anchors pulled out of the boxes, and how many of those have been replaced.
+  const anchorsOut = totals.filter((l) => l.kind === "anchor").reduce((n, l) => n + (l.packed - taking(l)), 0);
+  const swappedIn = swaps.reduce((n, s) => n + s.count, 0);
+
+  function setSwap(index: number, patch: Partial<Swap>) {
+    update((p) => {
+      if (p.swaps[index]) p.swaps[index] = { ...p.swaps[index], ...patch };
+    });
+  }
 
   function setTaking(line: { item_id: string; packed: number }, next: number) {
     const keep = Math.max(0, Math.min(next, line.packed));
@@ -391,6 +426,7 @@ export default function BoxScanPage({
     update((p) => {
       p.counts = {};
       p.removed = {};
+      p.swaps = [];
     });
     setStep("scan");
   }
@@ -400,6 +436,15 @@ export default function BoxScanPage({
     if (!scanned.length) return setFormErr("Scan at least one box.");
     if (!name.trim()) return setFormErr("Enter your name.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setFormErr("Enter a valid email.");
+    if (swaps.some((s) => !s.item_id)) return setFormErr("Pick which anchor went in the box.");
+    if (swaps.some((s) => s.item_id === CUSTOM && !s.custom.trim())) {
+      return setFormErr("Describe the custom anchor that went in the box.");
+    }
+    if (swappedIn > anchorsOut) {
+      return setFormErr(
+        `Only ${anchorsOut} anchor${anchorsOut === 1 ? " was" : "s were"} pulled out — swap in that many at most.`
+      );
+    }
 
     setBusy(true);
     try {
@@ -413,6 +458,11 @@ export default function BoxScanPage({
           website,
           boxes: scanned.map((t) => ({ item_id: t.id, count: counts[t.id] })),
           take: Object.fromEntries(totals.map((l) => [l.item_id, taking(l)])),
+          swaps: swaps.map((s) => ({
+            item_id: s.item_id === CUSTOM ? "" : s.item_id,
+            custom: s.item_id === CUSTOM ? s.custom.trim() : "",
+            count: s.count,
+          })),
         }),
       });
       const json = await res.json().catch(() => null);
@@ -458,6 +508,16 @@ export default function BoxScanPage({
                 {result.lines
                   .filter((l) => l.removed > 0)
                   .map((l) => `${l.removed} × ${l.item_name}`)
+                  .join(", ")}
+                .
+              </div>
+            )}
+            {result.lines.some((l) => (l.swapped_in || 0) > 0) && (
+              <div className="mt-1">
+                Swapped in:{" "}
+                {result.lines
+                  .filter((l) => (l.swapped_in || 0) > 0)
+                  .map((l) => `${l.swapped_in} × ${l.item_name}`)
                   .join(", ")}
                 .
               </div>
@@ -634,6 +694,74 @@ export default function BoxScanPage({
                 );
               })}
             </div>
+
+            {/* An anchor pulled out can be replaced — by a loose one off the
+                shelf, or a custom one that isn't in inventory. */}
+            {(anchorsOut > 0 || swaps.length > 0) && (
+              <Card className="mt-3 p-3">
+                <h3 className="text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">Put a different anchor in?</h3>
+                <p className="text-xs text-[var(--anchor-gray,#5b6b66)]">
+                  {anchorsOut} anchor{anchorsOut === 1 ? "" : "s"} pulled out
+                  {swappedIn ? ` · ${swappedIn} replaced` : ""}. A loose anchor comes off the shelf count.
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-2">
+                  {swaps.map((s, i) => (
+                    <div key={i} className="grid grid-cols-1 gap-1.5 rounded-lg border border-black/10 p-2">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={s.item_id}
+                          onChange={(e) => setSwap(i, { item_id: e.target.value })}
+                          aria-label="Anchor that went in"
+                          className="h-10 min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-2 text-sm"
+                        >
+                          <option value="">Choose an anchor…</option>
+                          <option value={CUSTOM}>A custom anchor (not in inventory)…</option>
+                          <optgroup label="Loose anchors">
+                            {anchors.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} ({a.loose} loose)
+                              </option>
+                            ))}
+                          </optgroup>
+                        </select>
+                        <Stepper
+                          value={s.count}
+                          max={s.count + Math.max(0, anchorsOut - swappedIn)}
+                          onChange={(v) => setSwap(i, { count: v })}
+                          label="swapped-in anchor"
+                        />
+                      </div>
+                      {s.item_id === CUSTOM && (
+                        <Input
+                          value={s.custom}
+                          onChange={(e) => setSwap(i, { custom: e.target.value })}
+                          placeholder="Describe the custom anchor…"
+                          maxLength={200}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {anchorsOut > swappedIn && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      update((p) => {
+                        p.swaps.push({ item_id: "", custom: "", count: 1 });
+                      })
+                    }
+                    className="mt-2 text-sm font-semibold text-[var(--anchor-green,#1f8a4c)] underline"
+                  >
+                    + Swap in an anchor
+                  </button>
+                )}
+                {swappedIn > anchorsOut && (
+                  <p className="mt-2 text-xs font-semibold text-amber-700">
+                    More anchors swapped in than pulled out — lower one.
+                  </p>
+                )}
+              </Card>
+            )}
 
             <Card className="mt-4 p-4">
               <div className="grid grid-cols-1 gap-2.5">
