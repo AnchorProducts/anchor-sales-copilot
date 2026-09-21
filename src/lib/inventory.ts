@@ -368,19 +368,49 @@ export function describeBoxContents(parts: readonly BoxPart[]): string {
 
 // How a boxed sample ships, once the rep has taken anything out of its box:
 // "pizza box (…everything…)", "pizza box without 1 × Tri-Fold Brochure",
-// "anchor + overlay, no box", or "anchor only". Used on the order form and in
-// the order's own line, so what the rep picked is what fulfillment reads.
-export function describeBoxChoice(parts: readonly BoxPart[], removed: readonly string[]): string {
+// "anchor + overlay, no box", or "anchor only". Taking the anchor itself out
+// adds what replaces it: "… — 2600 Sika PVC in place of 2400 IB PVC", or
+// "— no anchor". `swap` is the replacement's name as the order should read it.
+// Used on the order form and in the order's own line, so what the rep picked
+// is what fulfillment reads.
+export function describeBoxChoice(
+  parts: readonly BoxPart[],
+  removed: readonly string[],
+  swap?: string | null
+): string {
   const gone = new Set(removed);
+  const anchor = parts.find((p) => p.kind === "anchor");
+  const anchorOut = !!anchor && gone.has(anchor.item_id);
   const kept = parts.filter((p) => p.kind !== "anchor" && !gone.has(p.item_id));
   const dropped = parts.filter((p) => p.kind !== "anchor" && gone.has(p.item_id));
+  let out: string;
   if (!dropped.length) {
     const contents = describeBoxContents(parts);
-    return `pizza box${contents ? ` (${contents})` : ""}`;
+    out = `pizza box${contents ? ` (${contents})` : ""}`;
+  } else if (!kept.length) {
+    out = anchorOut ? "" : "anchor only";
+  } else if (kept.some((p) => p.role === "pizza_box")) {
+    out = `pizza box without ${describeBoxContents(dropped)}`;
+  } else {
+    out = `${anchorOut ? "" : "anchor + "}${describeBoxContents(kept)}, no box`;
   }
-  if (!kept.length) return "anchor only";
-  if (kept.some((p) => p.role === "pizza_box")) return `pizza box without ${describeBoxContents(dropped)}`;
-  return `anchor + ${describeBoxContents(kept)}, no box`;
+  if (!anchorOut) return out;
+  if (!out) return swap ? `${swap} only` : "nothing";
+  return `${out} — ${swap ? `${swap} in place of ${anchor!.name}` : "no anchor"}`;
+}
+
+// Whether a boxed sample, as trimmed, still sends anything at all.
+export function boxChoiceIsEmpty(parts: readonly BoxPart[], removed: readonly string[], swapped: boolean): boolean {
+  return !swapped && parts.every((p) => removed.includes(p.item_id));
+}
+
+// A loose anchor that can go in a box in place of its own: any sample that
+// isn't a kit piece or an assembled box, other than the box's own anchor.
+export function isSwapAnchor(
+  item: PackagingPieceItem & { id: string; category?: string | null; box_of?: string | null },
+  boxAnchorId: string
+): boolean {
+  return item.category === "samples" && !item.packaging_role && !item.box_of && item.id !== boxAnchorId;
 }
 
 // The quick choices on a boxed sample, as the items taken out of the box:
@@ -495,8 +525,10 @@ export function orderStockPlan(
     item: CatalogItem & PackagingChoiceItem;
     quantity: number;
     packaging: OrderPackaging;
-    // Item ids taken out of a boxed sample's pizza box.
+    // Item ids taken out of a boxed sample's pizza box — the anchor included.
     remove?: readonly string[];
+    // An inventory anchor that goes in the box in place of its own.
+    swapItemId?: string | null;
   }[],
   items: readonly CatalogItem[],
   extras: readonly { item_id: string; quantity: number }[]
@@ -511,23 +543,32 @@ export function orderStockPlan(
     if (!qty) continue;
     if (l.packaging === "box" && isBoxType(l.item)) {
       const parts = boxParts(l.item, items, extras);
-      const removed = new Set(
-        (l.remove || []).filter((id) => parts.some((p) => p.kind !== "anchor" && p.item_id === id))
-      );
+      const removed = new Set((l.remove || []).filter((id) => parts.some((p) => p.item_id === id)));
+      if (l.swapItemId) removed.add(l.item.id);
       if (!parts.some((p) => p.role === "pizza_box" && removed.has(p.item_id))) boxes += qty;
+      const kept = parts.filter((p) => !removed.has(p.item_id));
       const ready = findReadyBox(items, l.item.id);
-      const looseAnchors = l.item.quantity_available ?? 0;
-      if (ready && (removed.size === 0 || looseAnchors < qty)) {
+      const looseCovers =
+        !kept.length ||
+        buildableBoxes(
+          kept,
+          items.map((i) => ({ id: i.id, quantity_available: i.quantity_available ?? 0 }))
+        ).count >= qty;
+      if (ready && (removed.size === 0 || !looseCovers)) {
         // Send assembled boxes — they're their own stock. A trimmed-down sample
-        // opens one only when loose anchors can't cover it: the box comes off
-        // whole, and what was taken out goes back on the shelf (a negative line).
+        // opens one only when the loose parts it keeps can't cover it: the box
+        // comes off whole, and what was taken out goes back on the shelf (a
+        // negative line).
         add(ready.id, qty);
         for (const p of parts) if (removed.has(p.item_id)) add(p.item_id, -p.per_box * qty);
       } else {
-        // Nothing assembled to open, or loose anchors cover a trimmed-down
+        // Nothing assembled to open, or the loose parts cover a trimmed-down
         // sample: build it from the loose parts that are kept.
-        for (const p of parts) if (!removed.has(p.item_id)) add(p.item_id, p.per_box * qty);
+        for (const p of kept) add(p.item_id, p.per_box * qty);
       }
+      // The anchor that went in instead. A custom anchor isn't stock, so it
+      // only shows on the order's line.
+      if (l.swapItemId) add(l.swapItemId, qty);
       continue;
     }
     add(l.item.id, qty);
