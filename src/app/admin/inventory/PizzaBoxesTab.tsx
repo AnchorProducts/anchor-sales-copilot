@@ -713,6 +713,7 @@ export default function PizzaBoxesTab({
                 {scans.slice(0, scanLimit).map((s) => {
                   const pulled = (s.lines || []).filter((l) => l.removed > 0);
                   const short = (s.lines || []).filter((l) => l.short > 0);
+                  const swapped = (s.lines || []).filter((l) => (l.swapped_in || 0) > 0);
                   return (
                     <div key={s.id} className="rounded-xl border border-[var(--border-default)] p-3">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -730,6 +731,11 @@ export default function PizzaBoxesTab({
                       {pulled.length > 0 && (
                         <p className="mt-0.5 text-xs text-amber-700">
                           Pulled out: {pulled.map((l) => `${l.removed} × ${l.name}`).join(", ")}
+                        </p>
+                      )}
+                      {swapped.length > 0 && (
+                        <p className="mt-0.5 text-xs text-[var(--anchor-deep)]">
+                          Swapped in: {swapped.map((l) => `${l.swapped_in} × ${l.name}`).join(", ")}
                         </p>
                       )}
                       {short.length > 0 && (
