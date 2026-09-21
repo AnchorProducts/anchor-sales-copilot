@@ -26,10 +26,12 @@ import { consumeStock, notifyLowStockIfCrossed, shiftStock } from "@/lib/invento
 import {
   boxParts,
   boxPresetRemoval,
+  boxChoiceIsEmpty,
   describeBoxChoice,
   findReadyBox,
   isBoxType,
   isOverlayPool,
+  isSwapAnchor,
   orderStockPlan,
   overlayUnits,
   resolvePackaging,
@@ -489,7 +491,14 @@ export async function POST(req: Request) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
       const otherRequest = clean(body.other_request);
 
-      const picks: { item_id: string; quantity: number; packaging: string; remove?: string[]; note: string }[] = [];
+      const picks: {
+        item_id: string;
+        quantity: number;
+        packaging: string;
+        remove?: string[];
+        swap?: { item_id: string; custom: string };
+        note: string;
+      }[] = [];
       for (const raw of rawPicks) {
         const id = clean((raw as any)?.item_id);
         const q = Math.floor(Number((raw as any)?.quantity));
@@ -504,6 +513,14 @@ export async function POST(req: Request) {
           // a client that predates it.
           remove: Array.isArray((raw as any)?.remove)
             ? ((raw as any).remove as unknown[]).map(clean).filter(Boolean)
+            : undefined,
+          // What goes in the box in place of its anchor: an inventory anchor, or
+          // a custom one described in words (made to order, not stock).
+          swap: (raw as any)?.swap_anchor
+            ? {
+                item_id: clean((raw as any).swap_anchor.item_id),
+                custom: clean((raw as any).swap_anchor.custom).slice(0, 200),
+              }
             : undefined,
           note: clean((raw as any)?.note).slice(0, 500),
         });
@@ -534,7 +551,13 @@ export async function POST(req: Request) {
         const catalog = (invRows || []) as any[];
         const extras = parseBoxExtras((extrasRow as any)?.value);
         const byId = new Map(catalog.map((r: any) => [r.id, r]));
-        const resolved: { item: any; quantity: number; packaging: OrderPackaging; remove: string[] }[] = [];
+        const resolved: {
+          item: any;
+          quantity: number;
+          packaging: OrderPackaging;
+          remove: string[];
+          swapItemId: string | null;
+        }[] = [];
         for (const p of picks) {
           const row: any = byId.get(p.item_id);
           if (!row) {
@@ -552,10 +575,25 @@ export async function POST(req: Request) {
           const parts = boxed ? boxParts(row, catalog, extras) : [];
           let packaging: OrderPackaging;
           let remove: string[] = [];
+          let swapItem: any = null;
+          let swapName = "";
           if (boxed) {
             packaging = "box";
+            if (p.swap?.item_id) {
+              swapItem = byId.get(p.swap.item_id);
+              if (!swapItem || !isSwapAnchor(swapItem, row.id)) {
+                return NextResponse.json(
+                  { error: `The anchor picked to go in the ${row.name} box is no longer available.` },
+                  { status: 400 }
+                );
+              }
+              swapName = swapItem.name;
+            } else if (p.swap?.custom) {
+              swapName = `${p.swap.custom} (custom anchor)`;
+            }
             if (p.remove) {
-              remove = parts.filter((x) => x.kind !== "anchor" && p.remove!.includes(x.item_id)).map((x) => x.item_id);
+              remove = parts.filter((x) => p.remove!.includes(x.item_id)).map((x) => x.item_id);
+              if (swapName && !remove.includes(row.id)) remove.push(row.id);
             } else if (p.packaging === "overlay") {
               remove = boxPresetRemoval(parts, "overlay");
             } else if (p.packaging === "none") {
@@ -564,7 +602,13 @@ export async function POST(req: Request) {
           } else {
             packaging = resolvePackaging(row, p.packaging);
           }
-          resolved.push({ item: row, quantity: p.quantity, packaging, remove });
+          if (boxed && boxChoiceIsEmpty(parts, remove, !!swapName)) {
+            return NextResponse.json(
+              { error: `Everything was taken out of the ${row.name} box — leave something in it, or remove the item.` },
+              { status: 400 }
+            );
+          }
+          resolved.push({ item: row, quantity: p.quantity, packaging, remove, swapItemId: swapItem?.id ?? null });
 
           // Asking for more than we have on the shelf doesn't reject the order —
           // it's a normal thing to want. Note the shortfall on the line so the
@@ -572,9 +616,12 @@ export async function POST(req: Request) {
           // boxed anchor's stock is its assembled boxes plus any loose anchors.
           let line = `${p.quantity} × ${row.name}`;
           if (boxed) {
-            line += ` — ${describeBoxChoice(parts, remove)}`;
+            line += ` — ${describeBoxChoice(parts, remove, swapName)}`;
             const onHand = (findReadyBox(catalog, row.id)?.quantity_available ?? 0) + (row.quantity_available || 0);
             if (p.quantity > onHand) line += ` (only ${onHand} in stock)`;
+            if (swapItem && p.quantity > (swapItem.quantity_available || 0)) {
+              line += ` (only ${swapItem.quantity_available || 0} ${swapItem.name} in stock)`;
+            }
           } else {
             if (packaging === "overlay") line += " + plastic overlay";
             const short = p.quantity - row.quantity_available;

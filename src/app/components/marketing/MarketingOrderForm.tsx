@@ -13,11 +13,13 @@ import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/produc
 import { MARKETING_CATEGORIES } from "@/lib/marketingOrders";
 import {
   boxParts,
+  boxChoiceIsEmpty,
   boxPresetRemoval,
   describeBoxChoice,
   findReadyBox,
   inventoryCategoryLabel,
   isBoxType,
+  isSwapAnchor,
   isOverlayPool,
   overlayUnits,
   packagingKitLabel,
@@ -94,6 +96,11 @@ function boxPresets(parts: BoxPart[]): { key: string; label: string; remove: str
   ];
 }
 
+// What goes in a box in place of its own anchor: an inventory anchor (item_id),
+// or a custom one described in words (custom, with item_id "").
+type AnchorSwap = { item_id: string; custom: string };
+const CUSTOM_SWAP = "__custom__";
+
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x) => b.includes(x));
 }
@@ -149,6 +156,8 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
   // note — present, even empty, once "Add a note" is tapped.
   const [boxRemove, setBoxRemove] = useState<Record<string, string[]>>({});
   const [openContents, setOpenContents] = useState<Record<string, boolean>>({});
+  // Keyed by the boxed anchor. Only read while that anchor is taken out.
+  const [boxSwap, setBoxSwap] = useState<Record<string, AnchorSwap>>({});
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [otherRequest, setOtherRequest] = useState("");
 
@@ -288,8 +297,30 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     const keepVisible = <T,>(prev: Record<string, T>) =>
       Object.fromEntries(Object.entries(prev).filter(([id]) => stillVisible(id)));
     setBoxRemove(keepVisible);
+    setBoxSwap(keepVisible);
     setOpenContents(keepVisible);
     setItemNotes(keepVisible);
+  }
+
+  // The anchor going in a box in place of its own, when its own is taken out —
+  // with the name the order line uses. null: nothing replaces it.
+  function swapFor(id: string): { item_id: string; custom: string; name: string } | null {
+    if (!(boxRemove[id] || []).includes(id)) return null;
+    const sw = boxSwap[id];
+    if (!sw) return null;
+    if (sw.item_id) {
+      const it = inventory.find((x) => x.id === sw.item_id);
+      return it ? { item_id: it.id, custom: "", name: it.name } : null;
+    }
+    const text = sw.custom.trim();
+    return text ? { item_id: "", custom: text, name: `${text} (custom anchor)` } : null;
+  }
+
+  // Loose anchors that can go in a box in place of its own, by name.
+  function swapChoices(boxAnchorId: string): InvItem[] {
+    return inventory
+      .filter((x) => isSwapAnchor(x, boxAnchorId))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Take one item out of (or put it back into) a boxed sample's pizza box.
@@ -462,6 +493,18 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
     if (unanswered.length > 0) {
       return setError(`Choose how ${unanswered.join(", ")} should ship.`);
     }
+    for (const [id] of selectedEntries) {
+      const b = boxInfo.get(id);
+      if (!b) continue;
+      const name = inventory.find((x) => x.id === id)?.name || "a pizza box";
+      const sw = boxSwap[id];
+      if ((boxRemove[id] || []).includes(id) && sw && !sw.item_id && !sw.custom.trim()) {
+        return setError(`Describe the custom anchor going in the ${name} box.`);
+      }
+      if (boxChoiceIsEmpty(b.parts, boxRemove[id] || [], !!swapFor(id))) {
+        return setError(`Everything was taken out of the ${name} box — leave something in it, or remove the item.`);
+      }
+    }
     if (!neededBy) return setError("A needed-by date is required.");
     if (!shipName.trim()) return setError("A recipient name is required.");
     if (!shipStreet.trim()) return setError("A street address is required.");
@@ -484,6 +527,10 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
         packaging: choice,
         // What the rep took out of the pizza box.
         ...(boxed ? { remove: boxRemove[item_id] || [] } : {}),
+        // What went in the box in place of its anchor, if anything.
+        ...(boxed && swapFor(item_id)
+          ? { swap_anchor: { item_id: swapFor(item_id)!.item_id, custom: swapFor(item_id)!.custom } }
+          : {}),
         note: (itemNotes[item_id] || "").trim(),
         // Kept for an API that predates pizza boxes.
         plastic_overlay: choice === "overlay",
@@ -519,6 +566,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
       setSelected({});
       setPackaging({});
       setBoxRemove({});
+      setBoxSwap({});
       setOpenContents({});
       setItemNotes({});
       setItemSearch("");
@@ -590,7 +638,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                   )}
                   {box && (
                     <span className="block text-[11px] text-[var(--anchor-gray)]">
-                      🍕 {describeBoxChoice(box.parts, boxRemove[id] || [])}
+                      🍕 {describeBoxChoice(box.parts, boxRemove[id] || [], swapFor(id)?.name)}
                     </span>
                   )}
                   {note && (
@@ -870,6 +918,11 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                       const choice = packaging[it.id];
                       const options = box ? [] : packagingOptions(it);
                       const removed = boxRemove[it.id] || [];
+                      // The presets are about what's around the anchor, so a
+                      // swapped-out anchor stays swapped whichever is picked.
+                      const anchorOut = removed.includes(it.id);
+                      const aroundAnchor = removed.filter((x) => x !== it.id);
+                      const swap = boxSwap[it.id] || { item_id: "", custom: "" };
                       const presets = box ? boxPresets(box.parts) : [];
                       const noteOpen = it.id in itemNotes;
                       return (
@@ -983,12 +1036,17 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                 </div>
                                 <div className="mt-1 grid gap-1">
                                   {presets.map((preset) => {
-                                    const on = sameSet(removed, preset.remove);
+                                    const on = sameSet(aroundAnchor, preset.remove);
                                     return (
                                       <button
                                         key={preset.key}
                                         type="button"
-                                        onClick={() => setBoxRemove((prev) => ({ ...prev, [it.id]: preset.remove }))}
+                                        onClick={() =>
+                                          setBoxRemove((prev) => ({
+                                            ...prev,
+                                            [it.id]: anchorOut ? [...preset.remove, it.id] : preset.remove,
+                                          }))
+                                        }
                                         aria-pressed={on}
                                         className={
                                           "rounded-md px-1.5 py-1 text-[11px] font-semibold transition " +
@@ -1008,14 +1066,66 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                   aria-expanded={!!openContents[it.id]}
                                   className="mt-1.5 text-[11px] font-semibold text-[var(--anchor-green)] underline"
                                 >
-                                  {openContents[it.id] ? "Done" : "Take items out of the box"}
+                                  {openContents[it.id] ? "Done" : "Take items out or swap the anchor"}
                                 </button>
                                 {openContents[it.id] && (
                                   <div className="mt-1 grid gap-1">
-                                    <label className="flex items-start gap-1.5 text-[11px] text-[var(--anchor-gray)]">
-                                      <input type="checkbox" checked disabled className="mt-0.5" />
-                                      <span>The anchor</span>
+                                    <label className="flex items-start gap-1.5 text-[11px] leading-snug text-[var(--anchor-deep)]">
+                                      <input
+                                        type="checkbox"
+                                        checked={!anchorOut}
+                                        onChange={() => toggleBoxPart(it.id, it.id)}
+                                        className="mt-0.5"
+                                      />
+                                      <span>{it.name} (the anchor)</span>
                                     </label>
+                                    {/* Taking the anchor out: send the box with
+                                        nothing in its place, another anchor off
+                                        the shelf, or one that's custom-ordered. */}
+                                    {anchorOut && (
+                                      <div className="ml-5 grid gap-1">
+                                        <select
+                                          value={boxSwap[it.id] ? swap.item_id || CUSTOM_SWAP : ""}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            setBoxSwap((prev) => {
+                                              const next = { ...prev };
+                                              if (!v) delete next[it.id];
+                                              else if (v === CUSTOM_SWAP) next[it.id] = { item_id: "", custom: swap.custom };
+                                              else next[it.id] = { item_id: v, custom: "" };
+                                              return next;
+                                            });
+                                          }}
+                                          aria-label={`What goes in the ${it.name} box instead`}
+                                          className="w-full rounded-md border border-[var(--border-default)] bg-white px-1.5 py-1 text-[11px]"
+                                        >
+                                          <option value="">No anchor in its place</option>
+                                          <option value={CUSTOM_SWAP}>A custom anchor (not in inventory)…</option>
+                                          <optgroup label="Replace with a loose anchor">
+                                            {swapChoices(it.id).map((a) => (
+                                              <option key={a.id} value={a.id}>
+                                                {a.name} ({a.quantity_available} loose)
+                                              </option>
+                                            ))}
+                                          </optgroup>
+                                        </select>
+                                        {boxSwap[it.id] && !swap.item_id && (
+                                          <input
+                                            type="text"
+                                            value={swap.custom}
+                                            onChange={(e) =>
+                                              setBoxSwap((prev) => ({
+                                                ...prev,
+                                                [it.id]: { item_id: "", custom: e.target.value },
+                                              }))
+                                            }
+                                            placeholder="Describe the custom anchor…"
+                                            maxLength={200}
+                                            className="w-full rounded-md border border-[var(--border-default)] bg-white px-1.5 py-1 text-[11px]"
+                                          />
+                                        )}
+                                      </div>
+                                    )}
                                     {box.parts
                                       .filter((p) => p.kind !== "anchor")
                                       .map((p) => (
@@ -1038,7 +1148,7 @@ export default function MarketingOrderForm({ onSubmitted }: { onSubmitted?: () =
                                   </div>
                                 )}
                                 <div className="mt-1 text-[10px] leading-snug text-[var(--anchor-gray)]">
-                                  {describeBoxChoice(box.parts, removed)}
+                                  {describeBoxChoice(box.parts, removed, swapFor(it.id)?.name)}
                                 </div>
                               </div>
                             )}
