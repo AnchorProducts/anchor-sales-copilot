@@ -361,7 +361,7 @@ export default function PizzaBoxesTab({
       `<!doctype html><html><head><title>Pizza box labels</title>` +
         `<style>@page{margin:0.4in}body{font-family:system-ui,-apple-system,sans-serif;margin:0;color:#0f2e2a}` +
         `.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.12in}` +
-        `.lbl{border:1px dashed #cfd6d2;border-radius:10px;padding:0.1in;height:2.45in;box-sizing:border-box;` +
+        `.lbl{padding:0.1in;height:2.45in;box-sizing:border-box;` +
         `display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;break-inside:avoid}` +
         `.lbl img{width:1.5in;height:1.5in;margin:2px 0}` +
         `.kit{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#1f8a4c}` +
