@@ -6,6 +6,7 @@
 //   Box types        — every anchor that ships as a box: how many are assembled
 //                      and ready, how many more the loose stock could make, the
 //                      Assemble / Unbox controls, and how many labels to print.
+//                      A new anchor that isn't in inventory yet is added here.
 //   Not set up yet   — samples that aren't boxes, one tap from being one.
 //   Box scans        — each pass of the scanner as one entry.
 //   What's in a box  — each series' pieces, one dropdown per slot, and the
@@ -25,6 +26,7 @@ import {
   boxParts,
   boxScanUrl,
   buildableBoxes,
+  defaultLocationForCategory,
   findKitPiece,
   findReadyBox,
   isBoxType,
@@ -103,6 +105,7 @@ export default function PizzaBoxesTab({
   const [assembleQty, setAssembleQty] = useState<Record<string, string>>({});
   const [setupKit, setSetupKit] = useState<Record<string, string>>({});
   const [boxKit, setBoxKit] = useState<PackagingKit>("2000");
+  const [newBox, setNewBox] = useState<{ name: string; kit: string; qty: string } | null>(null);
   const [scanLimit, setScanLimit] = useState(SCAN_PAGE);
   const [working, setWorking] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -280,6 +283,47 @@ export default function PizzaBoxesTab({
     }
   }
 
+  // A brand-new anchor that ships as a box: a sample item, offered with a box,
+  // in the series picked. Its photo, cost and the rest are set in the editor.
+  async function addBoxType() {
+    if (!newBox) return;
+    const name = newBox.name.trim();
+    const kit = newBox.kit || seriesFromName(name) || "";
+    if (!name) {
+      setErr("Give the new anchor a name.");
+      return;
+    }
+    if (!kit) {
+      setErr(`Pick a series for ${name}.`);
+      return;
+    }
+    if (items.some((it) => it.name.trim().toLowerCase() === name.toLowerCase())) {
+      setErr(`There's already an item called ${name} — set it up as a box from the list below instead.`);
+      return;
+    }
+    setWorking(true);
+    setErr(null);
+    setNotice(null);
+    try {
+      await send("/api/inventory", "POST", {
+        name,
+        category: "samples",
+        location: defaultLocationForCategory("samples"),
+        quantity_available: newBox.qty || "0",
+        pizza_box: true,
+        packaging_kit: kit,
+      });
+      setNewBox(null);
+      setBoxKit(kit as PackagingKit);
+      setNotice({ text: `Added ${name} as a ${packagingKitLabel(kit)} box type. Tap its name to add a photo.`, warn: false });
+      await onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : `Couldn't add ${name}.`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   // Point one slot of a series' box at a different item — or at nothing. The
   // (kit, role) pair is unique, so whatever holds the slot gives it up first;
   // the scanner, the order form and the labels all follow the new item.
@@ -398,16 +442,80 @@ export default function PizzaBoxesTab({
             title={`🍕 Box types · ${shownReady} ready`}
             hint="Assemble takes a box's contents off the loose counts. Scanning a box out takes it off Ready; Unbox puts the contents back."
             action={
-              <button
-                type="button"
-                onClick={copyScannerLink}
-                disabled={!base}
-                className="text-xs font-semibold text-[var(--anchor-green)] hover:underline disabled:opacity-50"
-              >
-                {copied ? "Copied!" : "Copy scanner link"}
-              </button>
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setNewBox(newBox ? null : { name: "", kit: boxKit, qty: "" })}
+                  className="text-[var(--anchor-green)] hover:underline"
+                >
+                  {newBox ? "Cancel" : "+ New box type"}
+                </button>
+                <button
+                  type="button"
+                  onClick={copyScannerLink}
+                  disabled={!base}
+                  className="text-[var(--anchor-green)] hover:underline disabled:opacity-50"
+                >
+                  {copied ? "Copied!" : "Copy scanner link"}
+                </button>
+              </div>
             }
           >
+            {newBox && (
+              <div className="mb-3 rounded-xl border border-[var(--anchor-green)] bg-[var(--surface-soft)] p-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-[var(--anchor-deep)]">New box type</div>
+                <p className="mt-0.5 text-[11px] text-[var(--anchor-gray)]">
+                  For an anchor that isn&apos;t in inventory yet. It&apos;s added as a sample and gets that
+                  series&apos; pieces and the printables below. Already in inventory? Use the list further down.
+                </p>
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="min-w-0 flex-1 basis-full text-[11px] text-[var(--anchor-gray)] sm:basis-auto">
+                    Anchor name
+                    <Input
+                      placeholder="e.g. 2600 Sika PVC"
+                      value={newBox.name}
+                      onChange={(ev) => {
+                        const name = ev.target.value;
+                        // Follow the name's series until someone picks one.
+                        const guess = seriesFromName(name);
+                        setNewBox((prev) =>
+                          prev ? { ...prev, name, kit: guess && prev.kit === (seriesFromName(prev.name) || boxKit) ? guess : prev.kit } : prev
+                        );
+                      }}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter") addBoxType();
+                      }}
+                      autoFocus
+                    />
+                  </label>
+                  <label className="w-36 shrink-0 text-[11px] text-[var(--anchor-gray)]">
+                    Series
+                    <Select value={newBox.kit} onChange={(ev) => setNewBox({ ...newBox, kit: ev.target.value })}>
+                      {PIZZA_BOX_KITS.map((k) => (
+                        <option key={k.key} value={k.key}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="w-24 shrink-0 text-[11px] text-[var(--anchor-gray)]">
+                    Loose anchors
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      placeholder="0"
+                      className="text-center"
+                      value={newBox.qty}
+                      onChange={(ev) => setNewBox({ ...newBox, qty: ev.target.value })}
+                    />
+                  </label>
+                  <Button onClick={addBoxType} disabled={disabled || !newBox.name.trim()}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            )}
             {/* One row: the series pills, then the label controls. Only Print is a
                 full button; the rest are text links so the header stays quiet. */}
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -461,7 +569,7 @@ export default function PizzaBoxesTab({
             </div>
             {shownBoxes.length === 0 ? (
               <p className="text-sm text-[var(--anchor-gray)]">
-                No {packagingKitLabel(boxKit)} box types yet — set a sample up as a pizza box below.
+                No {packagingKitLabel(boxKit)} box types yet — add a new one, or set a sample up as a pizza box below.
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-2">
