@@ -1,10 +1,9 @@
 /* ============================================================================
  * The "Site live" flag — framework-free constants.
  *
- * Everything built for the App ↔ Portal reconciliation (Portal Access, the
- * shared document index, and the whole Pitch to Marketing workflow) ships
- * DARK. Nothing is visible to anyone — reps, marketing, or admins — until an
- * admin flips "Site live" in /admin/tools.
+ * Everything built for the App ↔ Portal reconciliation (Portal Access and the
+ * shared document index) ships DARK. Nothing is visible to anyone — reps,
+ * marketing, or admins — until an admin flips "Site live" in /admin/tools.
  *
  * IMPORTANT — this key inverts the usual admin_tools convention. Everywhere
  * else in that table a missing row means ACTIVE, so new tiles light up by
@@ -23,19 +22,6 @@ export function siteLiveFrom(rows: Array<{ key: string; active: boolean }> | nul
 /** What flipping the switch reveals — rendered in the admin toggle so it is
  *  obvious what is about to go live. */
 export const SITE_LIVE_SURFACES = [
-  {
-    label: "Pitch to Marketing",
-    detail: "Lets any internal user pitch a marketing idea and track the decision (/dashboard/pitch).",
-  },
-  {
-    label: "Submissions inbox",
-    detail:
-      "The marketing/admin review queue for those pitches — at /marketing/submissions, and as a third tab in the Marketing Admin Center.",
-  },
-  {
-    label: "Email templates",
-    detail: "Lets marketing write and design the pitch notification emails (/marketing/email-templates).",
-  },
   {
     label: "All Documents",
     detail: "Flat, searchable index over the shared resource library (/assets/documents).",
