@@ -11,9 +11,7 @@ import { FeatureGraphic, ToolLoader } from "@/app/components/visuals/FeatureGrap
 import { salesToolKey, HERO_FEATURE_TO_TOOL_KEY, type SalesAudience } from "@/lib/salesTools";
 import { isRestrictedTool } from "@/lib/toolAccess";
 import { useToolAccess } from "@/lib/role/useToolAccess";
-import { usePitchBadge } from "@/lib/pitches/seen";
-import { usePortalAccess } from "@/lib/role/usePortalAccess";
-import { useSiteLive } from "@/lib/flags/useSiteLive";
+import { isInternalEmail } from "@/lib/auth/internalEmail";
 
 type SearchProductRow = {
   id: string;
@@ -214,7 +212,7 @@ function RepPopover({
   );
 
   return (
-    <div role="menu" className="flex max-h-[75vh] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+    <div role="menu" className="flex max-h-[75vh] flex-col overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
       {showStateFilter && (
         <div className="flex flex-wrap gap-1.5 border-b border-black/5 px-2 py-2">
           <FilterChip label="All" active={stateFilter === "all"} onClick={() => setStateFilter("all")} />
@@ -295,7 +293,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 
 function StatesPopover({ states, onClose }: { states: string[]; onClose: () => void }) {
   return (
-    <div role="menu" className="overflow-hidden rounded-2xl border border-black/10 bg-white p-1.5 text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+    <div role="menu" className="overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-1.5 text-left shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
       <div className="px-3 pb-1 pt-2">
         <div className="text-sm font-semibold text-[var(--anchor-deep)]">Service States</div>
         <div className="text-[11px] leading-snug text-[var(--anchor-gray)]">
@@ -413,9 +411,9 @@ export default function DashboardPage() {
 
       if (!prof) {
         const email = (user.email || "").trim().toLowerCase();
-        const isInternalEmail = email.endsWith("@anchorp.com");
-        const roleToSet = isInternalEmail ? "anchor_rep" : "external_rep";
-        const user_type = isInternalEmail ? "internal" : "external";
+        const internal = isInternalEmail(email);
+        const roleToSet = internal ? "anchor_rep" : "external_rep";
+        const user_type = internal ? "internal" : "external";
         const meta = user.user_metadata || {};
         const { data: created } = await supabase
           .from("profiles")
@@ -573,14 +571,6 @@ export default function DashboardPage() {
   const isAdmin = effectiveRole === "admin";
   const isInternal = effectiveRole === "admin" || effectiveRole === "anchor_rep";
 
-  // Portal level/team drives the shared-surface tiles (Pitch to Marketing, and
-  // the Submissions inbox for marketing reviewers). `hasPitchNews` badges the
-  // tile when marketing has decided on, or asked about, one of this user's
-  // pitches since they last opened the page.
-  const { access: portalAccess } = usePortalAccess();
-  const { live: siteLive } = useSiteLive();
-  // Only poll for pitch activity once the feature is actually live.
-  const hasPitchNews = usePitchBadge(siteLive);
 
   // Search suggestions are filtered by role (internal sees internal_assets).
   // When an admin flips "View app as", drop the cache and clear the in-flight
@@ -721,34 +711,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Pitch to Marketing — open to every internal user, whatever their team
-  // (§5.6 B). External reps don't pitch, so they never see it. Both of these
-  // tiles stay hidden from everyone until an admin flips "Site live".
-  if (siteLive && roleReady && isInternal) {
-    actions.push({
-      key: "pitch",
-      href: "/dashboard/pitch",
-      label: "Pitch to Marketing",
-      desc: "Send marketing a campaign, event, or content idea — and track what they decide.",
-      icon: "sparkles",
-      badge: hasPitchNews ? "New reply" : "Marketing",
-    });
-  }
-
-  // The reviewer side of the same workflow, for marketing and admins.
-  // portalAccess.marketing is already false while the site is dark, but the
-  // explicit check keeps the gate obvious at the call site.
-  if (siteLive && portalAccess.marketing) {
-    actions.push({
-      key: "submissions",
-      href: "/marketing/submissions",
-      label: "Submissions",
-      desc: "Review marketing pitches from the rest of the company — approve, decline, or ask for more.",
-      icon: "clipboard",
-      badge: "Marketing",
-    });
-  }
-
   // Hide any sales tool an admin deactivated for this audience. Admin-only
   // tiles (admin/reports) are never sales tools, so they pass through.
   if (viewerIsSales) {
@@ -844,7 +806,7 @@ export default function DashboardPage() {
         {/* ── Greeting ───────────────────────────────────────────────────── */}
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[26px] font-bold leading-[1.1] tracking-tight text-[var(--anchor-deep)] sm:text-[30px]">
+            <h1 className="text-[26px] font-bold leading-[1.1] tracking-tight text-black sm:text-[30px]">
               Hello<br />{greetingName}!
             </h1>
             <p className="mt-2 text-sm text-[var(--anchor-gray)]">
@@ -939,7 +901,7 @@ export default function DashboardPage() {
 
         {/* ── Quick actions bento — tile width scales with how much you use each app ── */}
         <div data-tutorial="quick-actions">
-          <h2 className="px-1 text-[16px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+          <h2 className="px-1 text-[16px] font-bold tracking-tight text-black">Quick Actions</h2>
           <div className="mt-3 grid grid-cols-2 gap-3 [grid-auto-flow:dense]">
             {(() => {
               const featureKeyFor = (key: string) => (key === "project" ? "consults" : key);
@@ -1060,7 +1022,7 @@ export default function DashboardPage() {
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Topbar */}
           <header className="flex items-center justify-between gap-6 px-8 py-6">
-            <h1 className="text-[28px] font-bold tracking-tight text-[var(--anchor-deep)]">{t("dashboard")}</h1>
+            <h1 className="text-[28px] font-bold tracking-tight text-black">{t("dashboard")}</h1>
 
             <div ref={searchBoxRefDesktop} className="relative max-w-md flex-1">
               <form onSubmit={handleSearch} className="flex h-12 items-center gap-3 rounded-full bg-white px-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
@@ -1140,7 +1102,7 @@ export default function DashboardPage() {
 
             {/* Quick Actions bento — tile width scales with how much you use each app */}
             <div className="mt-5" data-tutorial="quick-actions">
-              <h2 className="px-1 text-[18px] font-bold tracking-tight text-[var(--anchor-deep)]">Quick Actions</h2>
+              <h2 className="px-1 text-[18px] font-bold tracking-tight text-black">Quick Actions</h2>
               {/* Top 2 actions by 30-day usage count get col-span-2; rest 1-wide.
                   Falls back to first action only when no usage data yet. */}
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:[grid-auto-flow:dense]">
