@@ -71,7 +71,7 @@ function Section({
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-sm font-bold text-[var(--anchor-deep)]">{title}</h2>
+          <h2 className="text-sm font-bold text-black">{title}</h2>
           {hint && <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">{hint}</p>}
         </div>
         {action}
@@ -439,7 +439,7 @@ export default function PizzaBoxesTab({
       <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="grid min-w-0 grid-cols-1 gap-3">
           <Section
-            title={`🍕 Box types · ${shownReady} ready`}
+            title={`Box types · ${shownReady} ready`}
             hint="Assemble takes a box's contents off the loose counts. Scanning a box out takes it off Ready; Unbox puts the contents back."
             action={
               <div className="flex items-center gap-3 text-xs font-semibold">

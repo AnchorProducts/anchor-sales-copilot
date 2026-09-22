@@ -121,7 +121,7 @@ export default function AdminRooftopReportsPage() {
             </Card>
           ) : (
             <>
-              <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+              <Card className="p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-black">All Rooftop Assessments</div>

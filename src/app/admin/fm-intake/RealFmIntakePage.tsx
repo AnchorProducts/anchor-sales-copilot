@@ -11,6 +11,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import FMIntakeForm from "@/app/components/fm-intake/FMIntakeForm";
 import NetSuitePanel from "@/app/components/netsuite/NetSuitePanel";
 import { fmIntakeStatusLabel, fmIntakeStatusPill } from "@/lib/fmIntake";
+import { Icon } from "@/app/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -383,7 +384,7 @@ function SubmissionsList({
               </div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--anchor-gray)]">
                 {r.equipment.length > 0 && <span>{r.equipment.join(", ")}</span>}
-                {r.attachment_count > 0 && <span>📎 {r.attachment_count}</span>}
+                {r.attachment_count > 0 && <span className="inline-flex items-center gap-1"><Icon name="paperclip" className="h-3.5 w-3.5" />{r.attachment_count}</span>}
                 {r.reviewed_by_name && <span>Reviewed by {r.reviewed_by_name}</span>}
               </div>
             </Card>
@@ -460,7 +461,7 @@ function Detail({
           <div className="space-y-4 lg:col-span-2">
             <Card className="p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold text-[var(--anchor-deep)]">{name}</h2>
+                <h2 className="text-lg font-bold text-black">{name}</h2>
                 {row?.company_name && (
                   <span className="text-sm text-[var(--anchor-gray)]">· {row.company_name}</span>
                 )}
@@ -516,7 +517,7 @@ function Detail({
                           <img src={a.url} alt={a.filename} className="h-24 w-28 object-cover" />
                         ) : (
                           <div className="flex h-24 w-28 items-center justify-center bg-[var(--surface-soft)] text-xs text-[var(--anchor-gray)]">
-                            📄 PDF
+                            PDF
                           </div>
                         )}
                         <div className="truncate px-1.5 py-1 text-[10px] text-[var(--anchor-gray)]">
@@ -608,7 +609,7 @@ function Detail({
                         type="button"
                         onClick={() => onConfirmDelete(false)}
                         disabled={deleting}
-                        className="rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm font-semibold text-[var(--anchor-deep)]"
+                        className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm font-semibold text-[var(--anchor-deep)]"
                       >
                         Cancel
                       </button>

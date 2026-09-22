@@ -116,7 +116,7 @@ export default function RooftopLogicPage() {
             <Card className="mb-4 p-4 text-sm text-[var(--anchor-gray)]">
               <p>
                 This is the system prompt that drives the <strong>/rooftop</strong> assessment — every
-                question, branch, and ⚠️ compliance flag. Edits take effect on the next audit; no deploy needed.
+                question, branch, and compliance flag. Edits take effect on the next audit; no deploy needed.
               </p>
               <p className="mt-2">
                 Keep the{" "}

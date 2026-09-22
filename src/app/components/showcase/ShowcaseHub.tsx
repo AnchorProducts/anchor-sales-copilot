@@ -245,7 +245,7 @@ function Hero({
   onAdd: () => void;
 }) {
   return (
-    <Card className="border-t-4 border-t-[var(--anchor-green)] p-5 sm:p-6">
+    <Card className="p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="ds-caption">Mobile showcase</div>

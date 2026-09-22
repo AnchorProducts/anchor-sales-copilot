@@ -88,7 +88,7 @@ export function MatrixFilterMenu({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-[var(--border-default)] bg-white p-3 shadow-lg sm:left-auto sm:right-0 sm:w-72">
+        <div className="absolute left-0 z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-3 shadow-lg sm:left-auto sm:right-0 sm:w-72">
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Time</span>

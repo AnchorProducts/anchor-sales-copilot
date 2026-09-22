@@ -8,6 +8,7 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { getViewAs } from "@/lib/role/viewAs";
+import { Icon } from "@/app/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -127,9 +128,9 @@ export default function SupportListPage() {
 
       <div className="mx-auto max-w-3xl px-5 py-6 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {/* New request form */}
-        <Card className="border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="p-6">
           <div className="ds-caption">New request</div>
-          <h1 className="mt-2 text-2xl text-[var(--anchor-deep)]">Need a hand?</h1>
+          <h1 className="mt-2 text-2xl text-black">Need a hand?</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
             Anchor admins read every request. We&rsquo;ll reply in the app and email you when there&rsquo;s an answer.
           </p>
@@ -142,7 +143,7 @@ export default function SupportListPage() {
                 onChange={(e) => setSubject(e.target.value)}
                 maxLength={200}
                 placeholder="What do you need help with?"
-                className="mt-1 block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
+                className="mt-1 block w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
               />
             </div>
             <div>
@@ -153,7 +154,7 @@ export default function SupportListPage() {
                 maxLength={5000}
                 rows={6}
                 placeholder="Describe the issue, what you tried, and anything an admin needs to know."
-                className="mt-1 block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
+                className="mt-1 block w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
               />
             </div>
             <div>
@@ -185,7 +186,7 @@ export default function SupportListPage() {
                         aria-label="Remove image"
                         className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white"
                       >
-                        ✕
+                        <Icon name="xmark" className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
@@ -211,7 +212,7 @@ export default function SupportListPage() {
 
         {/* Your past requests */}
         <div data-tutorial="support-list" className="mt-8">
-          <h2 className="px-1 text-lg font-bold text-[var(--anchor-deep)]">Your requests</h2>
+          <h2 className="px-1 text-lg font-bold text-black">Your requests</h2>
           {loading ? (
             <Card className="mt-3 p-5 text-sm text-black/60">Loading…</Card>
           ) : error ? (

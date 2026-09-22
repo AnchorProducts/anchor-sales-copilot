@@ -126,9 +126,9 @@ export default function SupportThreadPage() {
           <Card className="mt-4 p-5 text-sm text-[#991b1b]">{error || "Not found."}</Card>
         ) : (
           <>
-            <Card className="mt-4 border-t-4 border-t-[var(--anchor-green)] p-5">
+            <Card className="mt-4 p-5">
               <div className="flex items-center justify-between gap-3">
-                <h1 className="text-xl font-bold text-[var(--anchor-deep)]">{request.subject}</h1>
+                <h1 className="text-xl font-bold text-black">{request.subject}</h1>
                 <span className={
                   "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
                   (request.status === "open"
@@ -181,7 +181,7 @@ export default function SupportThreadPage() {
                   rows={4}
                   maxLength={5000}
                   placeholder="Add more detail or follow up here."
-                  className="block w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
+                  className="block w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm outline-none focus:border-[var(--anchor-green)]"
                 />
                 <ImagePicker images={replyImages} onChange={setReplyImages} />
                 {sendError && (

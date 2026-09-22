@@ -154,7 +154,7 @@ export function AdminViewAsSwitcher() {
         <div
           role="menu"
           aria-label="Switch role view"
-          className="w-60 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
+          className="w-60 overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
         >
           <div className="border-b border-black/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-black/50">
             View app as

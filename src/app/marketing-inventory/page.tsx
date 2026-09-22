@@ -33,7 +33,7 @@ function BoxedStock({ ready, loose }: { ready: number; loose: number }) {
   if (ready + loose <= 0) return <span className="font-semibold text-[var(--anchor-gray)]">Out of stock</span>;
   return (
     <span className="font-semibold text-green-700">
-      🍕 {ready} in pizza boxes
+      {ready} in pizza boxes
       {loose > 0 && <span className="font-normal text-[var(--anchor-gray)]"> · {loose} loose</span>}
     </span>
   );
@@ -228,7 +228,7 @@ export default function MarketingInventoryPage() {
       />
 
       <div className="mx-auto max-w-5xl px-5 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="mb-4 p-6">
           <div className="ds-caption">Marketing Inventory</div>
           <h1 className="mt-2 text-2xl">Available marketing stock</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">
@@ -274,7 +274,7 @@ export default function MarketingInventoryPage() {
                         : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)]"
                     }`}
                   >
-                    🍕 Pizza boxes
+                    Pizza boxes
                   </button>
                 )}
                 {orderedCategories.map((c) => (
@@ -298,7 +298,7 @@ export default function MarketingInventoryPage() {
               <Card className="mb-4 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="text-base font-bold text-[var(--anchor-deep)]">🍕 Pizza boxes</h2>
+                    <h2 className="text-base font-bold text-black">Pizza boxes</h2>
                     <p className="mt-0.5 text-xs text-[var(--anchor-gray)]">
                       Anchor samples are packed in their pizza boxes. On a marketing order a sample ships in its
                       box — take anything out of it, or ask for just the anchor
@@ -316,12 +316,12 @@ export default function MarketingInventoryPage() {
                         href={scannerUrl}
                         className="inline-flex items-center rounded-xl bg-[var(--anchor-green)] px-3 py-2 text-xs font-semibold text-white"
                       >
-                        📷 Scan boxes out
+                        Scan boxes out
                       </a>
                     )}
                     <a
                       href="/marketing-orders"
-                      className="inline-flex items-center rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)]"
+                      className="inline-flex items-center rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)]"
                     >
                       Order boxes
                     </a>
@@ -441,7 +441,7 @@ export default function MarketingInventoryPage() {
       <Modal open={!!checkoutItem} onClose={() => setCheckoutItem(null)} className="max-w-md">
         {checkoutItem && (
           <div className="p-5">
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Check out</h2>
+            <h2 className="text-lg font-bold text-black">Check out</h2>
             <p className="mt-0.5 text-sm text-[var(--anchor-gray)]">
               {checkoutItem.name} · {checkoutItem.quantity_available} available
             </p>

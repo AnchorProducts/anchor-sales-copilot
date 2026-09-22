@@ -28,9 +28,9 @@ export default function AdminWalkthroughsPage() {
 
       <div className="ds-container py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:py-10">
         <div className="mx-auto max-w-3xl">
-          <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+          <Card className="mb-4 p-6">
             <div className="ds-caption">Walkthroughs</div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--anchor-deep)]">Page walkthroughs</h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-black">Page walkthroughs</h1>
             <p className="mt-1 text-sm text-[var(--anchor-gray)]">
               Preview the guided tour users see on each page. We&rsquo;ll take you to the page and run its
               walkthrough &mdash; exactly what a user sees when they tap the &ldquo;?&rdquo; button.

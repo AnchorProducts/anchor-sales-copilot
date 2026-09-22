@@ -581,7 +581,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                             </p>
                           ) : (
                             <div className="mb-5 grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-                              <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
+                              <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4">
                                 <div className="ds-caption mb-3">Event breakdown</div>
                                 <ul className="space-y-2 text-sm">
                                   {Object.entries(u.events.byType)
@@ -596,7 +596,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                                     ))}
                                 </ul>
                               </div>
-                              <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
+                              <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4">
                                 <div className="ds-caption mb-3">Top pages</div>
                                 {u.events.topPages.length === 0 ? (
                                   <div className="text-sm text-[var(--anchor-gray)]">—</div>
@@ -616,7 +616,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                                   </ul>
                                 )}
                               </div>
-                              <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 md:col-span-2 xl:col-span-1">
+                              <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4 md:col-span-2 xl:col-span-1">
                                 <div className="ds-caption mb-3">Top clicks</div>
                                 {u.events.topClicks.length === 0 ? (
                                   <div className="text-sm text-[var(--anchor-gray)]">
@@ -655,7 +655,7 @@ function CategoryAnalyticsView({ category }: { category: ActivityCategory }) {
                               {u.reports.map((r) => (
                                 <div
                                   key={r.id}
-                                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-default)] bg-white px-4 py-3"
+                                  className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-4 py-3"
                                 >
                                   <div className="min-w-0">
                                     <div className="truncate text-sm font-semibold text-[var(--anchor-deep)]">

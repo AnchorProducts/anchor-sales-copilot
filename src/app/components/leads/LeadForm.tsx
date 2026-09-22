@@ -661,7 +661,7 @@ export default function LeadForm() {
           <span>Draft saved on this device — you can leave and come back to finish.</span>
         </div>
       )}
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
+      <Card className="p-4 sm:p-5">
         {profile && (
           <div className="rounded-[14px] border border-black/10 bg-[var(--surface-soft)]">
             <button

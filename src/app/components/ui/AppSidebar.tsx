@@ -26,7 +26,7 @@ function shouldHide(pathname: string) {
 }
 
 function NavIcon({ kind, className = "h-5 w-5" }: { kind: IconKind; className?: string }) {
-  const c = { fill: "none" as const, stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const c = { fill: "none" as const, stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {
     case "grid":
       return (<svg viewBox="0 0 24 24" className={className} {...c}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>);
@@ -59,10 +59,10 @@ function NavLink({ href, kind, label, active, tutorialKey }: { href: string; kin
       href={href}
       data-tutorial={tutorialKey}
       className={
-        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition " +
+        "flex items-center gap-3 rounded-[10px] px-3 py-2 text-[14px] font-medium transition " +
         (active
-          ? "bg-[var(--anchor-green)] text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
-          : "text-white/75 hover:bg-white/10 hover:text-white")
+          ? "bg-[var(--anchor-green)] text-white"
+          : "text-black/80 hover:bg-[var(--mo-fill)]")
       }
     >
       <NavIcon kind={kind} />
@@ -121,20 +121,22 @@ export function AppSidebar() {
   const isPath = (p: string, exact = false) => (exact ? pathname === p : pathname === p || pathname.startsWith(p + "/"));
 
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-dvh w-64 flex-col bg-[var(--anchor-deep)] px-4 py-6 text-white lg:flex">
+    // A light, frosted sidebar in the macOS / iPadOS style, with the brand green
+    // as the selection color.
+    <aside className="fixed left-0 top-0 z-40 hidden h-dvh w-64 flex-col border-r border-[var(--mo-sep)] bg-[var(--surface-card)]/80 px-3 py-6 text-black backdrop-blur-2xl backdrop-saturate-150 lg:flex">
       <Link href="/dashboard/settings" className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--anchor-mint)] text-sm font-bold text-[var(--anchor-deep)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--anchor-green)] text-sm font-semibold text-white">
           {initials(fullName)}
         </div>
         <div className="min-w-0 leading-tight">
-          <div className="truncate text-sm font-bold">{fullName || "User"}</div>
-          <div className="text-[11px] text-white/60">
+          <div className="truncate text-[15px] font-semibold text-black">{fullName || "User"}</div>
+          <div className="text-[12px] text-[var(--anchor-gray)]">
             {isAdmin ? "Admin" : isInternal ? "Anchor Rep" : isExternal ? "External Rep" : ""}
           </div>
         </div>
       </Link>
 
-      <nav data-tutorial="primary-nav" className="mt-8 flex flex-1 flex-col gap-1">
+      <nav data-tutorial="primary-nav" className="mt-7 flex flex-1 flex-col gap-0.5">
         <NavLink href="/dashboard" kind="grid" label="Dashboard" active={isPath("/dashboard", true)} tutorialKey="nav-dashboard" />
         <NavLink href="/chat" kind="sparkles" label="Copilot" active={isPath("/chat")} />
         <NavLink href="/assets" kind="library" label="Assets" active={isPath("/assets")} />
@@ -177,7 +179,7 @@ export function AppSidebar() {
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-[14px] font-medium text-black/80 transition hover:bg-[var(--mo-fill)]"
         >
           <NavIcon kind="logout" />
           <span>Sign out</span>

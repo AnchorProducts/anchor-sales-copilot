@@ -273,7 +273,7 @@ export default function AdminSalesRepsPage() {
           ) : (
             <>
               {/* Add / Edit form */}
-              <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+              <Card className="p-5">
                 <div className="text-sm font-semibold text-black">
                   {draft.id ? "Edit Salesperson" : "Add Salesperson"}
                 </div>
@@ -389,7 +389,7 @@ export default function AdminSalesRepsPage() {
               </Card>
 
               {/* List */}
-              <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+              <Card className="p-5">
                 <div className="text-sm font-semibold text-black">Current Salespeople</div>
                 <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
                   {externalReps.length} external · {internalReps.length} internal

@@ -93,7 +93,7 @@ export default function AdminNotableProjectsPage() {
     <main className="ds-page">
 
       <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="mb-4 p-6">
           <div className="ds-caption">Admin</div>
           <h1 className="mt-2 text-2xl">Notable Projects</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">

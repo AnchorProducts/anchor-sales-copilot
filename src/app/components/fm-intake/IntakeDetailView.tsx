@@ -113,7 +113,7 @@ export default function IntakeDetailView({ detail }: { detail: any }) {
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-bold text-[var(--anchor-deep)]">{name}</h2>
+          <h2 className="text-lg font-bold text-black">{name}</h2>
           {detail.company_name && (
             <span className="text-sm text-[var(--anchor-gray)]">· {detail.company_name}</span>
           )}
@@ -166,7 +166,7 @@ export default function IntakeDetailView({ detail }: { detail: any }) {
                     <img src={a.url} alt={a.filename} className="h-24 w-28 object-cover" />
                   ) : (
                     <div className="flex h-24 w-28 items-center justify-center bg-[var(--surface-soft)] text-xs text-[var(--anchor-gray)]">
-                      📄 PDF
+                      PDF
                     </div>
                   )}
                   <div className="truncate px-1.5 py-1 text-[10px] text-[var(--anchor-gray)]">{a.filename}</div>
@@ -178,7 +178,7 @@ export default function IntakeDetailView({ detail }: { detail: any }) {
       )}
 
       {detail.review_notes && (
-        <Card className="border-t-4 border-t-[var(--anchor-green)] p-4">
+        <Card className="p-4">
           <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-[var(--anchor-deep)]">
             Anchor review notes
           </h3>

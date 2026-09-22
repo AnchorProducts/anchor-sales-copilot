@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/app/components/ui/Card";
+import { Icon } from "@/app/components/ui/kit";
 
 type Tool = { key: string; label: string; description: string };
 type UserRow = { id: string; full_name: string | null; email: string | null; role: string | null };
@@ -33,7 +34,7 @@ function EmailAdder({ onAdd }: { onAdd: (email: string) => void }) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
           placeholder="+ Add email…"
-          className="h-9 w-full max-w-xs rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)] sm:w-56"
+          className="h-9 w-full max-w-xs rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)] sm:w-56"
         />
         <button
           type="button"
@@ -154,7 +155,7 @@ export default function ToolNotificationAssignments() {
 
       {pushConfigured === false && (
         <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-[#7c4a00]">
-          ⚠️ Push isn’t configured on this deployment (no VAPID keys). Assignments still save and
+          Push isn’t configured on this deployment (no VAPID keys). Assignments still save and
           emails still send, but no push goes out from here. Set <code>VAPID_PUBLIC_KEY</code>,{" "}
           <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code> on every deployment that
           handles form submissions (including the external rep app), then redeploy. Check any
@@ -192,7 +193,7 @@ export default function ToolNotificationAssignments() {
                         <span className="max-w-[200px] truncate" title={u ? userLabel(u) : uid}>
                           {u ? userLabel(u) : uid.slice(0, 8)}
                         </span>
-                        <button type="button" onClick={() => removeUser(tool.key, uid)} aria-label="Remove" className="text-[var(--anchor-deep)]/60 hover:text-red-600">✕</button>
+                        <button type="button" onClick={() => removeUser(tool.key, uid)} aria-label="Remove" className="text-[var(--anchor-deep)]/60 hover:text-red-600"><Icon name="xmark" className="h-4 w-4" /></button>
                       </span>
                     );
                   })}
@@ -201,7 +202,7 @@ export default function ToolNotificationAssignments() {
                   <select
                     value=""
                     onChange={(e) => { addUser(tool.key, e.target.value); e.target.value = ""; }}
-                    className="h-9 w-full max-w-xs rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)] sm:w-56"
+                    className="h-9 w-full max-w-xs rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)] sm:w-56"
                   >
                     <option value="">+ Add user…</option>
                     {unassigned.map((u) => (
@@ -221,7 +222,7 @@ export default function ToolNotificationAssignments() {
                   {emails.map((email) => (
                     <span key={email} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-xs text-[var(--anchor-deep)]">
                       <span className="max-w-[220px] truncate" title={email}>{email}</span>
-                      <button type="button" onClick={() => removeEmail(tool.key, email)} aria-label="Remove" className="text-[var(--anchor-deep)]/60 hover:text-red-600">✕</button>
+                      <button type="button" onClick={() => removeEmail(tool.key, email)} aria-label="Remove" className="text-[var(--anchor-deep)]/60 hover:text-red-600"><Icon name="xmark" className="h-4 w-4" /></button>
                     </span>
                   ))}
                 </div>

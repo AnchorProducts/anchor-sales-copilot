@@ -114,7 +114,7 @@ function NavItem({ href, active, ariaLabel, kind, tutorialKey }: { href: string;
       data-tutorial={tutorialKey}
       className={
         "flex h-12 items-center justify-center rounded-full transition " +
-        (active ? "bg-[var(--anchor-mint)] px-6 text-[var(--anchor-deep)]" : "w-12 text-white/70 hover:text-white")
+        (active ? "bg-[var(--anchor-green)] px-6 text-white" : "w-12 text-black/55 hover:text-black")
       }
     >
       <NavIcon kind={kind} />
@@ -222,7 +222,8 @@ export function MobileBottomNav() {
       <div
         ref={pillRef}
         className={
-          "pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--anchor-deep)] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)] " +
+          // Frosted like an iOS tab bar.
+          "pointer-events-auto flex items-center justify-around gap-2 rounded-full bg-[var(--surface-card)]/75 px-2.5 py-2 shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_12px_32px_-8px_rgba(0,0,0,0.28)] backdrop-blur-xl backdrop-saturate-150 " +
           (covering ? HIDE_WHEN_OVERLAPPING_CLASS : SHOW_WHEN_CLEAR_CLASS)
         }
       >

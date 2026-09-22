@@ -20,8 +20,8 @@ export default function OrderDelayBanner({
   const when = at ? formatDateTime(at) : null;
 
   return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-      <div className="font-semibold">⏳ Delayed — this order is held up.</div>
+    <div className="rounded-[14px] bg-amber-500/10 px-3.5 py-3 text-[13px] text-amber-900">
+      <div className="font-semibold">Delayed · this order is held up.</div>
       {projectedShipDate && (
         <div className="mt-1">
           <span className="font-semibold">Projected ship date:</span> {formatDate(projectedShipDate)}

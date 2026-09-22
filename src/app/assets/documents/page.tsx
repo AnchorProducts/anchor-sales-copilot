@@ -182,7 +182,7 @@ export default function LibraryDocumentsPage() {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-10 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+              className="h-10 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
               aria-label="Filter by category"
             >
               <option value={ALL}>All categories</option>
@@ -192,7 +192,7 @@ export default function LibraryDocumentsPage() {
             <select
               value={solution}
               onChange={(e) => setSolution(e.target.value)}
-              className="h-10 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+              className="h-10 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
               aria-label="Filter by solution"
             >
               <option value={ALL}>All solutions</option>

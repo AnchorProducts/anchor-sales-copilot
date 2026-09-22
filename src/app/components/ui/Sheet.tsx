@@ -62,7 +62,7 @@ export default function Sheet({
 
         {title && (
           <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
-            <h2 className="text-sm font-bold text-[var(--anchor-deep)]">{title}</h2>
+            <h2 className="text-sm font-bold text-black">{title}</h2>
             <button
               type="button"
               onClick={onClose}

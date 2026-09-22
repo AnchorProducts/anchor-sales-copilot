@@ -491,7 +491,7 @@ export default function BoxScanPage({
     <main className="min-h-screen bg-[var(--surface-soft,#f6f7f5)] px-4 pb-28 pt-6">
       <div className="mx-auto max-w-md">
         <header className="mb-4 text-center">
-          <h1 className="text-xl font-bold text-[var(--anchor-deep,#0f2e2a)]">🍕 Pizza boxes</h1>
+          <h1 className="text-xl font-bold text-[var(--anchor-deep,#0f2e2a)]">Pizza boxes</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray,#5b6b66)]">
             {step === "scan"
               ? "Scan the label on every box you're taking, then review what's inside."
@@ -567,7 +567,7 @@ export default function BoxScanPage({
               <Scanner onFrame={onFrame} onClose={() => setScanning(false)} />
             ) : (
               <Button onClick={() => setScanning(true)} className="mb-4 w-full">
-                📷 {totalBoxes ? "Scan another box" : "Scan a box"}
+                {totalBoxes ? "Scan another box" : "Scan a box"}
               </Button>
             )}
 

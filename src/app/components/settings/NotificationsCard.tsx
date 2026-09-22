@@ -57,7 +57,7 @@ export default function NotificationsCard() {
   const blocked = state?.supported === true && state.permission === "denied";
 
   return (
-    <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+    <Card className="p-5">
       <div className="text-sm font-semibold text-black">Notifications</div>
       <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">
         Get a push notification on this device when something needs your attention. On iPhone/iPad,

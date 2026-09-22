@@ -94,7 +94,7 @@ function Section({
 }) {
   return (
     <Card className="p-4 sm:p-5">
-      <h2 className="text-base font-bold text-[var(--anchor-deep)] sm:text-lg">{title}</h2>
+      <h2 className="text-base font-bold text-black sm:text-lg">{title}</h2>
       {description && <p className="mt-1 text-sm text-[var(--anchor-gray)]">{description}</p>}
       <div className="mt-4">{children}</div>
     </Card>
@@ -661,7 +661,7 @@ export default function FMIntakeForm() {
                     : "border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/40"
                 }`}
               >
-                {active ? "✓ " : ""}
+                
                 {opt}
               </button>
             );
@@ -796,13 +796,13 @@ export default function FMIntakeForm() {
 // "Form submitted!" confirmation, mirroring the PDF's closing screen.
 function SubmittedScreen() {
   const steps = [
-    { tag: "Complete ✅", title: "Form Submission" },
+    { tag: "Complete", title: "Form Submission" },
     { tag: "1–2 Business Days", title: "Anchor Products Review" },
     { tag: "3–5 Business Days", title: "Anchor Products Will Contact You" },
   ];
   return (
     <Card className="p-6 sm:p-8">
-      <h1 className="text-2xl font-bold text-[var(--anchor-deep)] sm:text-3xl">Quote request submitted!</h1>
+      <h1 className="text-2xl font-bold text-black sm:text-3xl">Quote request submitted!</h1>
       <p className="mt-2 text-sm text-[var(--anchor-gray)]">
         Thank you. Anchor Products will review your project, confirm receipt within 1–2 business
         days, and follow up with a quote and design or product recommendations.

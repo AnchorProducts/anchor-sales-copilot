@@ -175,7 +175,7 @@ function LoginInner() {
     <main className="ds-page flex min-h-dvh items-center justify-center px-5 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-md">
         {/* Card */}
-        <Card className="border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="p-6">
           <div className="mb-12 flex items-center gap-3">
             <img src={process.env.NEXT_PUBLIC_APP_MODE === "internal" ? "/internal_anchorplogin.svg" : "/anchorplogin.svg"} alt="Anchor" className="ds-logo shrink-0" />
             <div>

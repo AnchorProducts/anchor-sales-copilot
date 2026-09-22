@@ -249,7 +249,7 @@ export default function InternalContactsList({ productId }: { productId: string 
             ) : (
               <div className="grid gap-3">
                 {contacts.map((c) => (
-                  <div key={c.id} className="rounded-2xl border border-black/10 bg-white p-4">
+                  <div key={c.id} className="rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-black truncate">{c.full_name}</div>

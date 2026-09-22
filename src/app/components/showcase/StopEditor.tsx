@@ -197,7 +197,7 @@ export default function StopEditor({
       </div>
 
       <form onSubmit={save} className="grid gap-4">
-        <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
+        <Card className="p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-black">{stop.city}</h2>
           <div className="text-sm text-[var(--anchor-gray)]">
             {stop.event} · {formatDay(stop.date)}

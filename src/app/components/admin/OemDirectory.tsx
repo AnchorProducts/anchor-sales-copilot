@@ -567,7 +567,7 @@ export function OemDirectory() {
                                 </div>
                               )}
                               <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 text-sm">
+                                <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4 text-sm">
                                   <div className="ds-caption mb-2">Contact</div>
                                   {consultant ? (
                                     <>
@@ -585,7 +585,7 @@ export function OemDirectory() {
                                   <Field label="Territory" value={c.territory} />
                                 </div>
 
-                                <div className="rounded-xl border border-[var(--border-default)] bg-white p-4 text-sm">
+                                <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4 text-sm">
                                   <div className="ds-caption mb-2">App activity</div>
                                   {!c.signed_up ? (
                                     <div className="text-[var(--anchor-gray)]">

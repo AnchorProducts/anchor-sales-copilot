@@ -66,7 +66,7 @@ export function AppNavbar({ title, subtitle, menuItems, mobileMenuItems, hero }:
                 </button>
 
                 {open && (
-                  <div className="absolute right-0 top-full z-50 mt-2 min-w-[190px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-xl">
+                  <div className="absolute right-0 top-full z-50 mt-2 min-w-[190px] overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] shadow-xl">
                     {mobileMenuItems.map((mi, i) => (
                       <div key={i}>
                         {mi.href ? (
