@@ -691,6 +691,11 @@ export type InventoryItem = {
   // quantity_available is the boxes assembled and ready. Null everywhere else,
   // and absent before 20260915_000002.
   box_of?: string | null;
+  // "Talk to marketing": instructions an admin left for whoever fulfills an
+  // order containing this item. The note is the flag — null/empty means there's
+  // nothing to say. Absent before 20260922_000002.
+  marketing_alert?: string | null;
+  marketing_alert_at?: string | null;
   created_at: string;
   updated_at: string;
   // Convenience flag computed by the API.
@@ -785,4 +790,41 @@ export function formatUnitCost(v: number | string | null | undefined): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? `$${n.toFixed(2)}` : "—";
+}
+
+// ── Returns ─────────────────────────────────────────────────────────────────
+//
+// Only stock tagged for checkout comes back: booth kit, displays, banners —
+// gear that goes to a show and returns. Everything else in the aisle is taken
+// to be used or given away, so a pickup REMOVES it for good. The pickup is
+// still logged either way, which is how the team knows who has what.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function isReturnable(item: { checkout_enabled?: boolean | null } | null | undefined): boolean {
+  return !!item?.checkout_enabled;
+}
+
+// One sentence, used by the public aisle page and the pickup log, so the rule
+// reads the same wherever it's explained.
+export const RETURNS_CHECKOUT_ONLY_NOTICE =
+  "Only tradeshow gear comes back. Everything else in the aisle is yours to use — it's removed from the count when you take it.";
+
+// The items on an order that carry a "talk to marketing" note, by item id. Used
+// by the fulfillment queue to prompt before anything is packed.
+export function marketingAlertsFor<T extends { id: string; name: string; marketing_alert?: string | null }>(
+  items: readonly T[],
+  opts: { itemIds: readonly string[]; text?: string }
+): { id: string; name: string; note: string }[] {
+  const ids = new Set(opts.itemIds.filter(Boolean));
+  const text = (opts.text || "").toLowerCase();
+  const out: { id: string; name: string; note: string }[] = [];
+  for (const it of items) {
+    const note = (it.marketing_alert || "").trim();
+    if (!note) continue;
+    // An order placed before stock plans were recorded has only its item text,
+    // so fall back to naming the item in it.
+    const onOrder = ids.has(it.id) || (!!text && it.name.length > 2 && text.includes(it.name.toLowerCase()));
+    if (onOrder) out.push({ id: it.id, name: it.name, note });
+  }
+  return out;
 }

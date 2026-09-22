@@ -33,6 +33,7 @@ import {
   type PackagingKit,
   type PackagingRole,
 } from "@/lib/inventory";
+import { Icon } from "@/app/components/ui/kit";
 
 function fmtDate(s: string | null) {
   if (!s) return "—";
@@ -118,10 +119,17 @@ const ITEM_FLAGS: { key: ItemFlag; label: string }[] = [
 
 // One definition of each status, used both to filter the list and to count for
 // the chip beside it — so a chip can never promise a number the list won't show.
-function matchesFlag(it: InventoryItem, flag: ItemFlag, pickedIds: Set<string>): boolean {
+// An anchor's stock is its loose count plus whatever is already built into
+// pizza boxes — they're the same thing on the shelf, so "low" has to see both.
+function isLowWithBoxes(it: InventoryItem, boxes: number): boolean {
+  if (!boxes) return !!it.low_stock;
+  return it.low_stock_threshold > 0 && it.quantity_available + boxes <= it.low_stock_threshold;
+}
+
+function matchesFlag(it: InventoryItem, flag: ItemFlag, pickedIds: Set<string>, boxes = 0): boolean {
   switch (flag) {
     case "low":
-      return !!it.low_stock;
+      return isLowWithBoxes(it, boxes);
     case "onloan":
       return it.quantity_out > 0;
     case "picked":
@@ -199,6 +207,9 @@ export default function AdminInventoryPage({
   const [checkinLoan, setCheckinLoan] = useState<ItemCheckout | null>(null);
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState("");
+  // "Talk to marketing": the item whose note is being written, and its draft.
+  const [alertItem, setAlertItem] = useState<InventoryItem | null>(null);
+  const [alertDraft, setAlertDraft] = useState("");
   const [itemQrOpen, setItemQrOpen] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
@@ -280,20 +291,38 @@ export default function AdminInventoryPage({
   const boxTypeCount = useMemo(() => items.filter(isBoxType).length, [items]);
 
   // Every item the aisle log has ever seen leave the shelf.
+  // Items tagged for checkout: the only stock the aisle takes back.
+  const returnableIds = useMemo(
+    () => new Set(items.filter((i) => i.checkout_enabled).map((i) => i.id)),
+    [items]
+  );
+
   const pickedIds = useMemo(
     () => new Set(grabs.map((g) => g.item_id).filter((id): id is string => !!id)),
     [grabs]
   );
 
+  // A sample and its pizza boxes are one thing on the shelf, so they're one row
+  // here: the anchor, with however many of it are already built into boxes. The
+  // assembled-box item still exists underneath (it's what the scanner and the
+  // order stock plans count), it just doesn't get a row of its own.
+  const readyBoxes = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const it of items) if (it.box_of) out.set(it.box_of, (out.get(it.box_of) || 0) + it.quantity_available);
+    return out;
+  }, [items]);
+
+  const listItems = useMemo(() => items.filter((it) => !it.box_of), [items]);
+
   const filteredItems = useMemo(() => {
     const q = itemSearch.trim().toLowerCase();
-    const matched = items.filter((it) => {
+    const matched = listItems.filter((it) => {
       // Kit pieces are ordinary stock and are listed like it. They're each
       // orderable, pickable at the aisle and countable on their own — hiding
       // them here because the kit card also shows them made the one surface
       // that manages stock the only one that pretended they weren't items.
       if (itemCat && it.category !== itemCat) return false;
-      if (itemFlag && !matchesFlag(it, itemFlag, pickedIds)) return false;
+      if (itemFlag && !matchesFlag(it, itemFlag, pickedIds, readyBoxes.get(it.id) || 0)) return false;
       if (!q) return true;
       return (
         it.name.toLowerCase().includes(q) ||
@@ -302,7 +331,7 @@ export default function AdminInventoryPage({
       );
     });
     return sortItems(matched, itemSort);
-  }, [items, itemSearch, itemCat, itemFlag, itemSort, pickedIds]);
+  }, [listItems, itemSearch, itemCat, itemFlag, itemSort, pickedIds, readyBoxes]);
 
   // How many narrowing choices are in force — the number on the Filters button,
   // so a phone can tell at a glance that the short list it's looking at is short
@@ -311,10 +340,12 @@ export default function AdminInventoryPage({
   const flagCounts = useMemo(() => {
     const out: Record<string, number> = {};
     for (const f of ITEM_FLAGS) {
-      out[f.key] = f.key ? items.filter((i) => matchesFlag(i, f.key, pickedIds)).length : items.length;
+      out[f.key] = f.key
+        ? listItems.filter((i) => matchesFlag(i, f.key, pickedIds, readyBoxes.get(i.id) || 0)).length
+        : listItems.length;
     }
     return out;
-  }, [items, pickedIds]);
+  }, [listItems, pickedIds, readyBoxes]);
   const lowCount = flagCounts.low || 0;
 
   // The known locations plus every one already in use, so a place someone added
@@ -567,6 +598,38 @@ export default function AdminInventoryPage({
   }
 
   // ── Quick restock (add units to an item's on-hand count) ────────────────────
+  function openMarketingAlert(it: InventoryItem) {
+    setModalErr(null);
+    setAlertDraft(it.marketing_alert || "");
+    setAlertItem(it);
+  }
+
+  // Save (or clear, when the note is empty) the item's marketing instructions.
+  async function saveMarketingAlert() {
+    if (!alertItem) return;
+    setBusy(true);
+    setModalErr(null);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: alertItem.id, marketing_alert: alertDraft.trim() }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setModalErr(json?.error || "Couldn't save that note.");
+        return;
+      }
+      setAlertItem(null);
+      setAlertDraft("");
+      await loadAll();
+    } catch (e: any) {
+      setModalErr(e?.message || "Couldn't save that note.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openRestock(it: InventoryItem) {
     setModalErr(null);
     setRestockQty("");
@@ -710,12 +773,12 @@ export default function AdminInventoryPage({
                 one row instead of wrapping to two. */}
             <div className="mb-2 flex gap-1.5 sm:gap-2">
               <TabButton active={tab === "items"} onClick={() => setTab("items")}>
-                Items <TabCount>{items.length}</TabCount>
+                Items <TabCount>{listItems.length}</TabCount>
               </TabButton>
               {/* Pizza boxes get a tab of their own: box types, labels, what's
                   in a box, the kit pieces and the scan log all live there. */}
               <TabButton active={tab === "boxes"} onClick={() => setTab("boxes")}>
-                <span aria-hidden>🍕</span>
+                <Icon name="box" className="h-4 w-4" />
                 <span className="sr-only sm:not-sr-only">&nbsp;Pizza boxes</span> <TabCount>{boxTypeCount}</TabCount>
               </TabButton>
               <TabButton active={tab === "checkouts"} onClick={() => setTab("checkouts")}>
@@ -738,7 +801,7 @@ export default function AdminInventoryPage({
                 type="button"
                 onClick={() => setMoreOpen(true)}
                 aria-label="More inventory actions"
-                className="ml-auto flex w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border-default)] bg-white text-[var(--anchor-deep)] lg:hidden"
+                className="ml-auto flex w-10 shrink-0 items-center justify-center rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] text-[var(--anchor-deep)] lg:hidden"
               >
                 <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
                   <circle cx="4" cy="10" r="1.6" />
@@ -762,7 +825,7 @@ export default function AdminInventoryPage({
                       setItemFlag(itemFlag === "low" ? "" : "low");
                     }}
                   >
-                    ⚠ {lowCount} low stock
+                    {lowCount} low stock
                   </AttentionPill>
                 )}
                 {overdueCount > 0 && (
@@ -772,7 +835,7 @@ export default function AdminInventoryPage({
                 )}
                 {missingPieces > 0 && (
                   <AttentionPill tone="amber" active={tab === "boxes"} onClick={() => setTab("boxes")}>
-                    🍕 {missingPieces} kit {missingPieces === 1 ? "piece" : "pieces"} not set up
+                    {missingPieces} kit {missingPieces === 1 ? "piece" : "pieces"} not set up
                   </AttentionPill>
                 )}
               </div>
@@ -863,7 +926,7 @@ export default function AdminInventoryPage({
                 {(itemSearch || itemCat || itemFlag) && (
                   <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--anchor-gray)]">
                     <span>
-                      Showing {filteredItems.length} of {items.length}
+                      Showing {filteredItems.length} of {listItems.length}
                     </span>
                     <button
                       type="button"
@@ -886,6 +949,9 @@ export default function AdminInventoryPage({
                   onDelete={deleteItem}
                   onRemoveImage={removeImage}
                   onRestock={openRestock}
+                  onMarketingAlert={openMarketingAlert}
+                  readyBoxes={readyBoxes}
+                  onOpenBoxes={() => setTab("boxes")}
                   deleteErr={deleteErr}
                   busy={busy}
                 />
@@ -914,6 +980,7 @@ export default function AdminInventoryPage({
               <PickupsList
                 grabs={grabs}
                 returns={returns}
+                returnableIds={returnableIds}
                 limit={pickupLimit}
                 onMore={() => setPickupLimit((n) => n + PICKUP_PAGE)}
               />
@@ -926,7 +993,7 @@ export default function AdminInventoryPage({
       <Modal open={!!itemModal} className="max-w-lg">
         {itemModal && (
           <div className="p-5">
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">
+            <h2 className="text-lg font-bold text-black">
               {itemModal.id ? "Edit item" : "Add item"}
             </h2>
             {modalErr && <div className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{modalErr}</div>}
@@ -1281,11 +1348,58 @@ export default function AdminInventoryPage({
       {/* Item QR export modal */}
       <ItemQrModal open={itemQrOpen} onClose={() => setItemQrOpen(false)} items={items} />
 
+      {/* "Talk to marketing" — the instruction every fulfiller sees on an
+          order that includes this item. */}
+      <Modal open={!!alertItem} onClose={() => setAlertItem(null)} className="max-w-md">
+        {alertItem && (
+          <div className="p-5">
+            <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-black">Talk to marketing</h2>
+            <p className="mt-1 text-[13px] leading-snug text-[var(--anchor-gray)]">
+              Whoever fulfills an order with <strong className="text-black">{alertItem.name}</strong> on it sees this
+              before they pack anything. Use it for instructions only marketing knows.
+            </p>
+            {modalErr && <div className="mt-3 rounded-[12px] bg-red-500/10 p-2.5 text-[13px] text-red-700">{modalErr}</div>}
+            <Textarea
+              className="mt-3"
+              value={alertDraft}
+              onChange={(e) => setAlertDraft(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              placeholder="e.g. GAF orders ship with the co-branded insert — check with marketing before packing."
+            />
+            <div className="mt-4 flex items-center justify-between gap-2">
+              {(alertItem.marketing_alert || "").trim() ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setAlertDraft("");
+                    void saveMarketingAlert();
+                  }}
+                  disabled={busy}
+                >
+                  Remove note
+                </Button>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setAlertItem(null)} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button onClick={saveMarketingAlert} disabled={busy || !alertDraft.trim()}>
+                  {busy ? "Saving…" : "Save note"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Restock modal */}
       <Modal open={!!restockItem} className="max-w-sm">
         {restockItem && (
           <div className="p-5">
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Add stock — {restockItem.name}</h2>
+            <h2 className="text-lg font-bold text-black">Add stock — {restockItem.name}</h2>
             <p className="text-sm text-[var(--anchor-gray)]">
               {restockItem.quantity_available} on hand now.
             </p>
@@ -1322,7 +1436,7 @@ export default function AdminInventoryPage({
       <Modal open={!!checkoutItem} className="max-w-md">
         {checkoutItem && (
           <div className="p-5">
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Check out — {checkoutItem.name}</h2>
+            <h2 className="text-lg font-bold text-black">Check out — {checkoutItem.name}</h2>
             <p className="text-sm text-[var(--anchor-gray)]">{checkoutItem.quantity_available} available</p>
             {modalErr && <div className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{modalErr}</div>}
             <div className="mt-3 grid gap-3">
@@ -1372,7 +1486,7 @@ export default function AdminInventoryPage({
       <Modal open={!!checkinLoan} className="max-w-md">
         {checkinLoan && (
           <div className="p-5">
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">
+            <h2 className="text-lg font-bold text-black">
               Check in — {checkinLoan.item_name || "item"}
             </h2>
             <p className="text-sm text-[var(--anchor-gray)]">
@@ -1546,6 +1660,9 @@ function ItemsList({
   onRemoveImage,
   onRestock,
   onAdjust,
+  onMarketingAlert,
+  readyBoxes,
+  onOpenBoxes,
   deleteErr,
   busy,
 }: {
@@ -1556,6 +1673,10 @@ function ItemsList({
   onRemoveImage: (it: InventoryItem) => void;
   onRestock: (it: InventoryItem) => void;
   onAdjust: (it: InventoryItem, delta: number) => void;
+  onMarketingAlert: (it: InventoryItem) => void;
+  // Pizza boxes already built for an anchor, by anchor id.
+  readyBoxes: Map<string, number>;
+  onOpenBoxes: () => void;
   deleteErr: { id: string; msg: string } | null;
   busy: boolean;
 }) {
@@ -1617,20 +1738,24 @@ function ItemsList({
                     count and a Product of the Month change what you do next,
                     "Overlay" doesn't. The expanded card carries the rest. */}
                 <div className="mt-1 flex max-h-[1.25rem] flex-wrap items-center gap-1 overflow-hidden sm:max-h-none">
-                  {it.low_stock && (
+                  {isLowWithBoxes(it, readyBoxes.get(it.id) || 0) && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       Low stock
                     </span>
                   )}
-                  {it.product_of_month && (
-                    <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                      <span className="sm:hidden">★ PotM</span>
-                      <span className="hidden sm:inline">★ Product of the Month</span>
+                  {(it.marketing_alert || "").trim() && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] font-semibold text-violet-700"
+                      title={it.marketing_alert || ""}
+                    >
+                      <Icon name="message" className="h-3 w-3" />
+                      Talk to marketing
                     </span>
                   )}
-                  {it.box_of && (
-                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
-                      🍕 Assembled boxes
+                  {it.product_of_month && (
+                    <span className="rounded-full bg-[var(--anchor-green)] px-2 py-0.5 text-[10px] font-semibold text-white">
+                      <span className="sm:hidden">PotM</span>
+                      <span className="hidden sm:inline">Product of the Month</span>
                     </span>
                   )}
                   {it.packaging_role && (
@@ -1650,7 +1775,7 @@ function ItemsList({
                   )}
                   {it.pizza_box && (
                     <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] text-[var(--anchor-gray)]">
-                      🍕 Box
+                      Box
                     </span>
                   )}
                   {it.plastic_overlay && (
@@ -1674,7 +1799,16 @@ function ItemsList({
                 actions for "a pallet of 500 arrived". */}
             <div className="border-t border-[var(--border-default)] px-2.5 py-2 sm:flex sm:items-center sm:gap-2 sm:px-3">
               <div className="min-w-0 flex-1 text-xs text-[var(--anchor-gray)]">
-                <strong className="text-sm text-[var(--anchor-deep)]">{it.quantity_available}</strong> avail
+                <strong className="text-sm text-[var(--anchor-deep)]">
+                  {it.quantity_available + (readyBoxes.get(it.id) || 0)}
+                </strong>{" "}
+                avail
+                {(readyBoxes.get(it.id) || 0) > 0 && (
+                  <>
+                    {" · "}
+                    <strong className="text-[var(--anchor-deep)]">{readyBoxes.get(it.id)}</strong> in boxes
+                  </>
+                )}
                 {it.quantity_out > 0 && (
                   <>
                     {" · "}
@@ -1721,6 +1855,18 @@ function ItemsList({
 
             {open && (
               <div className="border-t border-[var(--border-default)] px-3 py-3">
+                {(readyBoxes.get(it.id) || 0) > 0 && (
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[14px] bg-[var(--mo-thin)] px-3.5 py-2.5 text-[13px] text-[var(--anchor-deep)]">
+                    <span>
+                      <strong>{readyBoxes.get(it.id)}</strong> built into pizza boxes ·{" "}
+                      <strong>{it.quantity_available}</strong> loose. The counter above adds and removes loose
+                      anchors.
+                    </span>
+                    <button type="button" onClick={onOpenBoxes} className="font-semibold text-[var(--anchor-green)]">
+                      Assemble or unbox
+                    </button>
+                  </div>
+                )}
                 {it.description && (
                   <p className="text-sm text-[var(--anchor-gray)]">{it.description}</p>
                 )}
@@ -1742,9 +1888,20 @@ function ItemsList({
                     <dd>{formatUnitCost(it.unit_cost)}</dd>
                   </div>
                 </dl>
+                {(it.marketing_alert || "").trim() && (
+                  <div className="mt-3 flex items-start gap-2.5 rounded-[14px] bg-violet-500/10 px-3.5 py-3 text-[13px] leading-snug text-violet-900">
+                    <Icon name="message" className="mt-px h-4 w-4 text-violet-600" />
+                    <span>
+                      <span className="font-semibold">Talk to marketing.</span> {it.marketing_alert}
+                    </span>
+                  </div>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => onRestock(it)} disabled={busy}>
                     + Add stock
+                  </Button>
+                  <Button variant="secondary" onClick={() => onMarketingAlert(it)} disabled={busy}>
+                    {(it.marketing_alert || "").trim() ? "Edit marketing note" : "Talk to marketing"}
                   </Button>
                   {it.checkout_enabled && (
                     <Button variant="secondary" onClick={() => onCheckout(it)} disabled={busy || it.quantity_available <= 0}>
@@ -1966,7 +2123,7 @@ function AisleQrModal({
     <Modal open={open} className="max-w-md">
       <div className="p-5">
         <div className="flex items-start justify-between">
-          <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Marketing aisle QR codes</h2>
+          <h2 className="text-lg font-bold text-black">Marketing aisle QR codes</h2>
           <button type="button" onClick={onClose} className="text-sm text-[var(--anchor-gray)]">
             Close
           </button>
@@ -2194,7 +2351,7 @@ function ItemQrModal({
     <Modal open={open} className="max-w-2xl">
       <div className="p-5">
         <div className="flex items-start justify-between">
-          <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Item QR codes</h2>
+          <h2 className="text-lg font-bold text-black">Item QR codes</h2>
           <button type="button" onClick={onClose} className="text-sm text-[var(--anchor-gray)]">
             Close
           </button>
@@ -2325,7 +2482,7 @@ function PizzaBoxKits({
         aria-expanded={expanded}
         className="flex w-full items-center gap-2 text-left lg:pointer-events-none"
       >
-        <h2 className="text-sm font-bold text-[var(--anchor-deep)]">🍕 Pizza box kits</h2>
+        <h2 className="text-sm font-bold text-black">Pizza box kits</h2>
         {lowPieces > 0 && (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
             {lowPieces} low
@@ -2489,11 +2646,14 @@ function PizzaBoxKits({
 function PickupsList({
   grabs,
   returns,
+  returnableIds,
   limit,
   onMore,
 }: {
   grabs: GrabRow[];
   returns: ReturnRow[];
+  // Items tagged for checkout — the only stock that can come back.
+  returnableIds: Set<string>;
   limit: number;
   onMore: () => void;
 }) {
@@ -2511,6 +2671,9 @@ function PickupsList({
           const series = packagingKitLabel(g.packaging_kit);
           const pieces = describeComponents(g.components || []);
           const back = g.quantity_returned || 0;
+          // Only tradeshow gear comes back. Everything else left the count when
+          // it was taken — the line stays here so the team can see who took it.
+          const returnable = !!g.item_id && returnableIds.has(g.item_id);
           return (
             <Card key={g.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
               <div className="min-w-0">
@@ -2523,7 +2686,23 @@ function PickupsList({
                   )}
                   {g.box_scan_id && (
                     <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
-                      🍕 box scan
+                      box scan
+                    </span>
+                  )}
+                  {!returnable && (
+                    <span
+                      className="ml-2 rounded-full bg-[var(--mo-fill)] px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-gray)]"
+                      title="Not tagged for checkout — removed from stock when taken"
+                    >
+                      Removed
+                    </span>
+                  )}
+                  {returnable && back < g.quantity && (
+                    <span
+                      className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800"
+                      title="Tradeshow gear — can be brought back"
+                    >
+                      Out
                     </span>
                   )}
                   {back > 0 && (

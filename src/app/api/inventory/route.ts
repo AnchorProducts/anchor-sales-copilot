@@ -22,11 +22,11 @@ import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExt
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Columns added after the table shipped: product_of_month (20260817_000002) and
-// packaging_kit (20260831_000001). Kept separate so a deploy that lands before
-// its migration still serves the catalog instead of 500ing the order form — see
-// the fallback in GET.
-const LATER_COLS = ["product_of_month", "packaging_kit"] as const;
+// Columns added after the table shipped: product_of_month (20260817_000002),
+// packaging_kit (20260831_000001) and the marketing alert (20260922_000002).
+// Kept separate so a deploy that lands before its migration still serves the
+// catalog instead of 500ing the order form — see the fallback in GET.
+const LATER_COLS = ["product_of_month", "packaging_kit", "marketing_alert", "marketing_alert_at"] as const;
 
 const ITEM_COLS_BASE =
   "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,checkout_enabled,pizza_box,plastic_overlay,packaging_role,created_at,updated_at";
@@ -43,6 +43,8 @@ function isMissingLaterColumn(error: { code?: string; message?: string } | null)
 function withoutLaterCols<T extends Record<string, unknown>>(payload: T) {
   const next = { ...payload };
   for (const c of LATER_COLS) delete next[c];
+  // Written alongside marketing_alert, and arrives in the same migration.
+  delete next.marketing_alert_by;
   return next;
 }
 
@@ -276,6 +278,19 @@ export async function PATCH(req: Request) {
       updates.name = name;
     }
     if (body?.description !== undefined) updates.description = clean(body.description) || null;
+    // "Talk to marketing": the instruction a fulfiller has to read before
+    // packing anything with this item on it. Marketing's own call, so admins
+    // only — an inside rep working an order can't write their own prompt. The
+    // note is the flag: empty clears it.
+    if (body?.marketing_alert !== undefined) {
+      if (clean(profile?.role) !== "admin") {
+        return NextResponse.json({ error: "Only admins can set a marketing note." }, { status: 403 });
+      }
+      const note = clean(body.marketing_alert).slice(0, 1000);
+      updates.marketing_alert = note || null;
+      updates.marketing_alert_by = note ? auth.user.id : null;
+      updates.marketing_alert_at = note ? new Date().toISOString() : null;
+    }
     if (body?.sku !== undefined) updates.sku = clean(body.sku) || null;
     if (body?.location !== undefined) updates.location = clean(body.location) || null;
     if (body?.category !== undefined) {
@@ -345,6 +360,14 @@ export async function PATCH(req: Request) {
 
     let { data: row, error } = await updateItem(updates, ITEM_COLS);
     if (isMissingLaterColumn(error)) {
+      // A marketing note can't quietly fall back: the point of it is that a
+      // fulfiller is told, so "saved" has to mean saved.
+      if (updates.marketing_alert !== undefined) {
+        return NextResponse.json(
+          { error: "Marketing notes need migration 20260922_000002 — run it, then try again." },
+          { status: 503 }
+        );
+      }
       ({ data: row, error } = await updateItem(withoutLaterCols(updates), ITEM_COLS_BASE));
     }
     if (error || !row) {
