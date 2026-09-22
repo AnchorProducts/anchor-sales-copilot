@@ -111,6 +111,21 @@ export function normalizeMarketingRecipients(
 
 export const MARKETING_LARGE_TYPE_THRESHOLD = 10;
 
+// The most samples (pizza boxes, however they're built) a customer order can
+// carry. Anything bigger — or anything for a manufacturing partner — is an OEM
+// order, which is printed to order rather than pulled from the shelf.
+export const CUSTOMER_SAMPLE_CAP = 10;
+
+// Whether an inventory item counts as a sample against that cap: an anchor, not
+// a packaging piece (an overlay on its own) or an assembled-box count.
+export function isSampleAnchor(item: {
+  category?: string | null;
+  packaging_role?: string | null;
+  box_of?: string | null;
+}): boolean {
+  return item.category === "samples" && !item.packaging_role && !item.box_of;
+}
+
 // The types in an order that are over the threshold, biggest first, as
 // `{ key, label, units }`. Input is units keyed by category. Empty = nothing to
 // recommend, which is the common case.

@@ -14,10 +14,13 @@ import {
   MARKETING_ORDER_STATUSES,
 } from "@/lib/marketingOrders";
 import OrderStatusTracker from "@/app/components/marketing/OrderStatusTracker";
+import { Icon, Segmented, Surface } from "@/app/components/ui/kit";
 import MarketingOrderChat from "@/app/components/marketing/MarketingOrderChat";
 import MarketingOrderActivity from "@/app/components/marketing/MarketingOrderActivity";
 import { useOrderUnread } from "@/lib/marketing/useOrderUnread";
 import { packagingKitLabel } from "@/lib/inventory";
+import { normalizeOemSpec, oemBoxes, oemUnits } from "@/lib/marketing/oemOrder";
+import { marketingAlertsFor } from "@/lib/inventory";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 
 type MarketingOrder = {
@@ -46,6 +49,11 @@ type MarketingOrder = {
   // are absent on orders placed before pizza boxes could be ordered.
   pizza_boxes?: number | null;
   stock_plan?: Record<string, number> | null;
+  // "oem" = a custom-printed pizza box for an OEM partner (always also tagged a
+  // custom order, so stock is never touched). Absent/"customer" = from stock.
+  order_type?: string | null;
+  // The OEM request as filed; artwork entries carry a signed `url` from the API.
+  oem_spec?: Record<string, any> | null;
   projected_ship_date: string | null;
   delay_notes: string | null;
   submitter_name: string | null;
@@ -220,6 +228,8 @@ export default function AdminMarketingOrdersPage({
   const [mineOnly, setMineOnly] = useState(false);
   // "Custom orders" filter — the live orders being ordered in specially.
   const [customOnly, setCustomOnly] = useState(false);
+  // "OEM" filter — custom-printed pizza boxes for OEM partners.
+  const [oemOnly, setOemOnly] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [updateErr, setUpdateErr] = useState<string | null>(null);
@@ -249,6 +259,9 @@ export default function AdminMarketingOrdersPage({
       quantity_available: number;
       packaging_role?: string | null;
       packaging_kit?: string | null;
+      // "Talk to marketing" — set by an admin on the item (see the inventory
+      // page). Any order carrying that item prompts the fulfiller.
+      marketing_alert?: string | null;
     }[]
   >([]);
   const [consumeDrafts, setConsumeDrafts] = useState<
@@ -305,15 +318,35 @@ export default function AdminMarketingOrdersPage({
     [items]
   );
 
+  // What marketing wants said before this order is packed. Matched on the
+  // order's stock plan (and an OEM order's lines), falling back to the item
+  // names in its text for orders placed before plans were recorded.
+  const alertsFor = useCallback(
+    (o: MarketingOrder) => {
+      const ids = [
+        ...Object.keys(o.stock_plan || {}),
+        ...(Array.isArray(o.oem_spec?.lines) ? o.oem_spec!.lines.map((l: any) => String(l?.item_id || "")) : []),
+      ];
+      return marketingAlertsFor(inventory, { itemIds: ids, text: o.items || "" });
+    },
+    [inventory]
+  );
+
+  const oemCount = useMemo(
+    () => items.filter((o) => o.order_type === "oem" && !isArchived(o)).length,
+    [items]
+  );
+
   const filteredItems = useMemo(
     () =>
       items.filter((o) => {
         if (activeTab === "archived" ? !isArchived(o) : isArchived(o)) return false;
         if (mineOnly && o.assigned_to !== currentUserId) return false;
         if (customOnly && !o.needs_custom_order) return false;
+        if (oemOnly && o.order_type !== "oem") return false;
         return true;
       }),
-    [items, activeTab, mineOnly, customOnly, currentUserId]
+    [items, activeTab, mineOnly, customOnly, oemOnly, currentUserId]
   );
 
   async function loadOrders() {
@@ -342,6 +375,7 @@ export default function AdminMarketingOrdersPage({
             quantity_available: it.quantity_available,
             packaging_role: it.packaging_role ?? null,
             packaging_kit: it.packaging_kit ?? null,
+            marketing_alert: it.marketing_alert ?? null,
           }))
         );
       }
@@ -648,58 +682,69 @@ export default function AdminMarketingOrdersPage({
   const shell = (
       <div className={embedded ? "pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-4" : "ds-container py-6 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:py-10"}>
         {!ready ? (
-          <Card className="p-5 text-sm text-black/60">{t("loading")}</Card>
+          <Surface className="p-6 text-[14px] text-[var(--anchor-gray)]">{t("loading")}</Surface>
         ) : accessError ? (
-          <Card className="border-[var(--anchor-deep)]/25 bg-[var(--anchor-mint)] p-5 text-sm text-[var(--anchor-deep)]">
-            {accessError}
-          </Card>
+          <Surface className="p-6 text-[14px] text-[var(--anchor-deep)]">{accessError}</Surface>
         ) : (
           <>
-            <header className="mb-6 sm:mb-8">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Marketing Orders</h1>
-              <p className="mt-1 text-sm text-[var(--anchor-gray)]">
-                Every samples, printables, swag, and collateral order submitted by sales reps.
+            <header className="mb-6">
+              <h1 className="text-[28px] font-bold leading-tight tracking-[-0.03em] sm:text-[34px]">Marketing Orders</h1>
+              <p className="mt-1 text-[15px] text-[var(--anchor-gray)]">
+                Every pizza box, printables, swag and OEM order sales has placed.
               </p>
             </header>
 
             {loadErr && (
-              <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadErr}</Card>
+              <div className="mb-4 rounded-[14px] bg-red-500/10 p-3.5 text-[14px] text-red-700">{loadErr}</div>
             )}
             {updateErr && (
-              <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">{updateErr}</Card>
+              <div className="mb-4 rounded-[14px] bg-red-500/10 p-3.5 text-[14px] text-red-700">{updateErr}</div>
             )}
 
             {items.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2 border-b border-[var(--border-default)] pb-3">
-                {([
-                  { key: "active", label: "Active", count: counts.active },
-                  { key: "archived", label: "Archived", count: counts.archived },
-                ] as const).map((tab) => {
-                  const active = activeTab === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                        active
-                          ? "bg-[var(--anchor-deep)] text-white"
-                          : "bg-[var(--surface-soft)] text-[var(--anchor-deep)] hover:bg-[var(--anchor-mint)]/60"
-                      }`}
-                    >
-                      {tab.label}
-                      <span
-                        className={`rounded-full px-1.5 text-[10px] ${
-                          active ? "bg-white/20" : "bg-black/10"
-                        }`}
-                      >
-                        {tab.count}
-                      </span>
-                    </button>
-                  );
-                })}
-
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <Segmented
+                  ariaLabel="Which orders"
+                  value={activeTab}
+                  onChange={(v) => setActiveTab(v)}
+                  options={[
+                    {
+                      value: "active" as const,
+                      label: (
+                        <>
+                          Active <span className="tabular-nums opacity-50">{counts.active}</span>
+                        </>
+                      ),
+                    },
+                    {
+                      value: "archived" as const,
+                      label: (
+                        <>
+                          Archived <span className="tabular-nums opacity-50">{counts.archived}</span>
+                        </>
+                      ),
+                    },
+                  ]}
+                />
                 <div className="ml-auto flex flex-wrap gap-2">
+                {/* Custom-printed OEM pizza boxes — a production job, not a pick. */}
+                {oemCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOemOnly((v) => !v)}
+                    aria-pressed={oemOnly}
+                    title="OEM pizza boxes — printed custom for a partner, anchors printed separately"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
+                      oemOnly ? "bg-violet-600 text-white" : "bg-violet-500/12 text-violet-700 hover:bg-violet-500/20"
+                    }`}
+                  >
+                    OEM
+                    <span className={`rounded-full px-1.5 text-[10px] ${oemOnly ? "bg-white/20" : "bg-black/10"}`}>
+                      {oemCount}
+                    </span>
+                  </button>
+                )}
+
                 {/* Orders being ordered in specially rather than pulled. */}
                 {customCount > 0 && (
                   <button
@@ -707,13 +752,11 @@ export default function AdminMarketingOrdersPage({
                     onClick={() => setCustomOnly((v) => !v)}
                     aria-pressed={customOnly}
                     title="Orders tagged as custom orders — samples ordered in, stock unchanged"
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                      customOnly
-                        ? "bg-amber-600 text-white"
-                        : "bg-amber-100 text-amber-900 hover:bg-amber-200"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
+                      customOnly ? "bg-amber-600 text-white" : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25"
                     }`}
                   >
-                    ⚑ Custom orders
+                    Custom orders
                     <span
                       className={`rounded-full px-1.5 text-[10px] ${
                         customOnly ? "bg-white/20" : "bg-black/10"
@@ -773,7 +816,7 @@ export default function AdminMarketingOrdersPage({
                   const open = openOrderId === o.id;
                   const late = isPastDue(o);
                   return (
-                  <Card key={o.id} className="overflow-hidden p-0">
+                  <Surface key={o.id} className="overflow-hidden">
                     {/* The whole card opens the order. Top-down: where it is,
                         what it is, who it's for, then the deadline pinned to the
                         bottom so it lines up across a row of cards. */}
@@ -781,8 +824,8 @@ export default function AdminMarketingOrdersPage({
                       type="button"
                       onClick={() => toggleOrder(o.id)}
                       aria-haspopup="dialog"
-                      className={`flex h-full w-full flex-col gap-2 p-4 text-left transition hover:bg-[var(--anchor-mint)]/30 ${
-                        open ? "bg-[var(--surface-soft)]" : ""
+                      className={`flex h-full w-full flex-col gap-2 rounded-[22px] p-4 text-left transition hover:bg-[var(--mo-thin)] ${
+                        open ? "bg-[var(--mo-thin)]" : ""
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -795,7 +838,7 @@ export default function AdminMarketingOrdersPage({
 
                       {/* Two lines of the free-text order, which is as much as
                           identifies it — the rest is in the dialog. */}
-                      <span className="line-clamp-2 text-sm font-semibold leading-snug text-black">
+                      <span className="line-clamp-2 text-[15px] font-semibold leading-snug text-black">
                         {o.items}
                       </span>
 
@@ -810,7 +853,24 @@ export default function AdminMarketingOrdersPage({
 
                       {/* The flags that change what you do next. */}
                       <span className="flex flex-wrap items-center gap-1.5 empty:hidden">
-                        {o.needs_custom_order && (
+                        {alertsFor(o).length > 0 && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700"
+                            title="Marketing left instructions for this order"
+                          >
+                            <Icon name="message" className="h-3 w-3" />
+                            Talk to marketing
+                          </span>
+                        )}
+                        {o.order_type === "oem" && (
+                          <span
+                            className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800"
+                            title="OEM pizza box — everything printed custom, anchors printed separately"
+                          >
+                            OEM · {oemUnits(normalizeOemSpec(o.oem_spec))} samples
+                          </span>
+                        )}
+                        {o.needs_custom_order && o.order_type !== "oem" && (
                           <span
                             className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900"
                             title="Custom order — samples ordered in, marketing stock unchanged"
@@ -820,7 +880,7 @@ export default function AdminMarketingOrdersPage({
                         )}
                         {(o.pizza_boxes || 0) > 0 && (
                           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-900">
-                            🍕 {o.pizza_boxes} pizza box{o.pizza_boxes === 1 ? "" : "es"}
+                            {o.pizza_boxes} pizza box{o.pizza_boxes === 1 ? "" : "es"}
                           </span>
                         )}
                         {unread[o.id] > 0 && openChatId !== o.id && (
@@ -842,7 +902,7 @@ export default function AdminMarketingOrdersPage({
                           dates line up across a row however long the titles
                           above them run. The deadline decides what gets worked
                           first, which is why it's on the card at all. */}
-                      <span className="mt-auto flex items-baseline justify-between gap-2 border-t border-[var(--border-default)] pt-2">
+                      <span className="mt-auto flex items-baseline justify-between gap-2 border-t border-[var(--mo-sep)] pt-2">
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
                           Needed by
                         </span>
@@ -871,14 +931,14 @@ export default function AdminMarketingOrdersPage({
                       // have to be overridden inline to beat the class.
                       style={{ width: "min(100%, 68rem)", padding: 0 }}
                     >
-                      <header className="flex items-start gap-3 border-b border-[var(--border-default)] bg-[var(--surface-soft)] px-4 py-3 sm:px-5">
+                      <header className="flex items-start gap-3 border-b border-[var(--mo-sep)] px-4 py-3.5 sm:px-5">
                         <span
                           className={`mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${marketingOrderStatusPill(o.status)}`}
                         >
                           {marketingOrderStatusLabel(o.status)}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <h2 className="truncate text-sm font-bold text-black">
+                          <h2 className="truncate text-[17px] font-semibold tracking-[-0.02em] text-black">
                             Order #{o.id.slice(0, 8)}
                           </h2>
                           <p className="truncate text-[11px] text-[var(--anchor-gray)]">
@@ -893,7 +953,7 @@ export default function AdminMarketingOrdersPage({
                           aria-label="Close order"
                           className="-mr-1 shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-[var(--anchor-gray)] transition hover:bg-black/5 hover:text-black"
                         >
-                          ✕
+                          <Icon name="xmark" className="h-5 w-5" />
                         </button>
                       </header>
 
@@ -905,8 +965,80 @@ export default function AdminMarketingOrdersPage({
                           is the only thing that fits a phone. */}
                       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-5">
                         <div className="min-w-0">
+                        {/* Marketing's instructions come before anything else:
+                            they change what gets packed. */}
+                        {alertsFor(o).map((a) => (
+                          <div
+                            key={a.id}
+                            className="mb-4 flex items-start gap-2.5 rounded-[16px] bg-violet-500/10 px-4 py-3.5 text-[13px] leading-snug text-violet-900"
+                          >
+                            <Icon name="message" className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                            <span>
+                              <span className="font-semibold">Talk to marketing about {a.name}.</span> {a.note}
+                            </span>
+                          </div>
+                        ))}
+
                         {/* What they ordered — the headline */}
                         <p className="whitespace-pre-line text-sm font-medium leading-snug text-black">{o.items}</p>
+
+                        {/* An OEM order is a print job: the files are what gets
+                            worked, so they sit right under the request. */}
+                        {o.order_type === "oem" && (() => {
+                          const spec = normalizeOemSpec(o.oem_spec);
+                          const files = (Array.isArray(o.oem_spec?.artwork) ? o.oem_spec!.artwork : []) as {
+                            filename?: string;
+                            url?: string | null;
+                          }[];
+                          return (
+                            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <div className="text-[11px] font-bold uppercase tracking-wide text-violet-900">
+                                  OEM order · nothing from stock
+                                </div>
+                                <div className="text-xs text-violet-900">
+                                  {oemUnits(spec)} samples · {oemBoxes(spec)} fully built boxes
+                                  {spec.proof_required ? " · proof first" : ""}
+                                </div>
+                              </div>
+                              {files.length > 0 || spec.artwork_link ? (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {files.map((f, i) =>
+                                    f.url ? (
+                                      <a
+                                        key={i}
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800 hover:border-violet-400"
+                                      >
+                                        <Icon name="download" className="h-3.5 w-3.5" /> {f.filename || "file"}
+                                      </a>
+                                    ) : (
+                                      <span key={i} className="rounded-lg bg-white px-2.5 py-1 text-xs text-[var(--anchor-gray)]">
+                                        {f.filename || "file"}
+                                      </span>
+                                    )
+                                  )}
+                                  {/^https?:\/\//i.test(spec.artwork_link) && (
+                                    <a
+                                      href={spec.artwork_link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800 hover:border-violet-400"
+                                    >
+                                      <Icon name="link" className="h-3.5 w-3.5" /> Shared files
+                                    </a>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-xs text-violet-900">
+                                  No files attached yet — see the artwork line above and the order&apos;s messages.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Order details — stacked label/value, scannable on a phone */}
                         <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -928,7 +1060,7 @@ export default function AdminMarketingOrdersPage({
                                 Pizza boxes
                               </dt>
                               <dd className="mt-0.5 text-sm text-black">
-                                🍕 {o.pizza_boxes}
+                                {o.pizza_boxes}
                                 <span className="ml-1 text-[var(--anchor-gray)]">— contents are on each line</span>
                               </dd>
                             </div>
@@ -1070,7 +1202,7 @@ export default function AdminMarketingOrdersPage({
                               onClick={() => toggleChat(o.id)}
                               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
                             >
-                              💬 {openChatId === o.id ? "Hide messages" : "Messages"}
+                              <Icon name="message" className="h-4 w-4" /> {openChatId === o.id ? "Hide messages" : "Messages"}
                               {unread[o.id] > 0 && openChatId !== o.id && (
                                 <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--anchor-green)] px-1.5 text-[10px] font-bold text-white">
                                   {unread[o.id]}
@@ -1082,7 +1214,7 @@ export default function AdminMarketingOrdersPage({
                               onClick={() => toggleActivity(o.id)}
                               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
                             >
-                              🧾 {openActivityId === o.id ? "Hide activity" : "Activity log"}
+                              <Icon name="list" className="h-4 w-4" /> {openActivityId === o.id ? "Hide activity" : "Activity log"}
                             </button>
                             {/* The pick sheet — ship-to block up top to cut out and
                                 tape to the carton, tick boxes for the items. */}
@@ -1092,7 +1224,7 @@ export default function AdminMarketingOrdersPage({
                               title="Print this request as a pick sheet + ship-to label"
                               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-xs font-semibold text-[var(--anchor-deep)] transition hover:bg-[var(--anchor-mint)]/40"
                             >
-                              🖨️ Print request
+                              <Icon name="print" className="h-4 w-4" /> Print request
                             </button>
                           </div>
                           {role === "admin" && (
@@ -1293,7 +1425,7 @@ export default function AdminMarketingOrdersPage({
                                         aria-label="Remove"
                                         className="text-[var(--anchor-deep)]/60 hover:text-red-600"
                                       >
-                                        ✕
+                                        <Icon name="xmark" className="h-4 w-4" />
                                       </button>
                                     </div>
                                   );
@@ -1386,7 +1518,7 @@ export default function AdminMarketingOrdersPage({
                       </div>
                     </div>
                     </Modal>
-                  </Card>
+                  </Surface>
                   );
                 })}
               </div>

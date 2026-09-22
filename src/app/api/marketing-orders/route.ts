@@ -9,7 +9,9 @@ import {
   marketingOrderStatusLabel,
   typesOverThreshold,
   CUSTOM_ORDER_REP_NOTICE,
+  CUSTOMER_SAMPLE_CAP,
   MARKETING_LARGE_TYPE_THRESHOLD,
+  isSampleAnchor,
 } from "@/lib/marketingOrders";
 import { sendPushToTool, sendPushToUser } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails, emailToolUsers } from "@/lib/push/recipients";
@@ -20,6 +22,7 @@ import {
   submitterStates,
   insideRepEmailsFor,
   insideRepCanAccessOrder,
+  insideRepsForSubmitter,
   resolveInsideRepsFor,
 } from "@/lib/marketing/territory";
 import { consumeStock, notifyLowStockIfCrossed, shiftStock } from "@/lib/inventory/server";
@@ -38,6 +41,14 @@ import {
   type OrderPackaging,
 } from "@/lib/inventory";
 import { PIZZA_BOX_EXTRAS_KEY, parseBoxExtras } from "@/lib/settings/pizzaBoxExtras";
+import {
+  OEM_ARTWORK_BUCKET,
+  describeOemSpec,
+  normalizeOemSpec,
+  oemBoxes,
+  oemSpecProblem,
+  oemUnits,
+} from "@/lib/marketing/oemOrder";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -197,6 +208,8 @@ async function sendMarketingOrderEmail(params: {
   submitterPhone: string | null;
   submitterEmail: string | null;
   largeTypes: { label: string; units: number }[];
+  // An OEM order names its partner rather than its categories.
+  subject?: string;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
@@ -224,7 +237,7 @@ async function sendMarketingOrderEmail(params: {
   lines.push("Notes:");
   lines.push(params.notes || "(none)");
 
-  const subject = `Marketing Order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+  const subject = params.subject || `Marketing Order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
 
   const result = await resend.emails.send({ from, to: params.to, subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
@@ -333,7 +346,7 @@ async function sendOrderShippedEmail(params: {
   const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
   const categoryLabel = marketingCategoriesLabel(params.categories);
   const shortId = params.orderId.slice(0, 8);
-  const orderUrl = repAppUrl("/marketing-orders", params.repRole);
+  const orderUrl = repAppUrl("/marketing-orders?tab=orders", params.repRole);
   const by = params.shippedByName ? ` by ${params.shippedByName}` : "";
 
   const lines: string[] = [];
@@ -430,6 +443,220 @@ async function sendMarketingOrderAssignedEmail(params: {
   if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
 }
 
+// Put the order on someone the moment it lands.
+//
+// Every order goes to the submitter's inside salesperson — the one covering
+// their territory. Outside sales is staff too (Anchor emails, internal
+// accounts), so this is decided by the rep list rather than the app role: see
+// insideRepsForSubmitter. An inside rep's own order stays with them.
+//
+// Best-effort: an order that can't be matched to anyone stays unassigned and
+// waits for an admin, exactly as before. Returns the assignee for notifying.
+async function autoAssign(
+  orderId: string,
+  user: { id: string },
+  profile: any
+): Promise<{ id: string; full_name: string | null; email: string | null } | null> {
+  let target: { id: string; full_name: string | null; email: string | null } | null = null;
+
+  const { self, reps } = await insideRepsForSubmitter(profile);
+  if (self) {
+    // An inside rep's own order is already on the right desk.
+    target = { id: user.id, full_name: clean(profile?.full_name) || null, email: clean(profile?.email) || null };
+  } else {
+    const emails = reps.map((r) => clean(r.email).toLowerCase()).filter(Boolean);
+    if (!emails.length) return null;
+    // The rep list is its own table; the order points at a user account, so the
+    // email is what ties the two together.
+    const { data: people } = await supabaseAdmin
+      .from("profiles")
+      .select("id,full_name,email,role")
+      .in("email", emails);
+    const rows = ((people || []) as any[]).filter((r) => clean(r.role) !== "external_rep");
+    // Territory order, not alphabetical: the first rep resolved for the state
+    // (and ZIP) is the one who covers it.
+    for (const email of emails) {
+      const hit = rows.find((r) => clean(r.email).toLowerCase() === email);
+      if (hit) {
+        target = { id: hit.id, full_name: clean(hit.full_name) || null, email: clean(hit.email) || null };
+        break;
+      }
+    }
+  }
+  if (!target) return null;
+
+  const { error } = await supabaseAdmin
+    .from("marketing_orders")
+    // assigned_by stays null: nobody assigned this, the territory did.
+    .update({ assigned_to: target.id, assigned_by: null, assigned_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .is("assigned_to", null);
+  if (error) {
+    console.warn("marketing order auto-assign failed", error.message);
+    return null;
+  }
+  return target;
+}
+
+// Tell the assignee, unless they're the person who just placed it.
+async function notifyAutoAssigned(
+  orderId: string,
+  assignee: { id: string; full_name: string | null; email: string | null },
+  submitterUserId: string,
+  order: { categories: string[]; items: string; needed_by: string | null; who: string }
+) {
+  if (assignee.id === submitterUserId) return;
+  if (assignee.email) {
+    try {
+      await sendMarketingOrderAssignedEmail({
+        orderId,
+        to: assignee.email,
+        assignedByName: order.who,
+        categories: order.categories,
+        items: order.items,
+        neededBy: order.needed_by,
+      });
+    } catch (e: any) {
+      console.warn("marketing order auto-assign email failed", e?.message || e);
+    }
+  }
+  void sendPushToUser(assignee.id, {
+    title: "A marketing order is yours",
+    body: `${order.who} placed an order in your territory.`,
+    url: "/admin/marketing-orders",
+    tag: `mo-assigned-${orderId}`,
+  }).catch((e) => console.warn("marketing order auto-assign push failed", e?.message || e));
+}
+
+// File an OEM pizza box order. Everything in it is printed custom for the
+// partner — the box, inserts, overlay, printables — and the anchors are printed
+// separately, so nothing is pulled from marketing inventory. The order is tagged
+// a custom order on creation, which is what already keeps fulfillment from
+// decrementing stock; the structured request rides along in oem_spec, and the
+// same request in words goes in `items` for every view that predates it.
+async function createOemOrder(user: { id: string; email?: string | null }, profile: any, body: Record<string, unknown>) {
+  const spec = normalizeOemSpec(body.oem_spec);
+  const problem = oemSpecProblem(spec);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+
+  const needed_by = clean(body.needed_by) || null;
+  const ship_to = clean(body.ship_to) || null;
+  const notes = clean(body.notes) || null;
+  if (!ship_to) return NextResponse.json({ error: "A shipping address is required." }, { status: 400 });
+  if (!needed_by || !/^\d{4}-\d{2}-\d{2}$/.test(needed_by) || Number.isNaN(Date.parse(needed_by))) {
+    return NextResponse.json({ error: "A valid needed-by date is required." }, { status: 400 });
+  }
+
+  const items = describeOemSpec(spec).join("\n");
+  const quantity = String(oemUnits(spec));
+  // Samples are pizza boxes, so an OEM order routes to the samples contact.
+  const categories = ["samples"];
+  const now = new Date().toISOString();
+
+  const submitter_name = clean(profile.full_name) || null;
+  const submitter_company = clean(profile.company) || null;
+  const submitter_phone = clean(profile.phone) || null;
+  const submitter_email = clean(profile.email) || clean(user.email) || null;
+
+  const baseRow = {
+    created_by: user.id,
+    submitter_name,
+    submitter_company,
+    submitter_email,
+    submitter_phone,
+    categories,
+    items,
+    quantity,
+    needed_by,
+    ship_to,
+    notes,
+    status: "new",
+    needs_custom_order: true,
+    custom_order_tagged_by: user.id,
+    custom_order_tagged_at: now,
+  };
+  let { data: row, error: insErr } = await supabaseAdmin
+    .from("marketing_orders")
+    .insert({ ...baseRow, order_type: "oem", oem_spec: spec })
+    .select("id")
+    .single();
+  // Before 20260922_000001 there's no order_type/oem_spec. The order still files
+  // as a custom order and its items text says everything — only the artwork
+  // links are lost, and their file names are still in the text.
+  if (insErr && (insErr.code === "42703" || /order_type|oem_spec/.test(insErr.message || ""))) {
+    console.warn("marketing order: OEM columns missing — run 20260922_000001_marketing_order_types.sql");
+    ({ data: row, error: insErr } = await supabaseAdmin.from("marketing_orders").insert(baseRow).select("id").single());
+  }
+  if (insErr || !row?.id) {
+    return NextResponse.json({ error: insErr?.message || "Failed to create order." }, { status: 500 });
+  }
+  const orderId = row.id as string;
+  const shortId = orderId.slice(0, 8);
+
+  // An OEM order is placed by inside sales, so it's theirs from the start.
+  const assignee = await autoAssign(orderId, user, profile);
+  if (assignee) {
+    await notifyAutoAssigned(orderId, assignee, user.id, {
+      categories,
+      items,
+      needed_by,
+      who: submitter_name || submitter_company || "internal sales",
+    });
+  }
+
+  const emailNotification = { attempted: true, sent: false, to: null as string[] | null, error: null as string | null };
+  try {
+    const to = await resolveRecipients();
+    emailNotification.to = to;
+    await sendMarketingOrderEmail({
+      orderId,
+      to,
+      categories,
+      items,
+      quantity,
+      neededBy: needed_by,
+      shipTo: ship_to,
+      notes,
+      submitterName: submitter_name,
+      submitterCompany: submitter_company,
+      submitterPhone: submitter_phone,
+      submitterEmail: submitter_email,
+      largeTypes: [],
+      subject: `OEM Order - ${spec.company} (${shortId})`,
+    });
+    emailNotification.sent = true;
+  } catch (emailErr: any) {
+    emailNotification.error = emailErr?.message || String(emailErr);
+    console.warn("OEM order email failed", emailNotification.error);
+  }
+
+  void sendPushToTool("marketing_order", {
+    title: "New OEM order",
+    body: `${oemUnits(spec)} samples${oemBoxes(spec) ? ` (${oemBoxes(spec)} built boxes)` : ""} for ${spec.company} — ${submitter_name || "internal sales"}`,
+    url: "/admin/marketing-orders",
+    tag: `mo-${orderId}`,
+  });
+
+  if (submitter_email) {
+    try {
+      await sendMarketingOrderCreatorEmail({
+        orderId,
+        to: submitter_email,
+        categories,
+        items,
+        quantity,
+        neededBy: needed_by,
+        shipTo: ship_to,
+        notes,
+      });
+    } catch (creatorEmailErr: any) {
+      console.warn("OEM order creator email failed", creatorEmailErr?.message || creatorEmailErr);
+    }
+  }
+
+  return NextResponse.json({ ok: true, id: orderId, email_notification: emailNotification }, { status: 201 });
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await supabaseRoute();
@@ -450,6 +677,15 @@ export async function POST(req: Request) {
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
+    // An OEM pizza box is made to order from end to end, not picked from stock,
+    // so it takes its own path. Internal sales only.
+    if (clean(body.order_type) === "oem") {
+      if (profile.role !== "anchor_rep" && profile.role !== "admin") {
+        return NextResponse.json({ error: "OEM orders are placed by internal sales." }, { status: 403 });
+      }
+      return await createOemOrder(user, profile, body);
+    }
 
     const rawCategories = Array.isArray(body.categories) ? body.categories : [];
     // Normalize: strings only, de-duped, valid keys.
@@ -634,6 +870,20 @@ export async function POST(req: Request) {
           unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
         }
 
+        // A customer order is a small one. Past the cap — or for a manufacturing
+        // partner — it's an OEM order, which internal sales places.
+        const sampleUnits = resolved
+          .filter(({ item }) => isSampleAnchor(item))
+          .reduce((n, { quantity }) => n + quantity, 0);
+        if (sampleUnits > CUSTOMER_SAMPLE_CAP) {
+          return NextResponse.json(
+            {
+              error: `Customer orders are capped at ${CUSTOMER_SAMPLE_CAP} samples (this one has ${sampleUnits}). Place larger orders, or orders for a manufacturing partner, as an OEM order.`,
+            },
+            { status: 400 }
+          );
+        }
+
         // Overlays off each series' pool: those paired with a sample plus any
         // ordered on their own. Recomputed here from live item data so the count
         // recorded on the order is the server's, not the browser's — including
@@ -745,6 +995,18 @@ export async function POST(req: Request) {
     }
 
     const orderId = row.id as string;
+
+    // Put it on the rep who works this territory before anyone is notified, so
+    // the notifications name an owner rather than going to a queue nobody owns.
+    const assignee = await autoAssign(orderId, user, profile);
+    if (assignee) {
+      await notifyAutoAssigned(orderId, assignee, user.id, {
+        categories,
+        items,
+        needed_by,
+        who: submitter_name || submitter_company || "a rep",
+      });
+    }
 
     let emailNotification: {
       attempted: boolean;
@@ -914,12 +1176,13 @@ export async function GET() {
       return query;
     };
 
-    // pizza_boxes + stock_plan arrive with 20260915_000001. Until then the queue
-    // loads without them rather than not at all.
-    let { data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan`);
-    if (error && (error.code === "42703" || /pizza_boxes|stock_plan/.test(error.message || ""))) {
-      ({ data, error } = await listOrders(ORDER_COLS));
-    }
+    // Newer columns, newest first: order_type + oem_spec arrive with
+    // 20260922_000001, pizza_boxes + stock_plan with 20260915_000001. Each
+    // missing one drops out rather than the queue not loading at all.
+    const missingCol = (e: any) => e && (e.code === "42703" || /does not exist/.test(e.message || ""));
+    let { data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan,order_type,oem_spec`);
+    if (missingCol(error)) ({ data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan`));
+    if (missingCol(error)) ({ data, error } = await listOrders(ORDER_COLS));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let orders = (data || []) as any[];
@@ -956,6 +1219,9 @@ export async function GET() {
           // An order explicitly assigned to me is always mine — even one an admin
           // handed me outside my own territory (that's the point of assignment).
           if (clean(o.assigned_to) === auth.user.id) return true;
+          // So is one I placed myself — an OEM order, or a customer order for an
+          // account of my own — or it wouldn't show in my own order history.
+          if (o.created_by === auth.user.id) return true;
           const sub = o.created_by ? subMap.get(o.created_by) : undefined;
           // Only outside reps' orders are routed to an inside rep's territory.
           if (!sub || sub.role !== "external_rep") return false;
@@ -1015,7 +1281,25 @@ export async function GET() {
       }
     }
 
+    // OEM artwork lives in a private bucket; hand out short-lived links to it.
+    const artworkUrls = new Map<string, string>();
+    const artworkPaths = orders.flatMap((o) =>
+      Array.isArray(o.oem_spec?.artwork) ? o.oem_spec.artwork.map((f: any) => clean(f?.path)).filter(Boolean) : []
+    );
+    if (artworkPaths.length) {
+      const { data: signed } = await supabaseAdmin.storage
+        .from(OEM_ARTWORK_BUCKET)
+        .createSignedUrls(artworkPaths, 3600);
+      for (const s of signed || []) if (s.path && s.signedUrl) artworkUrls.set(s.path, s.signedUrl);
+    }
+
     const items = orders.map((o) => {
+      if (Array.isArray(o.oem_spec?.artwork)) {
+        o.oem_spec = {
+          ...o.oem_spec,
+          artwork: o.oem_spec.artwork.map((f: any) => ({ ...f, url: artworkUrls.get(clean(f?.path)) ?? null })),
+        };
+      }
       const updater = o.updated_by ? nameMap.get(o.updated_by) : undefined;
       const assignee = o.assigned_to ? nameMap.get(o.assigned_to) : undefined;
       const act = latestActivity.get(o.id);
@@ -1123,6 +1407,7 @@ export async function PATCH(req: Request) {
     if (
       role === "anchor_rep" &&
       currentAssignee !== auth.user.id &&
+      !isOwner &&
       !(await insideRepCanAccessOrder(clean(profile?.email), (current as any).created_by))
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
