@@ -67,6 +67,38 @@ export function insideRepEmailsFor(
   return out;
 }
 
+// The inside sales rep(s) for whoever placed an order.
+//
+// The rep list is the authority on who is what, not the app role: Anchor's
+// OUTSIDE salespeople are staff with @anchorp.com accounts (so they sign in as
+// internal users), and each one has an inside salesperson covering the same
+// states. Robert Alvarez sells outside across TX/OK/NM/…; Nora Menendez is the
+// inside rep for exactly those states, and his orders are hers.
+//
+// `self` means the person IS an inside rep — their own order stays with them.
+// Anyone not on the rep list falls back to the territory on their profile,
+// which is how partner reps (non-Anchor emails) are routed.
+export async function insideRepsForSubmitter(
+  profile: any
+): Promise<{ self: boolean; reps: SalesRep[] }> {
+  const email = clean(profile?.email).toLowerCase();
+  const allReps = await loadAllSalesReps();
+  const me = email ? allReps.find((r) => clean(r.email).toLowerCase() === email) : undefined;
+
+  if (me?.kind === "internal") return { self: true, reps: [] };
+
+  if (me) {
+    // Their own row carries the territory, including the ZIP split that decides
+    // between two inside reps in one state (the Houston/Gulf TX case). Any ZIP
+    // in the prefix stands in for the whole sub-territory.
+    const zip = me.zip_prefixes?.length ? `${me.zip_prefixes[0]}00` : null;
+    return { self: false, reps: insideRepsFor(allReps, me.states || [], zip) };
+  }
+
+  const zip = clean(profile?.service_zip) || null;
+  return { self: false, reps: insideRepsFor(allReps, submitterStates(profile), zip) };
+}
+
 // Resolve the inside rep record(s) for an outside rep's own territory. Used on
 // submit to map the order to its region notification tool(s) — i.e. the
 // configured regional manager — without notifying the inside rep directly.
