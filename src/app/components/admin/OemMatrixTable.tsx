@@ -155,7 +155,7 @@ export function OemMatrixTable({
 
 function PeopleList({ title, cell }: { title: string; cell: MatrixCell }) {
   return (
-    <div className="rounded-xl border border-[var(--border-default)] bg-white p-3">
+    <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-3">
       <div className="mb-2 flex items-baseline justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--anchor-deep)]">{title}</span>
         <span className="text-[10px] text-[var(--anchor-gray)]">

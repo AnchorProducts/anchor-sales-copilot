@@ -405,7 +405,7 @@ export default function RooftopPage() {
 
             {/* Profile card – same pattern as Project Identifier & Commission Claim */}
             {(profileName || profileEmail) && (
-              <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-sm">
+              <div className="rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-4 py-3 text-sm shadow-sm">
                 <div className="font-semibold text-black">Submitted by</div>
                 <div className="mt-1.5 grid gap-0.5 text-[var(--anchor-gray)]">
                   {profileName    && <div><span className="font-medium text-black">{profileName}</span></div>}
@@ -423,7 +423,7 @@ export default function RooftopPage() {
               item.type === "ai" ? (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm leading-relaxed shadow-sm text-black whitespace-pre-wrap"
+                  className="rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-4 py-3 text-sm leading-relaxed shadow-sm text-black whitespace-pre-wrap"
                 >
                   {item.text}
                 </div>
@@ -445,7 +445,7 @@ export default function RooftopPage() {
 
             {/* Loading indicator */}
             {loading && (
-              <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/50 shadow-sm flex items-center gap-2">
+              <div className="rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-4 py-3 text-sm text-black/50 shadow-sm flex items-center gap-2">
                 <span
                   style={{
                     display: "inline-block",

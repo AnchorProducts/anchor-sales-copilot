@@ -31,7 +31,7 @@ export default function GetStartedPage() {
       />
 
       <div className="mx-auto max-w-5xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="mb-4 p-6">
           <div className="ds-caption">Get started</div>
           <h1 className="mt-2 text-2xl">Talk to an Anchor rep or request a quote</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">

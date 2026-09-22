@@ -195,7 +195,7 @@ export function InstallGate() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={APP_LOGO} alt={APP_NAME} className="ds-logo mb-8 self-start" />
 
-        <h1 className="text-2xl font-bold leading-tight text-[var(--anchor-deep)]">
+        <h1 className="text-2xl font-bold leading-tight text-black">
           Install {APP_NAME}
         </h1>
         <p className="mt-2 text-sm leading-snug text-black/70">

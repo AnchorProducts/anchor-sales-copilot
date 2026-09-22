@@ -177,7 +177,7 @@ export default function AdminToolsPage() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)]">Site live</h2>
+                    <h2 className="text-lg font-bold tracking-tight text-black">Site live</h2>
                     <span
                       className={
                         "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
@@ -229,7 +229,7 @@ export default function AdminToolsPage() {
             </Card>
 
             {/* Admin Console tools */}
-            <h2 className="text-lg font-bold text-[var(--anchor-deep)]">Admin Console tools</h2>
+            <h2 className="text-lg font-bold text-black">Admin Console tools</h2>
             <p className="mb-4 mt-1 text-sm text-[var(--anchor-gray)]">
               Deactivated tools stay visible to admins on the console (marked “Inactive”) so you can
               preview them, but they’re hidden from everyone else. {activeCount} of {CARDS.length} active.
@@ -266,7 +266,7 @@ export default function AdminToolsPage() {
             </div>
 
             {/* Sales rep tools — toggled per audience (internal vs external) */}
-            <h2 className="mt-8 text-lg font-bold text-[var(--anchor-deep)]">Sales rep tools</h2>
+            <h2 className="mt-8 text-lg font-bold text-black">Sales rep tools</h2>
             <p className="mb-4 mt-1 text-sm text-[var(--anchor-gray)]">
               Deactivated tools are hidden from a rep&apos;s dashboard. Toggle each tool separately for internal and external reps.
               A tool marked <strong>Assigned</strong> goes further: only the people you name on it can see or open it.

@@ -69,7 +69,7 @@ export default function FaqPage() {
       />
 
       <div className="mx-auto max-w-3xl px-5 py-6">
-        <Card className="mb-4 border-t-4 border-t-[var(--anchor-green)] p-6">
+        <Card className="mb-4 p-6">
           <div className="ds-caption">Help</div>
           <h1 className="mt-2 text-2xl">Frequently asked questions</h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">

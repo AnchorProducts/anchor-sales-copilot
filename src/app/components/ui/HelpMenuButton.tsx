@@ -136,7 +136,7 @@ export function HelpMenuButton() {
         {open && (
           <div
             role="menu"
-            className="absolute bottom-14 right-0 w-60 overflow-hidden rounded-2xl border border-black/10 bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.22)]"
+            className="absolute bottom-14 right-0 w-60 overflow-hidden rounded-[18px] bg-[var(--surface-card)]/90 p-1.5 shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_24px_60px_-12px_rgba(0,0,0,0.3)] backdrop-blur-xl"
           >
             {tourKey && (
               <button type="button" role="menuitem" onClick={runWalkthrough} className={itemClass}>
@@ -185,7 +185,7 @@ export function HelpMenuButton() {
           aria-haspopup="menu"
           title="Help"
           data-tutorial="nav-support"
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[var(--anchor-deep)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.22)] transition hover:bg-[var(--anchor-green)] active:scale-95"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-card)]/75 text-[var(--anchor-green)] shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_12px_32px_-8px_rgba(0,0,0,0.28)] backdrop-blur-xl backdrop-saturate-150 transition active:scale-95"
         >
           <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <circle cx="12" cy="12" r="10" />

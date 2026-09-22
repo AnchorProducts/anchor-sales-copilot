@@ -316,7 +316,7 @@ export default function InternalDocsList({ productId }: { productId: string }) {
   return (
     <div
       key={a.id}
-      className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white"
+      className="w-full overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)]"
     >
       <a
         href={href}

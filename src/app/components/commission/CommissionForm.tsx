@@ -222,7 +222,7 @@ export default function CommissionForm() {
 
   return (
     <form onSubmit={submit}>
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-5 sm:p-6">
+      <Card className="p-5 sm:p-6">
         <div className="text-sm text-[var(--anchor-gray)]">
           {t("commissionFormDesc")}{" "}
           <span className="font-semibold text-[var(--anchor-deep)]">{t("lateRequestsNote")}</span>

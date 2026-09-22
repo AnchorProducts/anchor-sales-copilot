@@ -8,21 +8,22 @@
   --anchor-gray: #76777B;
   --anchor-white: #FFFFFF;
 
-  --surface-page: #f3f5f4;
+  /* Apple-style neutrals: a light gray page, white cards, iOS system fills. */
+  --surface-page: #f5f5f7;
   --surface-card: var(--anchor-white);
-  --surface-soft: #edf2ef;
-  --surface-strong: #e6ece8;
+  --surface-soft: #f2f2f5;
+  --surface-strong: #e8e8ed;
 
   --text-primary: var(--anchor-black);
   --text-secondary: var(--anchor-gray);
   --text-inverse: var(--anchor-white);
 
-  --border-default: rgba(0, 0, 0, 0.12);
+  --border-default: rgba(60, 60, 67, 0.14);
   --border-strong: rgba(17, 80, 15, 0.32);
 
-  --radius-sm: 12px;
+  --radius-sm: 10px;
   --radius-md: 14px;
-  --radius-lg: 16px;
+  --radius-lg: 22px;
 
   --space-1: 8px;
   --space-2: 16px;
@@ -30,16 +31,25 @@
   --space-4: 32px;
   --space-5: 40px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.11);
+  --shadow-sm: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px -10px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 24px 60px -12px rgba(0, 0, 0, 0.25);
 
-  --ring-focus: 0 0 0 3px rgba(156, 226, 187, 0.8);
+  --ring-focus: 0 0 0 4px rgba(4, 120, 53, 0.18);
 
-  --font-h1: 700 2rem/1.15 "Arial", "Helvetica", sans-serif;
-  --font-h2: 600 1.5rem/1.25 "Arial", "Helvetica", sans-serif;
-  --font-body: 400 0.9375rem/1.55 "Arial", "Helvetica", sans-serif;
-  --font-caption: 600 0.75rem/1.35 "Arial", "Helvetica", sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  --font-h1: 700 2.125rem/1.15 var(--font-family);
+  --font-h2: 600 1.375rem/1.25 var(--font-family);
+  --font-body: 400 0.9375rem/1.5 var(--font-family);
+  --font-caption: 600 0.75rem/1.35 var(--font-family);
+
+  /* iOS system fills and separators, used by the shared UI kit
+     (components/ui/kit.tsx) and the ds-* classes below. */
+  --mo-fill: rgba(118, 118, 128, 0.12);
+  --mo-fill-strong: rgba(118, 118, 128, 0.2);
+  --mo-thin: rgba(118, 118, 128, 0.06);
+  --mo-sep: rgba(60, 60, 67, 0.12);
+  --mo-card: var(--surface-card);
 }
 
 /* ── Dark mode token overrides ───────────────────────────────────────────── */
@@ -57,6 +67,13 @@ html[data-theme="dark"] {
   --border-strong:  rgba(156, 226, 187, 0.28);
   --anchor-black:   #e8f0e8;
   --anchor-white:   #172116;
+  --mo-fill: rgba(118, 118, 128, 0.24);
+  --mo-fill-strong: rgba(118, 118, 128, 0.34);
+  --mo-thin: rgba(118, 118, 128, 0.12);
+  --mo-sep: rgba(255, 255, 255, 0.1);
+  --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px -12px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
 
@@ -146,16 +163,15 @@ html[data-theme="dark"] .border-black\/5 { border-color: rgba(255, 255, 255, 0.0
    utility overrides above don't reach them — fix the dark-surface ones here. */
 html[data-theme="dark"] .ds-tab,
 html[data-theme="dark"] .ds-table th { color: var(--text-secondary); }
-html[data-theme="dark"] .ds-tab:hover { color: var(--anchor-mint); background: rgba(156, 226, 187, 0.16); }
+html[data-theme="dark"] .ds-tab:hover,
+html[data-theme="dark"] .ds-tab.is-active { color: var(--text-primary); }
+html[data-theme="dark"] .ds-tab.is-active { background: rgba(255, 255, 255, 0.14); }
 html[data-theme="dark"] .ds-alert-neutral { color: var(--text-primary); }
-html[data-theme="dark"] .ds-alert-success { color: #bdeecd; }
-html[data-theme="dark"] .ds-alert-error { color: var(--text-primary); background: rgba(17, 80, 15, 0.32); }
-/* ds-btn-secondary base sits on a dark card (--anchor-white flips dark); its
-   hover flips to a mint fill, so the text must flip back to dark on hover. */
-html[data-theme="dark"] .ds-btn-secondary { color: var(--anchor-mint); }
-html[data-theme="dark"] .ds-btn-secondary:hover { color: var(--anchor-deep); }
-/* These keep a green/translucent-dark fill, but their label uses --anchor-white,
-   which flips dark in this theme — force it back to light so it stays legible. */
+html[data-theme="dark"] .ds-alert-success { color: #bdeecd; background: rgba(95, 208, 143, 0.14); }
+html[data-theme="dark"] .ds-alert-error { color: #ffb4ab; background: rgba(255, 69, 58, 0.16); }
+/* Filled gray buttons carry the regular ink; solid ones stay white-on-color. */
+html[data-theme="dark"] .ds-btn-secondary { color: var(--text-primary); }
+html[data-theme="dark"] .ds-btn-destructive { color: #ff6961; }
 html[data-theme="dark"] .ds-btn-primary,
 html[data-theme="dark"] .ds-btn-ghost { color: #f3f7f3; }
 
@@ -165,6 +181,7 @@ body {
   min-height: 100%;
   margin: 0;
   padding: 0;
+  /* The brand's faint green grid, under the Apple-style cards. */
   background:
     linear-gradient(rgba(17, 80, 15, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(17, 80, 15, 0.03) 1px, transparent 1px),
@@ -190,12 +207,15 @@ body {
   min-height: 100dvh;
   color: var(--text-primary);
   font: var(--font-body);
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
 h1 {
   font: var(--font-h1);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   color: var(--anchor-black);
 }
 
@@ -210,7 +230,7 @@ h2,
   font: var(--font-caption);
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 * {
@@ -242,7 +262,7 @@ h2,
     padding-top: 0;
     padding-bottom: 0;
     padding-left: 16rem;
-    background: var(--surface-soft);
+    background: transparent;
   }
 }
 
@@ -264,11 +284,11 @@ h2,
   top: 0;
   z-index: 30;
   padding-top: env(safe-area-inset-top);
-  background:
-    linear-gradient(90deg, rgba(156, 226, 187, 0.22), transparent 36%),
-    linear-gradient(120deg, #06100b 0%, var(--anchor-deep) 38%, var(--anchor-green) 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  /* Dark frosted toolbar; content inside is styled for a dark bar. */
+  background: rgba(17, 32, 16, 0.86);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ds-navbar-inner {
@@ -282,16 +302,14 @@ h2,
 }
 
 .ds-card {
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(180deg, rgba(156, 226, 187, 0.12), transparent 30%),
-    var(--surface-card);
+  background: var(--surface-card);
   box-shadow: var(--shadow-md);
 }
 
 .ds-card-header {
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--mo-sep);
   padding: var(--space-2);
 }
 
@@ -303,64 +321,59 @@ h2,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  padding: 11px 16px;
-  font: 600 0.8125rem/1 "Arial", "Helvetica", sans-serif;
-  letter-spacing: 0.01em;
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease,
-    transform 180ms ease;
+  gap: 6px;
+  border-radius: 999px;
+  border: 0;
+  padding: 10px 18px;
+  font: 600 0.9375rem/1.2 var(--font-family);
+  letter-spacing: -0.01em;
+  transition: background-color 160ms ease, color 160ms ease, filter 160ms ease, transform 120ms ease;
 }
 
 .ds-btn:active {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
 
 .ds-btn:disabled {
-  opacity: 0.58;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .ds-btn-primary {
-  background: linear-gradient(180deg, var(--anchor-green), var(--anchor-deep));
-  color: var(--anchor-white);
-  box-shadow: 0 8px 18px rgba(17, 80, 15, 0.25);
+  background: var(--anchor-green);
+  color: #fff;
 }
 
 .ds-btn-primary:hover {
-  background: var(--anchor-deep);
+  filter: brightness(1.1);
 }
 
 .ds-btn-secondary {
-  background: var(--anchor-white);
-  border-color: var(--border-default);
-  color: var(--anchor-deep);
+  background: var(--mo-fill);
+  color: var(--text-primary);
 }
 
 .ds-btn-secondary:hover {
-  background: var(--anchor-mint);
-  border-color: var(--border-strong);
+  background: var(--mo-fill-strong);
 }
 
+/* For use on dark surfaces (the dark toolbar). */
 .ds-btn-ghost {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--anchor-white);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .ds-btn-ghost:hover {
-  background: rgba(156, 226, 187, 0.22);
-  border-color: rgba(156, 226, 187, 0.56);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .ds-btn-destructive {
-  background: var(--anchor-black);
-  color: var(--anchor-white);
+  background: rgba(255, 59, 48, 0.12);
+  color: #d70015;
 }
 
 .ds-btn-destructive:hover {
-  background: var(--anchor-deep);
+  background: rgba(255, 59, 48, 0.2);
 }
 
 .ds-input,
@@ -374,12 +387,12 @@ h2,
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--mo-fill);
   color: var(--text-primary);
   font: var(--font-body);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .ds-input,
@@ -422,54 +435,56 @@ input[type="datetime-local"] {
 .ds-input:hover,
 .ds-select:hover,
 .ds-textarea:hover {
-  border-color: var(--border-strong);
-  background: var(--anchor-white);
+  background: var(--mo-fill-strong);
 }
 
 .ds-input:focus,
 .ds-select:focus,
 .ds-textarea:focus {
+  outline: none;
   border-color: var(--anchor-green);
-  background: var(--anchor-white);
+  background: var(--surface-card);
+  box-shadow: 0 0 0 4px rgba(4, 120, 53, 0.14);
 }
 
+/* iOS segmented control: a gray track with a raised thumb. */
 .ds-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border-radius: var(--radius-md);
-  padding: 6px;
-  border: 1px solid var(--border-default);
-  background: var(--surface-soft);
+  gap: 2px;
+  border-radius: 10px;
+  padding: 2px;
+  border: 0;
+  background: var(--mo-fill);
 }
 
 .ds-tab {
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  padding: 9px 12px;
-  font: var(--font-caption);
-  color: var(--anchor-gray);
+  border-radius: 8px;
+  border: 0;
+  padding: 6px 14px;
+  font: 500 0.8125rem/1.3 var(--font-family);
+  color: var(--text-secondary);
   background: transparent;
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  white-space: nowrap;
+  transition: background-color 200ms ease, color 200ms ease, box-shadow 200ms ease;
 }
 
 .ds-tab:hover {
-  color: var(--anchor-deep);
-  background: rgba(156, 226, 187, 0.4);
+  color: var(--text-primary);
 }
 
 .ds-tab.is-active {
-  border-color: rgba(4, 120, 53, 0.3);
-  background: var(--anchor-mint);
-  color: var(--anchor-deep);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.04);
 }
 
 .ds-table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--anchor-white);
-  box-shadow: var(--shadow-sm);
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-md);
 }
 
 .ds-table {
@@ -480,17 +495,17 @@ input[type="datetime-local"] {
 
 .ds-table th,
 .ds-table td {
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--mo-sep);
   padding: 12px;
   text-align: left;
   vertical-align: top;
 }
 
 .ds-table th {
-  font: var(--font-caption);
-  color: var(--anchor-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font: 600 0.75rem/1.35 var(--font-family);
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .ds-table tbody tr {
@@ -498,37 +513,36 @@ input[type="datetime-local"] {
 }
 
 .ds-table tbody tr:hover {
-  background: rgba(156, 226, 187, 0.28);
+  background: var(--mo-thin);
 }
 
 .ds-alert,
 .ds-toast {
-  border: 1px solid;
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  font: 600 0.8125rem/1.45 "Arial", "Helvetica", sans-serif;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font: 500 0.875rem/1.45 var(--font-family);
 }
 
 .ds-toast {
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
 .ds-alert-neutral {
-  border-color: var(--border-default);
-  background: var(--surface-soft);
-  color: var(--anchor-deep);
+  background: var(--mo-fill);
+  color: var(--text-primary);
 }
 
 .ds-alert-success {
-  border-color: rgba(4, 120, 53, 0.28);
-  background: rgba(156, 226, 187, 0.5);
+  background: rgba(4, 120, 53, 0.1);
   color: var(--anchor-deep);
 }
 
 .ds-alert-error {
-  border-color: rgba(17, 80, 15, 0.4);
-  background: rgba(17, 80, 15, 0.12);
-  color: var(--anchor-deep);
+  background: rgba(255, 59, 48, 0.1);
+  color: #b3261e;
 }
 
 /* Floating app chrome stands down while a dialog is open.
@@ -568,8 +582,9 @@ body[data-modal-open] [data-floating-chrome] {
   justify-content: center;
   overflow-y: auto;
   padding: var(--space-3);
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .ds-modal {
@@ -581,9 +596,9 @@ body[data-modal-open] [data-floating-chrome] {
      `min-width: 0` keeps the modal at its computed width and clips overflow. */
   min-width: 0;
   max-width: 100%;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--anchor-white);
+  border: 0;
+  border-radius: 28px;
+  background: var(--surface-card);
   box-shadow: var(--shadow-lg);
   padding: var(--space-3);
 }
@@ -593,10 +608,10 @@ body[data-modal-open] [data-floating-chrome] {
   align-items: center;
   border-radius: 999px;
   padding: 4px 10px;
-  font: var(--font-caption);
-  color: var(--anchor-deep);
-  background: var(--anchor-mint);
-  border: 1px solid rgba(17, 80, 15, 0.2);
+  font: 600 0.75rem/1.3 var(--font-family);
+  color: var(--anchor-green);
+  background: rgba(4, 120, 53, 0.1);
+  border: 0;
 }
 
 .ds-logo {
@@ -717,4 +732,20 @@ body[data-modal-open] [data-floating-chrome] {
 }
 @media (prefers-reduced-motion: reduce) {
   .anchor-stack-sheet > span { animation: none !important; opacity: 1; }
+}
+
+/* ── Apple-style surfaces ────────────────────────────────────────────────────
+   .mo-surface is the elevated card used by the shared UI kit
+   (components/ui/kit.tsx). .mo-apple is kept as a no-op hook: the
+   system font and filled fields it once scoped are now app-wide. */
+.mo-surface {
+  background: var(--mo-card);
+  border-radius: 22px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px -10px rgba(0, 0, 0, 0.12);
+}
+html[data-theme="dark"] .mo-surface {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+.mo-apple .ds-modal {
+  border-radius: 28px;
 }

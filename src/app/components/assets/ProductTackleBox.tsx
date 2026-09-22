@@ -1497,7 +1497,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                         return (
                           <div
                             key={a.id}
-                            className="w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4"
+                            className="w-full overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4"
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">

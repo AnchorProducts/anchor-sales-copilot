@@ -282,7 +282,7 @@ export default function AdminUsersPage() {
                   </svg>
                 </button>
                 {filterOpen && (
-                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[var(--border-default)] bg-white p-2 shadow-lg">
+                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-2 shadow-lg">
                     <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Type</div>
                     {FILTERS.map((f) => {
                       const active = filter === f;

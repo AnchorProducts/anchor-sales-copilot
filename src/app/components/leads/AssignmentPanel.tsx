@@ -118,7 +118,7 @@ export default function AssignmentPanel({
             setChoice(e.target.value);
             setMsg(null);
           }}
-          className="mt-1.5 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+          className="mt-1.5 w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm"
         >
           <option value="">Unassigned (New)</option>
           {assignees.map((a) => (
@@ -182,7 +182,7 @@ export default function AssignmentPanel({
                   type="button"
                   onClick={() => setConfirming(false)}
                   disabled={deleting}
-                  className="rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm font-semibold text-[var(--anchor-deep)]"
+                  className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 py-2 text-sm font-semibold text-[var(--anchor-deep)]"
                 >
                   Cancel
                 </button>

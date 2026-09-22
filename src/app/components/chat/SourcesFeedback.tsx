@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/app/components/ui/kit";
 
 export type SourceUsed = {
   chunkId: string;
@@ -243,7 +244,7 @@ export default function SourcesFeedback({
                   type="button"
                   title="Mark answer wrong"
                 >
-                  {busyId === "__no_sources__" ? "Submitting…" : "❌ Submit feedback"}
+                  {busyId === "__no_sources__" ? "Submitting…" : "Submit feedback"}
                 </button>
 
                 <button
@@ -260,7 +261,7 @@ export default function SourcesFeedback({
               </div>
 
               <div className="text-[11px] opacity-70">
-                Submitting will save a ❌ feedback. If you added correction text, it also creates a
+                Submitting will save a “needs correction” feedback. If you added correction text, it also creates a
                 correction ticket.
               </div>
             </div>
@@ -292,7 +293,7 @@ export default function SourcesFeedback({
                       title="This source was helpful/correct"
                       type="button"
                     >
-                      {isBusy ? "…" : "✅"}
+                      {isBusy ? "…" : <Icon name="thumbsUp" className="h-4 w-4" />}
                     </button>
 
                     <button
@@ -302,7 +303,7 @@ export default function SourcesFeedback({
                       title="This source is wrong / needs correction"
                       type="button"
                     >
-                      ❌
+                      <Icon name="thumbsDown" className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -345,7 +346,7 @@ export default function SourcesFeedback({
                     </div>
 
                     <div className="text-[11px] opacity-70">
-                      Submitting will save a ❌ feedback. If you added correction text, it also
+                      Submitting will save a “needs correction” feedback. If you added correction text, it also
                       creates a correction ticket.
                     </div>
                   </div>

@@ -294,7 +294,7 @@ export function PersonEditorModal({
                       value={newOem}
                       onChange={(e) => setNewOem(e.target.value)}
                       placeholder="Add manufacturer…"
-                      className="h-9 flex-1 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                      className="h-9 flex-1 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
                     />
                     <button
                       type="button"
@@ -390,7 +390,7 @@ function Text({ label, value, onChange, type = "text" }: { label: string; value:
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+        className="h-10 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
       />
     </label>
   );

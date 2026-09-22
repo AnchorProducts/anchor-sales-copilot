@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "@/app/components/ui/Button";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { MAX_PHOTOS, toJpeg, uploadPhoto } from "@/lib/showcase/client";
+import { Icon } from "@/app/components/ui/kit";
 
 /* ============================================================================
  * Photos for a stop: pick several → each converts to JPEG → uploads, right away.
@@ -224,7 +225,7 @@ export function PhotoTray({
                   aria-label={`Remove ${it.name}`}
                   className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-xs text-white"
                 >
-                  ✕
+                  <Icon name="xmark" className="h-4 w-4" />
                 </button>
               </div>
 

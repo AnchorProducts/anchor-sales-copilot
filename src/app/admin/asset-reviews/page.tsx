@@ -164,7 +164,7 @@ export default function AdminAssetReviewsPage() {
       />
 
       <div className="mx-auto mt-6 max-w-5xl">
-        <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+        <Card className="p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-semibold text-black">Asset reviews</div>
@@ -206,7 +206,7 @@ export default function AdminAssetReviewsPage() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid gap-3 rounded-2xl border border-black/10 bg-white p-4 sm:grid-cols-[180px_1fr]"
+                  className="grid gap-3 rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4 sm:grid-cols-[180px_1fr]"
                 >
                   <div className="overflow-hidden rounded-xl bg-[var(--surface-soft)]">
                     {item.preview_url ? (

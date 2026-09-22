@@ -352,7 +352,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
       const commit = await commitRes.json().catch(() => null);
       if (!commitRes.ok) throw new Error(commit?.error || `HTTP ${commitRes.status}`);
 
-      setReplaceStatus((prev) => ({ ...prev, [path]: "✓ Replaced" }));
+      setReplaceStatus((prev) => ({ ...prev, [path]: "Replaced" }));
       setMsg("File replaced — every link pointing at this path now serves the new version.");
       await loadDocs();
     } catch (e: any) {
@@ -594,7 +594,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
                             : "bg-red-400/20 text-red-200"
                         }`}
                       >
-                        {(f.rating ?? 0) >= 4 ? "👍 Accurate" : "👎 Needs correction"}
+                        {(f.rating ?? 0) >= 4 ? "Accurate" : "Needs correction"}
                       </span>
                       <span className="opacity-60">•</span> {fmt(f.created_at)}
                     </div>

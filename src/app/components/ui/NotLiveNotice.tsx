@@ -17,7 +17,7 @@ export function NotLiveNotice() {
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
       </div>
-      <h2 className="text-base font-semibold text-[var(--anchor-deep)]">Not available yet</h2>
+      <h2 className="text-base font-semibold text-black">Not available yet</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--anchor-gray)]">
         This part of the app hasn&apos;t been switched on. Check back once it&apos;s released.
       </p>

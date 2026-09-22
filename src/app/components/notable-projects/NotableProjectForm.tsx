@@ -102,7 +102,7 @@ export default function NotableProjectForm() {
 
   return (
     <form onSubmit={submit}>
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
+      <Card className="p-4 sm:p-5">
         <div className="text-sm font-semibold text-black">{t("notableProjectTitle")}</div>
         <div className="mt-1 text-sm text-[var(--anchor-gray)]">{t("notableProjectFormDesc")}</div>
 

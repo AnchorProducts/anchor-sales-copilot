@@ -81,7 +81,7 @@ export function ProfileCompletionPrompt() {
   return (
     <Modal open={open} className="max-w-md">
       <div className="p-1">
-        <h2 className="text-lg font-bold leading-tight text-[var(--anchor-deep)]">
+        <h2 className="text-lg font-bold leading-tight text-black">
           Complete your profile
         </h2>
         <p className="mt-2 text-sm leading-snug text-black/70">

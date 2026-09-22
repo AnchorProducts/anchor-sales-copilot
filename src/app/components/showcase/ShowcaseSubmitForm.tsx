@@ -90,7 +90,7 @@ export default function ShowcaseSubmitForm({
 
   return (
     <form onSubmit={submit}>
-      <Card className="border-t-4 border-t-[var(--anchor-green)] p-4 sm:p-5">
+      <Card className="p-4 sm:p-5">
         <h2 className="text-lg font-semibold text-black">Add a stop</h2>
         <div className="mt-1 text-sm text-[var(--anchor-gray)]">
           Marketing reviews every stop and photo before it shows up on anchorp.com.

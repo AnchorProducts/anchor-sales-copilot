@@ -308,7 +308,7 @@ export default function AdminCommissionClaimsPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
+    <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-4">
       <div className="ds-caption mb-2">{title}</div>
       <div className="space-y-1">{children}</div>
     </div>

@@ -236,7 +236,7 @@ export default function LeadDetail({ id }: { id: string }) {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="ds-caption">Consult</div>
-          <h1 className="mt-1 break-words text-xl font-bold leading-tight tracking-tight text-[var(--anchor-deep)] sm:text-3xl">
+          <h1 className="mt-1 break-words text-xl font-bold leading-tight tracking-tight text-black sm:text-3xl">
             {lead.customer_company}
           </h1>
           <div className="mt-1 break-words text-sm text-[var(--anchor-gray)]">
@@ -331,7 +331,7 @@ export default function LeadDetail({ id }: { id: string }) {
                     )}
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {(solution.attachments || []).length === 0 ? (
-                        <div className="rounded-xl border border-[var(--border-default)] bg-white p-3 text-xs text-[var(--anchor-gray)]">
+                        <div className="rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] p-3 text-xs text-[var(--anchor-gray)]">
                           {t("noFiles")}
                         </div>
                       ) : (
@@ -460,7 +460,7 @@ function AttachmentLink({
       onClick={(e) => {
         if (isDisabled) e.preventDefault();
       }}
-      className={`block overflow-hidden rounded-xl border border-[var(--border-default)] bg-white transition-colors hover:bg-[var(--surface-soft)] ${
+      className={`block overflow-hidden rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] transition-colors hover:bg-[var(--surface-soft)] ${
         isDisabled ? "cursor-not-allowed opacity-60" : ""
       }`}
     >

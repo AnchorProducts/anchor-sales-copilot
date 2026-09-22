@@ -775,7 +775,7 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
     (showInternal && internalRows.length > 0);
 
   return (
-    <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+    <Card className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-black">{t("browseTackleBoxes")}</div>

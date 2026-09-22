@@ -492,7 +492,7 @@ export default function AdminAnalyticsPage() {
                   <section>
                     <div className="mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">
+                        <h2 className="text-lg font-bold tracking-tight text-black sm:text-xl">
                           Internal &amp; other users
                         </h2>
                         <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
@@ -524,7 +524,7 @@ export default function AdminAnalyticsPage() {
                 <section>
                   <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                      <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">OEM matrix</h2>
+                      <h2 className="text-lg font-bold tracking-tight text-black sm:text-xl">OEM matrix</h2>
                       <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
                         One row per OEM, split by sales reps, tech reps, and consultants — adoption, usage, and projects submitted over the window set in <span className="font-semibold">Filters</span>. Click a row to drill into the people behind each number.
                       </p>
@@ -577,7 +577,7 @@ export default function AdminAnalyticsPage() {
                 {view === "people" && (
                 <section>
                   <div className="mb-4 sm:mb-5">
-                    <h2 className="text-lg font-bold tracking-tight text-[var(--anchor-deep)] sm:text-xl">People</h2>
+                    <h2 className="text-lg font-bold tracking-tight text-black sm:text-xl">People</h2>
                     <p className="mt-0.5 text-xs text-[var(--anchor-gray)] sm:text-sm">
                       Everyone in one list — OEM reps, tech reps and consultants alongside Anchor
                       staff and other signed-up users. Narrow by contact type, OEM or activity in

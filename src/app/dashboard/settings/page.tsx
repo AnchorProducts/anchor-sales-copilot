@@ -11,6 +11,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import Button from "@/app/components/ui/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import NotificationsCard from "@/app/components/settings/NotificationsCard";
+import { Icon } from "@/app/components/ui/kit";
 
 export const dynamic = "force-dynamic";
 
@@ -203,7 +204,7 @@ export default function SettingsPage() {
         <div className="mx-auto max-w-xl space-y-5">
 
           {/* ── Profile Information ──────────────────────────────── */}
-          <Card data-tutorial="settings-profile" className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-profile" className="p-5">
             <div className="text-sm font-semibold text-black">{t("profileInformation")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("profileInformationDesc")}</div>
 
@@ -265,7 +266,7 @@ export default function SettingsPage() {
 
           {/* ── NetSuite sync (internal reps only) ───────────────── */}
           {isInternalRep && (
-            <Card className="border-t-4 border-t-[var(--anchor-green)] p-5">
+            <Card className="p-5">
               <div className="text-sm font-semibold text-black">{t("netsuiteSync")}</div>
               <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("netsuiteSyncDesc")}</div>
 
@@ -303,14 +304,14 @@ export default function SettingsPage() {
           <NotificationsCard />
 
           {/* ── Appearance ───────────────────────────────────────── */}
-          <Card data-tutorial="settings-appearance" className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-appearance" className="p-5">
             <div className="text-sm font-semibold text-black">{t("appearance")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("appearanceDesc")}</div>
 
             <div className="mt-4 grid grid-cols-3 gap-3">
               {(["light", "system", "dark"] as Theme[]).map((th) => {
                 const labelKey = th as "light" | "system" | "dark";
-                const icons = { light: "☀️", system: "⚙️", dark: "🌙" };
+                const icons = { light: "sun", system: "gear", dark: "moon" } as const;
                 const active = theme === th;
                 return (
                   <button
@@ -324,7 +325,7 @@ export default function SettingsPage() {
                         : "border-black/10 bg-white text-black hover:bg-[var(--surface-soft)]",
                     ].join(" ")}
                   >
-                    <span className="text-xl">{icons[th]}</span>
+                    <Icon name={icons[th]} className="h-6 w-6" />
                     {t(labelKey)}
                   </button>
                 );
@@ -333,7 +334,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* ── Sign Out ─────────────────────────────────────────── */}
-          <Card data-tutorial="settings-signout" className="border-t-4 border-t-[var(--anchor-green)] p-5">
+          <Card data-tutorial="settings-signout" className="p-5">
             <div className="text-sm font-semibold text-black">{t("signOut")}</div>
             <div className="mt-1 text-[12px] text-[var(--anchor-gray)]">{t("signOutDesc")}</div>
             <Button

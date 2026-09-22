@@ -64,7 +64,7 @@ export default function CommissionClaimPage() {
           <div className="text-[11px] font-semibold uppercase tracking-widest text-[var(--anchor-gray)]">
             {t("independentRepresentative")}
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--anchor-deep)] sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-black sm:text-3xl">
             {t("commissionClaimFormTitle")}
           </h1>
           <p className="mt-1 text-sm text-[var(--anchor-gray)]">{t("completeAndSubmit")}</p>

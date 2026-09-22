@@ -172,7 +172,7 @@ export default function PortalAccessPage() {
             </header>
 
             <Card className="mb-5 p-4 sm:p-5">
-              <h2 className="mb-3 text-sm font-semibold text-[var(--anchor-deep)]">Authorize an email</h2>
+              <h2 className="mb-3 text-sm font-semibold text-black">Authorize an email</h2>
               <form onSubmit={addInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="flex-1">
                   <span className="mb-1 block text-xs font-semibold text-[var(--anchor-gray)]">Email</span>
@@ -181,7 +181,7 @@ export default function PortalAccessPage() {
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="name@anchorp.com"
-                    className="h-11 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                    className="h-11 w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
                   />
                 </label>
                 <label className="sm:w-40">
@@ -189,7 +189,7 @@ export default function PortalAccessPage() {
                   <select
                     value={newLevel}
                     onChange={(e) => setNewLevel(e.target.value)}
-                    className="h-11 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                    className="h-11 w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
                   >
                     {PORTAL_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                   </select>
@@ -199,7 +199,7 @@ export default function PortalAccessPage() {
                   <select
                     value={newTeam}
                     onChange={(e) => setNewTeam(e.target.value)}
-                    className="h-11 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
+                    className="h-11 w-full rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3 text-sm outline-none focus:border-[var(--anchor-green)]"
                   >
                     <option value="">No team</option>
                     {PORTAL_TEAMS.map((tm) => <option key={tm.value} value={tm.value}>{tm.label}</option>)}
@@ -271,7 +271,7 @@ export default function PortalAccessPage() {
                               onChange={(e) =>
                                 void send("PATCH", { email: inv.email, role: e.target.value, team: inv.team }, inv.email)
                               }
-                              className="h-10 rounded-xl border border-[var(--border-default)] bg-white px-2.5 text-sm outline-none focus:border-[var(--anchor-green)] disabled:opacity-50"
+                              className="h-10 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-2.5 text-sm outline-none focus:border-[var(--anchor-green)] disabled:opacity-50"
                               aria-label={`Level for ${inv.email}`}
                             >
                               {PORTAL_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
@@ -282,7 +282,7 @@ export default function PortalAccessPage() {
                               onChange={(e) =>
                                 void send("PATCH", { email: inv.email, role: inv.role, team: e.target.value || null }, inv.email)
                               }
-                              className="h-10 rounded-xl border border-[var(--border-default)] bg-white px-2.5 text-sm outline-none focus:border-[var(--anchor-green)] disabled:opacity-50"
+                              className="h-10 rounded-[14px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-2.5 text-sm outline-none focus:border-[var(--anchor-green)] disabled:opacity-50"
                               aria-label={`Team for ${inv.email}`}
                             >
                               <option value="">No team</option>

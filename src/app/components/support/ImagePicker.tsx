@@ -1,5 +1,7 @@
 "use client";
 
+import { Icon } from "@/app/components/ui/kit";
+
 // Compact multi-image picker with thumbnail previews + remove. Holds File
 // objects in the parent's state; the parent submits them as FormData.
 export default function ImagePicker({
@@ -40,7 +42,7 @@ export default function ImagePicker({
                 aria-label="Remove image"
                 className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white"
               >
-                ✕
+                <Icon name="xmark" className="h-4 w-4" />
               </button>
             </div>
           ))}
