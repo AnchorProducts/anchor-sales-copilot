@@ -10,6 +10,7 @@ import ChatSidebar from "@/app/components/ChatSidebar";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { trackEvent } from "@/lib/analytics/track";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
+import { isInternalEmail } from "@/lib/auth/internalEmail";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type UserType = "internal" | "external";
@@ -72,7 +73,7 @@ const DEFAULT_GREETING: Msg = {
 const TRAINING_MESSAGE: Msg = {
   role: "assistant",
   content:
-    "Hey, I'm your Anchor Products sales expert — tell me what you're securing and I'll point you to the right solution. For engineering questions (spacing, loads, or code compliance), I'll connect you with the Anchor Products team directly.\n\n🧪 While we're testing, you can help me get smarter: if an answer is right, tap “✓ Accurate” under it. If it's off, tap “Needs correction” and tell me what's right — or just reply and correct me. Either way, I'll learn from it.",
+    "Hey, I'm your Anchor Products sales expert — tell me what you're securing and I'll point you to the right solution. For engineering questions (spacing, loads, or code compliance), I'll connect you with the Anchor Products team directly.\n\nWhile we're testing, you can help me get smarter: if an answer is right, tap “Accurate” under it. If it's off, tap “Needs correction” and tell me what's right — or just reply and correct me. Either way, I'll learn from it.",
 };
 
 const INITIAL_MESSAGES: Msg[] = [];
@@ -444,7 +445,7 @@ export default function ChatPage() {
 
         if (!profile) {
           const email = (user.email || "").trim().toLowerCase();
-          const isInternal = email.endsWith("@anchorp.com");
+          const isInternal = isInternalEmail(email);
           const user_type: UserType = isInternal ? "internal" : "external";
           const roleToSet: ProfileRow["role"] = isInternal ? "anchor_rep" : "external_rep";
 
@@ -693,7 +694,7 @@ export default function ChatPage() {
                       <div
                         role="dialog"
                         aria-label="Chat history"
-                        className="absolute right-0 top-full z-50 mt-2 flex w-[300px] max-w-[86vw] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.22)]"
+                        className="absolute right-0 top-full z-50 mt-2 flex w-[300px] max-w-[86vw] flex-col overflow-hidden rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] shadow-[0_12px_32px_rgba(0,0,0,0.22)]"
                         style={{ height: "min(70vh, 560px)" }}
                       >
                         <ChatSidebar
@@ -839,7 +840,7 @@ export default function ChatPage() {
                   })}
 
                   {(historyLoading || loading) && (
-                    <div className="max-w-[88%] rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-[13.5px] text-black/70 sm:px-4 sm:py-3 sm:text-sm">
+                    <div className="max-w-[88%] rounded-[20px] border border-[var(--mo-sep)] bg-[var(--surface-card)] px-3.5 py-2.5 text-[13.5px] text-black/70 sm:px-4 sm:py-3 sm:text-sm">
                       {historyLoading ? t("loadingChat") : t("thinking")}
                     </div>
                   )}
