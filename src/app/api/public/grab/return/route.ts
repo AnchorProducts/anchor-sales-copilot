@@ -41,7 +41,9 @@ import {
 import {
   normalizeComponents,
   grabOutstanding,
+  isReturnable,
   packagingKitLabel,
+  RETURNS_CHECKOUT_ONLY_NOTICE,
   type PackagingRole,
 } from "@/lib/inventory";
 
@@ -143,7 +145,23 @@ export async function GET(req: Request) {
       }))
       .filter((p) => p.outstanding > 0);
 
-    return NextResponse.json({ pickups });
+    // Only gear tagged for checkout comes back; everything else was removed
+    // from the count when it was taken. The pickup still shows in the aisle log
+    // either way — this is only about what can be handed back.
+    const itemIds = Array.from(new Set(pickups.map((p) => clean(p.item_id)).filter(Boolean)));
+    const returnable = new Set<string>();
+    if (itemIds.length) {
+      const { data: items } = await supabaseAdmin
+        .from("marketing_inventory_items")
+        .select("id,checkout_enabled")
+        .in("id", itemIds);
+      for (const it of (items || []) as any[]) if (isReturnable(it)) returnable.add(it.id);
+    }
+
+    return NextResponse.json({
+      pickups: pickups.filter((p) => returnable.has(clean(p.item_id))),
+      notice: RETURNS_CHECKOUT_ONLY_NOTICE,
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed to load your pickups." }, { status: 500 });
   }
@@ -203,6 +221,26 @@ async function returnOne(
   // this stops a guessed pickup id from crediting someone else's history.
   if (clean((grab as any).grabbed_by_email).toLowerCase() !== who.email.toLowerCase()) {
     return { ok: false, item_name: itemName, quantity: line.quantity, error: "That pickup isn't yours." };
+  }
+
+  // The rule, enforced here and not just hidden in the list above: only stock
+  // tagged for checkout can come back. Anything else was removed from the count
+  // when it was taken.
+  const grabItemId = clean((grab as any).item_id) || null;
+  if (grabItemId) {
+    const { data: item } = await supabaseAdmin
+      .from("marketing_inventory_items")
+      .select("checkout_enabled")
+      .eq("id", grabItemId)
+      .maybeSingle();
+    if (!isReturnable(item)) {
+      return {
+        ok: false,
+        item_name: itemName,
+        quantity: line.quantity,
+        error: "That one isn't returnable — it came off the count when you took it.",
+      };
+    }
   }
 
   const alreadyReturned = ((grab as any).quantity_returned || 0) as number;

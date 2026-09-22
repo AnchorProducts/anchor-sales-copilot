@@ -25,6 +25,7 @@ import { Card } from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import { Input } from "@/app/components/ui/Field";
 import {
+  RETURNS_CHECKOUT_ONLY_NOTICE,
   inventoryCategoryLabel,
   isInventoryCategory,
   packagingKitLabel,
@@ -478,9 +479,14 @@ export default function GrabPage({
           className="absolute left-[-9999px] h-0 w-0 opacity-0"
         />
         {mode === "return" && (
-          <Button variant="secondary" onClick={lookupPickups} disabled={busy}>
-            {busy ? "Looking…" : "Find what I have out"}
-          </Button>
+          <>
+            <p className="text-xs leading-snug text-[var(--anchor-gray,#5b6b66)]">
+              {RETURNS_CHECKOUT_ONLY_NOTICE}
+            </p>
+            <Button variant="secondary" onClick={lookupPickups} disabled={busy}>
+              {busy ? "Looking…" : "Find what I have out"}
+            </Button>
+          </>
         )}
       </div>
     </Card>
@@ -496,7 +502,7 @@ export default function GrabPage({
           <p className="mt-1 text-sm text-[var(--anchor-gray,#5b6b66)]">
             {mode === "take"
               ? "Set how many of each you're taking, add your name once, and tap Take."
-              : "Bringing some back? Look up what you have out and put it back on the count."}
+              : "Bringing tradeshow gear back? Look it up and put it back on the count."}
           </p>
           {mode === "take" && (
             <a
@@ -561,7 +567,7 @@ export default function GrabPage({
             </Card>
           ) : pickups.length === 0 ? (
             <Card className="p-6 text-center text-sm text-[var(--anchor-gray,#5b6b66)]">
-              Nothing out under that email in the last six months.
+              Nothing to bring back under that email. {RETURNS_CHECKOUT_ONLY_NOTICE}
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-2.5">
