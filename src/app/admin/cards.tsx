@@ -172,6 +172,18 @@ export const CARDS: AdminCard[] = [
   },
 ];
 
+/** Shown only to the two credential keepers (src/lib/credentials/keepers.ts).
+ *  Kept out of CARDS so it never appears in Manage Tools, where every admin
+ *  could see it and switch it off. */
+export const CREDENTIALS_CARD: AdminCard = {
+  key: "credentials",
+  title: "Credentials",
+  description: "Where every Anchor login lives — which password-manager item, sign-in page, and whose phone has the 2FA. No passwords are stored here.",
+  badge: "Config",
+  href: "/admin/credentials",
+  icon: "shield",
+};
+
 export const BADGE_STYLE: Record<AdminCard["badge"], string> = {
   Analytics: "bg-[var(--anchor-mint)]/60 text-[var(--anchor-deep)]",
   Config: "bg-[#fde68a] text-[#7c4a00]",

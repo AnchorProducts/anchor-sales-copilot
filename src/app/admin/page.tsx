@@ -8,7 +8,8 @@ import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ToolLoader } from "@/app/components/visuals/FeatureGraphic";
-import { CARDS, BADGE_STYLE, TileIcon, SITE_LIVE_CARD_KEYS, type AdminCard } from "./cards";
+import { CARDS, CREDENTIALS_CARD, BADGE_STYLE, TileIcon, SITE_LIVE_CARD_KEYS, type AdminCard } from "./cards";
+import { isCredentialKeeper } from "@/lib/credentials/keepers";
 import { useSiteLive } from "@/lib/flags/useSiteLive";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default function AdminHubPage() {
   // Keys an admin has switched off in /admin/tools. A tool with no row is
   // active, so we only track the deactivated set and hide those tiles.
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+  const [keeper, setKeeper] = useState(false);
   const { live: siteLive } = useSiteLive();
 
   useEffect(() => {
@@ -30,6 +32,7 @@ export default function AdminHubPage() {
       const { data } = await supabase.auth.getUser();
       if (!alive) return;
       if (!data.user) { router.replace("/"); return; }
+      setKeeper(isCredentialKeeper(data.user.email));
 
       const { data: prof } = await supabase
         .from("profiles")
@@ -64,11 +67,12 @@ export default function AdminHubPage() {
   // cards are removed outright rather than shown as Inactive, so nothing is
   // reachable — not even for an admin — until the switch is flipped.
   const orderedCards = useMemo(() => {
-    const catalog = siteLive ? CARDS : CARDS.filter((c) => !SITE_LIVE_CARD_KEYS.has(c.key));
+    const released = siteLive ? CARDS : CARDS.filter((c) => !SITE_LIVE_CARD_KEYS.has(c.key));
+    const catalog = keeper ? [...released, CREDENTIALS_CARD] : released;
     const active = catalog.filter((c) => !hiddenKeys.has(c.key));
     const inactive = catalog.filter((c) => hiddenKeys.has(c.key));
     return [...active, ...inactive];
-  }, [hiddenKeys, siteLive]);
+  }, [hiddenKeys, siteLive, keeper]);
 
   return (
     <main className="ds-page">
