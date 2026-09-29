@@ -16,6 +16,7 @@ import {
 } from "@/lib/solutions/solutionCatalog";
 import {
   prefixCandidatesForProduct,
+  sharedFilesForPrefixes,
   isFolderLike,
 } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
@@ -143,7 +144,7 @@ async function fetchTackleBoxFileCount(product: ProductRow, accessToken: string)
     }
   }
 
-  const unique = new Set<string>(paths);
+  const unique = new Set<string>([...paths, ...sharedFilesForPrefixes(candidates)]);
   return unique.size;
 }
 

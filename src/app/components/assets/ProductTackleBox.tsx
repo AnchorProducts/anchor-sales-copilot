@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
-import { prefixCandidatesForProduct } from "@/lib/assets/storagePrefixes";
+import { prefixCandidatesForProduct, sharedFilesForPrefixes, SHARED_FILE_TITLES } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
 import { compressImages } from "@/lib/media/compressImage";
 import { isArchivePath, withArchivePrefix } from "@/lib/library/archive";
@@ -542,11 +542,14 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
       setStoragePrefix(normalizePrefix(pickedPrefix));
 
+      // Files shared across many tackle boxes (e.g. the U-anchor master spec)
+      paths = [...paths, ...sharedFilesForPrefixes(candidates)];
+
       // Build storage-derived assets
       const derived: AssetRow[] = paths.map((path) => ({
         id: `storage:${path}`,
         product_id: (p as ProductRow).id,
-        title: titleFromPath(path),
+        title: SHARED_FILE_TITLES[path] || titleFromPath(path),
         type: typeFromPath(path),
         category_key: tabFromPath(path), // informational only
         path,
@@ -1545,7 +1548,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                                     {replacingPath === a.path ? "Replacing…" : "Replace"}
                                   </button>
                                 )}
-                                {isAdmin && (
+                                {isAdmin && !SHARED_FILE_TITLES[a.path] && (
                                   <button
                                     type="button"
                                     onClick={() => deleteAsset(a)}

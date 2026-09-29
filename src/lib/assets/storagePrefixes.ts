@@ -110,6 +110,25 @@ export const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "U3800 Coatings": ["anchor/u-anchors/u3800/coatings"],
 };
 
+/* ---------------------------------------------
+   Shared files
+   One file that belongs to many products' tackle boxes without being copied
+   into each folder. The U-anchor master spec covers every 2000 and 3000
+   series anchor, so it lives once at anchor/u-anchors/spec.docx and is added
+   to any product whose folder sits under anchor/u-anchors/.
+--------------------------------------------- */
+
+export const U_ANCHOR_SPEC_PATH = "anchor/u-anchors/spec.docx";
+
+export const SHARED_FILE_TITLES: Record<string, string> = {
+  [U_ANCHOR_SPEC_PATH]: "U2000 / U3000 Series Spec",
+};
+
+export function sharedFilesForPrefixes(prefixes: string[]): string[] {
+  const hit = prefixes.some((p) => normalizePrefix(p).startsWith("anchor/u-anchors/"));
+  return hit ? [U_ANCHOR_SPEC_PATH] : [];
+}
+
 export const SERIES_ROOTS_BY_SERIES: Record<string, string[]> = {
   // Solutions
   HVAC: ["solutions/hvac"],
