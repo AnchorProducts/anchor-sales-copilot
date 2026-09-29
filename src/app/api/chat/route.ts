@@ -9,6 +9,7 @@ import {
   folderCandidatesForCatalog,
 } from "@/lib/solutions/solutionCatalog";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sharedFilesForPrefixes, SHARED_FILE_TITLES } from "@/lib/assets/storagePrefixes";
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve";
 import { retrieveCorrections } from "@/lib/learning/corrections";
 import { maybeExtractKnowledge, maybeSummarizeSession, writeChatMessage } from "@/lib/learning/loops";
@@ -136,13 +137,14 @@ async function fetchDocsForFolder(folder: string): Promise<RecommendedDoc[]> {
   if (!prefix) return [];
 
   try {
-    const paths = await listStorageRecursive("knowledge", prefix);
+    const listed = await listStorageRecursive("knowledge", prefix);
+    const paths = Array.from(new Set([...listed, ...sharedFilesForPrefixes([prefix])]));
     return paths
       .filter((p) => !isInternalStoragePath(p))
       .filter((p) => /\.(pdf|dwg|stp|step|docx?)$/i.test(p))
       .sort((a, b) => docSortPriority(a) - docSortPriority(b))
       .map((path) => ({
-        title: titleFromStoragePath(path),
+        title: SHARED_FILE_TITLES[path] || titleFromStoragePath(path),
         doc_type: docTypeFromPath(path),
         path,
         url: null,
