@@ -40,6 +40,14 @@ export const CARDS: AdminCard[] = [
     featured: true,
   },
   {
+    key: "sop",
+    title: "SOP",
+    description: "Step-by-step procedures for every tool — admin, internal and external views — so anyone covering can run the app.",
+    badge: "Content",
+    href: "/admin/sop",
+    icon: "book",
+  },
+  {
     key: "users",
     title: "Users",
     description: "Edit names, emails, phone numbers, and roles for every user.",
