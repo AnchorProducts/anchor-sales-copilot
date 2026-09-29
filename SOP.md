@@ -2,6 +2,8 @@
 
 **For:** Riley (Admin / Operator)
 **Version:** 1.0 — 2026-07-29
+> **The living SOP is now in the app: Admin Console → SOP (`/admin/sop`), content in `src/lib/sop/content.ts`.** This file is kept for history and for the developer notes at the end; where the two disagree, the in-app page is current.
+
 **Companion doc:** `SITEMAP.md` (the exhaustive technical inventory — routes, tables, every email). This SOP is the *how-to*; the sitemap is the *what-exists*.
 
 > The last section (Page 14) is written for a software developer, not for you. Hand the whole document to anyone brought in to make large-scale changes to the site.
