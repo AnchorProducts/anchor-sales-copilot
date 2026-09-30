@@ -24,7 +24,7 @@ export type SopSection = {
   blocks: SopBlock[];
 };
 
-export const SOP_REVIEWED = "2026-09-29";
+export const SOP_REVIEWED = "2026-09-30";
 
 export const SOP_AUDIENCES: { value: SopAudience; label: string; hint: string }[] = [
   { value: "start", label: "Start here", hint: "How the app is put together, the roles, and the daily and weekly routine. Read this first." },
@@ -707,6 +707,77 @@ export const SOP_SECTIONS: SopSection[] = [
       {
         heading: "Steps",
         steps: ["Click **Preview** next to a page. You're taken there and the tour runs."],
+      },
+    ],
+  },
+  {
+    id: "hubspot-website",
+    audience: "admin",
+    title: "HubSpot — website leads",
+    where: "anchorp.com portal → Marketing → Forms",
+    summary:
+      "Every anchorp.com form becomes a HubSpot contact, assigned to the territory rep, who is emailed by a HubSpot workflow. The HubSpot login is Riley's; the website side is Lauren's. This lives in the website, not this app.",
+    blocks: [
+      {
+        heading: "What happens on every submission",
+        steps: [
+          "The submission is saved in the portal first, so a lead is never lost even if HubSpot is down.",
+          "The person is created or updated as a HubSpot contact with every answer filled in. A returning visitor who mistypes their email is matched to their existing contact.",
+          "The contact goes to the territory rep for their state/ZIP. With no territory, the first person under the form's **Who gets notified** gets it. An existing owner is never replaced.",
+          "The HubSpot workflow **Website form submission > email the territory rep (anchorp.com)** emails the rep.",
+        ],
+        note: "No deals, companies or tasks are created. That's deliberate: contacts are reviewed, then imported into NetSuite (the **NetSuite review** field on the contact).",
+      },
+      {
+        heading: "Checking it worked",
+        bullets: [
+          "Portal → **Marketing → Forms** → open the form. Each submission has a HubSpot badge; click it for every step and HubSpot's exact reply.",
+          "**In HubSpot** — all good. **Sending…** — normal for up to a minute. **Stalled** — stuck over 5 minutes.",
+          "**Note only** — the contact was saved but HubSpot's form record didn't land, so the answers went in as a note.",
+          "**Failed** — HubSpot refused it; the badge says why. **Not sent** — HubSpot is switched off (the key is missing).",
+          "Held (spammy-looking) submissions wait under **Needs review** and only go to HubSpot when released.",
+        ],
+      },
+      {
+        heading: "Changing who gets leads",
+        bullets: [
+          "By region: Portal → **Marketing → Territories**. **HubSpot leads go to** switches a region between the outside rep and inside sales.",
+          "By form (fallback): Portal → **Marketing → Forms** → the form → **Who gets notified**.",
+          "Every rep must be a HubSpot user. Anyone who isn't is skipped for ownership.",
+          "New or edited forms need nothing in HubSpot. Saving the form creates its **(anchorp.com)** HubSpot form and a **website_…** property per question.",
+        ],
+      },
+      {
+        heading: "Report → fix",
+        bullets: [
+          "**Badge says Not sent** — HUBSPOT_PRIVATE_APP_TOKEN is missing in Vercel (anchorp-website). Re-add it and redeploy.",
+          "**Failed with 401 / unauthorized** — the key was revoked or expired. Replace it (below).",
+          "**Contacts arrive with no owner** — the private app lost its owners permission (this has happened when the key was reissued). HubSpot → Settings → Integrations → **Private Apps** → the website app → Scopes: tick crm.objects.owners.read, save, and put the new key in Vercel.",
+          "**Contact arrived but the rep got no email** — HubSpot → Automation → **Workflows**: the (anchorp.com) rep-email workflow must be ON, and the rep must be the owner or the contact's **Website territory rep**.",
+          "**Original Source says Offline Sources, no page history** — HUBSPOT_PORTAL_ID is missing in Vercel. Re-add it and redeploy.",
+          "**Every submission from one form fails** — someone turned on reCAPTCHA on its (anchorp.com) form in HubSpot. Turn it off.",
+          "**State or country missing on the contact** — HubSpot rejected the spelling and the contact was saved without it. Tell Lauren the value.",
+        ],
+      },
+      {
+        heading: "Replacing the key (Riley and Lauren together)",
+        steps: [
+          "HubSpot → Settings → Integrations → **Private Apps** → the website app.",
+          "Check every scope is ticked: crm.objects.contacts.read, crm.objects.contacts.write, crm.schemas.contacts.read, crm.schemas.contacts.write, crm.objects.owners.read, forms, automation.",
+          "Rotate the key and copy the new one.",
+          "Vercel → anchorp-website → Settings → **Environment Variables** → HUBSPOT_PRIVATE_APP_TOKEN → paste → Save → **Redeploy**.",
+          "Submit a test form on anchorp.com. The badge should say **In HubSpot** and the contact should have an owner.",
+        ],
+        note: "Keep the key only in the password manager and Vercel. Never in chat or email.",
+      },
+      {
+        heading: "Don't touch in HubSpot",
+        bullets: [
+          "The **(anchorp.com)** forms' settings. reCAPTCHA stays off; **create new contact for new email** stays on.",
+          "The (anchorp.com) rep-email workflow. The website's script rebuilds it and overwrites any edits.",
+          "The properties lead_source (must keep the option **Website submission**), lead_source_other, netsuite_review, and anything starting website_.",
+        ],
+        note: "Developer detail and scripts: docs/hubspot-leads-go-live-and-inside-sales.md in the anchorp-website repo.",
       },
     ],
   },
