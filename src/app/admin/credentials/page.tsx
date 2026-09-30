@@ -1,6 +1,6 @@
 "use client";
 
-// Credentials index for the two keepers (src/lib/credentials/keepers.ts). It
+// Credentials index for the keepers (src/lib/credentials/keepers.ts). It
 // records where every login lives — never the password itself, which stays in
 // the team password manager. Every view, open, copy and edit is logged, from
 // here and from the website admin alike.
@@ -216,7 +216,7 @@ export default function CredentialsPage() {
           <ToolLoader feature="admin" label="Loading…" />
         ) : denied ? (
           <Surface className="mx-auto max-w-xl p-6 text-[14px] text-[var(--anchor-gray)]">
-            This page is limited to the two people who look after Anchor&rsquo;s logins.
+            This page is limited to the people who look after Anchor&rsquo;s logins.
           </Surface>
         ) : (
           <div className="mx-auto max-w-4xl space-y-4">
@@ -228,7 +228,7 @@ export default function CredentialsPage() {
               <h1 className="mt-2 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-black">Credentials</h1>
               <p className="mt-1.5 max-w-2xl text-[14px] leading-snug text-[var(--anchor-gray)]">
                 Every system Anchor signs in to, and where its login is kept. Passwords, keys and recovery codes live
-                only in the password manager — this list tells you which item to open. Only Riley and Calli can see it,
+                only in the password manager — this list tells you which item to open. Only Riley, Calli and Lauren can see it,
                 here and in the website admin, and every visit is logged.
               </p>
 

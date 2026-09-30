@@ -1,8 +1,8 @@
-// Who may see the credentials index. Deliberately a list of two people, not a
+// Who may see the credentials index. Deliberately a short list of people, not a
 // role: being an admin is not enough. The website keeps the same list in
 // src/lib/portal/credentialKeepers.ts — change both together.
 
-export const CREDENTIAL_KEEPERS = ["riley.stanley@anchorp.com", "calli@anchorp.com"];
+export const CREDENTIAL_KEEPERS = ["riley.stanley@anchorp.com", "calli@anchorp.com", "lauren.burrell@anchorp.com"];
 
 export function isCredentialKeeper(email: string | null | undefined) {
   return CREDENTIAL_KEEPERS.includes(String(email || "").trim().toLowerCase());
