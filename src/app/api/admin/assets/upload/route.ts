@@ -29,6 +29,7 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   manufacturer_approval_letters: "approval-",
   presentations: "presentation-",
   case_studies: "case-study-",
+  internal_document: "internal-document-",
   pictures: "",
 };
 
@@ -103,6 +104,8 @@ const CATEGORY_ALIASES: Record<string, string> = {
   presentation: "presentations",
   case_study: "case_studies",
   case: "case_studies",
+  internal: "internal_document",
+  internal_doc: "internal_document",
   sales: "sales_sheet",
   data: "data_sheet",
   test: "test_reports",
@@ -175,7 +178,11 @@ export async function POST(req: NextRequest) {
     // superseded, so it must never reach a customer — which also keeps it out
     // of the public Webflow feed via the existing internal-path gate.
     const archive = body?.archive === true;
-    const visibility = archive ? "internal" : String(body?.visibility || "public").trim();
+    // An internal document is internal by definition, whatever the client sent.
+    const visibility =
+      archive || category === "internal_document"
+        ? "internal"
+        : String(body?.visibility || "public").trim();
 
     // ── Replace-in-place ──────────────────────────────────────────────────
     // Overwrite the bytes of an EXISTING library file at its exact path. The
