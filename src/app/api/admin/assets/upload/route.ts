@@ -30,6 +30,8 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   presentations: "presentation-",
   case_studies: "case-study-",
   internal_document: "internal-document-",
+  assembly: "assembly-",
+  cad: "cad-",
   pictures: "",
 };
 
@@ -106,6 +108,10 @@ const CATEGORY_ALIASES: Record<string, string> = {
   case: "case_studies",
   internal: "internal_document",
   internal_doc: "internal_document",
+  assembly_instructions: "assembly",
+  cad_file: "cad",
+  cad_files: "cad",
+  drawings: "cad",
   sales: "sales_sheet",
   data: "data_sheet",
   test: "test_reports",

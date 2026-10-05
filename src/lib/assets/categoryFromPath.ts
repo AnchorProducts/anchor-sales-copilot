@@ -12,11 +12,18 @@ import { basename, extOf, IMAGE_EXTS } from "@/lib/assets/storagePrefixes";
  * Order matters: the first rule that matches wins, most specific first.
  * ==========================================================================*/
 
+const CAD_EXTS = new Set([
+  "dwg", "dxf", "step", "stp", "iges", "igs", "sat", "x_t", "stl",
+  "rvt", "rfa", "skp", "sldprt", "sldasm", "ipt", "iam",
+]);
+
 export type AssetCategoryKey =
   | "spec_document"
   | "data_sheet"
   | "sales_sheet"
   | "install_guide"
+  | "assembly"
+  | "cad"
   | "intake_form"
   | "test_reports"
   | "pricebook"
@@ -28,6 +35,12 @@ export type AssetCategoryKey =
 export function categoryKeyFromPath(path: string): AssetCategoryKey | null {
   const p = String(path || "").toLowerCase();
   const file = basename(p);
+
+  // Assembly and CAD — matched on their upload prefix before the substring rules
+  // below, so "cad-install-detail.dwg" isn't filed as an install guide.
+  if (file.startsWith("assembly-") || file.includes("assembly-instructions") || p.includes("/assembly/"))
+    return "assembly";
+  if (file.startsWith("cad-") || p.includes("/cad/") || CAD_EXTS.has(extOf(file))) return "cad";
 
   // Spec — uploaded with a "spec-" filename prefix; /spec/ folder is a fallback.
   if (p.includes("/spec/") || p.startsWith("spec/") || file.includes("spec")) return "spec_document";
