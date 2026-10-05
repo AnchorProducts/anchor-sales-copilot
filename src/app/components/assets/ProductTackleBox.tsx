@@ -67,6 +67,8 @@ type TabKey =
   | "spec"
   | "data"
   | "install"
+  | "assembly"
+  | "cad"
   | "sales"
   | "intake"
   | "test"
@@ -86,6 +88,8 @@ const TAB_ORDER: TabKey[] = [
   "spec",
   "data",
   "install",
+  "assembly",
+  "cad",
   "sales",
   "intake",
   "test",
@@ -108,6 +112,8 @@ const ASSET_CATEGORY_OPTIONS: { key: string; label: string }[] = [
   { key: "sales_sheet", label: "Sales Sheet" },
   { key: "data_sheet", label: "Data Sheet" },
   { key: "install_guide", label: "Install Guide" },
+  { key: "assembly", label: "Assembly" },
+  { key: "cad", label: "CAD" },
   { key: "spec_document", label: "Spec Document" },
   { key: "intake_form", label: "Intake Form" },
   { key: "test_reports", label: "Test Report" },
@@ -132,6 +138,12 @@ const PDF_EXTS = new Set(["pdf"]);
 // Office docs have no native renderer on mobile — opened via the in-app
 // viewer, which embeds the Microsoft Office Online viewer.
 const OFFICE_EXTS = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
+// Drawing/model formats. None render in the browser, so they download — but
+// they still file under the CAD tab even when uploaded without the "cad-" prefix.
+const CAD_EXTS = new Set([
+  "dwg", "dxf", "step", "stp", "iges", "igs", "sat", "x_t", "stl",
+  "rvt", "rfa", "skp", "sldprt", "sldasm", "ipt", "iam",
+]);
 
 /* ---------------------------------------------
    Helpers
@@ -253,6 +265,14 @@ function tabFromPath(path: string): TabKey {
   // ("…-spec.pdf", "…-pricing.pdf") and must not be filed under that tab.
   if (file.includes("internal-document")) return "internal";
 
+  // Assembly and CAD — matched on the upload prefix (start of the filename) for
+  // the same reason, and before "install"/"spec" so "cad-install-detail.dwg"
+  // stays a CAD file. "cad" is only trusted as a prefix: as a bare substring it
+  // would catch words like "cascade" or "decade".
+  if (file.startsWith("assembly-") || file.includes("assembly-instructions") || p.includes("/assembly/"))
+    return "assembly";
+  if (file.startsWith("cad-") || p.includes("/cad/") || CAD_EXTS.has(extOf(file))) return "cad";
+
   // Spec — each solution's own admin-uploaded spec lands here. Spec docs are
   // uploaded with a "spec-" filename prefix (see admin/assets/upload), so the
   // filename check below catches them; the /spec/ folder check is a fallback.
@@ -368,7 +388,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
   const TAB_LABELS: Record<TabKey, string> = {
     all: t("tabAll"), spec: t("tabSpec"), data: t("tabData"),
-    install: t("tabInstall"), sales: t("tabSales"), intake: t("tabIntake"),
+    install: t("tabInstall"), assembly: t("tabAssembly"), cad: t("tabCad"), sales: t("tabSales"), intake: t("tabIntake"),
     test: t("tabTest"), pricebook: t("tabPricebook"), internal: t("tabInternal"), approval: t("tabApproval"),
     presentation: t("tabPresentation"), pics: t("tabPics"), case: t("tabCase"),
     archive: t("tabArchive"), other: t("tabOther"),
@@ -625,6 +645,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       spec: 0,
       data: 0,
       install: 0,
+      assembly: 0,
+      cad: 0,
       sales: 0,
       intake: 0,
       test: 0,
