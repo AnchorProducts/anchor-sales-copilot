@@ -1708,8 +1708,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
               <div className="text-sm font-semibold text-black">{t("addAsset")}</div>
               <div className="mt-1 text-sm text-[#76777B]">{t("adminOnlyNote")}</div>
 
-              <form onSubmit={submitAddAsset} className="mt-4 grid gap-3 sm:grid-cols-4">
-                <label className="sm:col-span-4 grid gap-1 text-sm">
+              <form onSubmit={submitAddAsset} className="mt-4 grid gap-3 sm:grid-cols-3">
+                <label className="sm:col-span-3 grid gap-1 text-sm">
                   <span className="font-semibold text-black">File</span>
                   <input
                     type="file"
@@ -1723,12 +1723,12 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   )}
                 </label>
 
-                <label className="grid gap-1 text-sm">
+                <label className="grid min-w-0 gap-1 text-sm">
                   <span className="font-semibold text-black">Category</span>
                   <select
                     value={form.category_key}
                     onChange={(e) => setForm((s) => ({ ...s, category_key: e.target.value }))}
-                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                    className="h-10 w-full min-w-0 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                   >
                     {ASSET_CATEGORY_OPTIONS.map((c) => (
                       <option key={c.key} value={c.key}>{c.label}</option>
@@ -1736,12 +1736,12 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   </select>
                 </label>
 
-                <label className="grid gap-1 text-sm">
+                <label className="grid min-w-0 gap-1 text-sm">
                   <span className="font-semibold text-black">Type</span>
                   <select
                     value={form.type}
                     onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))}
-                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                    className="h-10 w-full min-w-0 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                   >
                     <option value="document">Document</option>
                     <option value="image">Image</option>
@@ -1751,7 +1751,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   </select>
                 </label>
 
-                <label className="grid gap-1 text-sm">
+                <label className="grid min-w-0 gap-1 text-sm">
                   <span className="font-semibold text-black">Visibility</span>
                   <select
                     value={
@@ -1761,7 +1761,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                     }
                     disabled={form.archive || INTERNAL_ONLY_CATEGORIES.has(form.category_key)}
                     onChange={(e) => setForm((s) => ({ ...s, visibility: e.target.value as any }))}
-                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835] disabled:opacity-60"
+                    className="h-10 w-full min-w-0 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835] disabled:opacity-60"
                   >
                     <option value="public">Public</option>
                     <option value="internal">Internal</option>
@@ -1771,7 +1771,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 {/* Archive is a tag, not a category. The file keeps the category
                     chosen above, so it stays on that tab, and additionally
                     lands on the internal-only Archive tab. */}
-                <label className="sm:col-span-4 flex items-start gap-2 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 py-3 text-sm">
+                <label className="sm:col-span-3 flex items-start gap-2 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 py-3 text-sm">
                   <input
                     type="checkbox"
                     checked={form.archive}
@@ -1798,7 +1798,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   />
                 </label>
 
-                <label className="sm:col-span-4 grid gap-1 text-sm">
+                <label className="sm:col-span-3 grid gap-1 text-sm">
                   <span className="font-semibold text-black">Storage path (only if not uploading a file)</span>
                   <input
                     value={form.path}
@@ -1808,7 +1808,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   />
                 </label>
 
-                <div className="sm:col-span-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="sm:col-span-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="submit"
                     disabled={adding}
