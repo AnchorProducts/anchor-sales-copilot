@@ -576,7 +576,7 @@ export const SOP_SECTIONS: SopSection[] = [
         heading: "Add a file",
         steps: [
           "Open the tackle box → **Add asset**.",
-          "Choose the **File**, **Category** (Spec, Data Sheet, Install Guide…), **Type** and **Visibility** (Public or Internal). **Internal Document** is always Internal — staff only, never on the public website.",
+          "Choose the **File**, **Category** (Spec, Data Sheet, Install Guide, Internal Document…), **Type** and **Visibility** (Public or Internal).",
           "Click save. Product photos go through **Upload Product Images** instead.",
         ],
       },
@@ -587,6 +587,19 @@ export const SOP_SECTIONS: SopSection[] = [
           "The link stays the same everywhere, including anchorp.com. **Document replaced** recipients are told.",
         ],
         note: "Don't delete and re-upload an updated document — that changes its link and breaks the website button pointing at it.",
+      },
+      {
+        heading: "Add an internal document",
+        steps: [
+          "Open the tackle box → **Add asset** and choose the **File**.",
+          "Set **Category** to **Internal Document**. **Visibility** locks to Internal.",
+          "Click save. It's filed in the product's internal/ folder as internal-document-….",
+        ],
+        bullets: [
+          "It shows under the tackle box's **Internal** tab (internal users only).",
+          "On the website it's in the staff library at **/portal/documents**, never on the public Product Literature page.",
+          "Public download links (/api/public/doc) refuse it, so it can't be pasted into a Webflow card.",
+        ],
       },
       {
         heading: "Archive an old version",
