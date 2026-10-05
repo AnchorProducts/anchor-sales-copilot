@@ -1745,6 +1745,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   >
                     <option value="document">Document</option>
                     <option value="image">Image</option>
+                    <option value="model">Model</option>
                     <option value="video">Video</option>
                     <option value="link">Link</option>
                   </select>
