@@ -71,6 +71,7 @@ type TabKey =
   | "intake"
   | "test"
   | "pricebook"
+  | "internal"
   | "approval"
   | "presentation"
   | "pics"
@@ -89,6 +90,7 @@ const TAB_ORDER: TabKey[] = [
   "intake",
   "test",
   "pricebook",
+  "internal",
   "approval",
   "presentation",
   "pics",
@@ -113,12 +115,17 @@ const ASSET_CATEGORY_OPTIONS: { key: string; label: string }[] = [
   { key: "manufacturer_approval_letters", label: "Manufacturer Approval Letter" },
   { key: "presentations", label: "Presentation" },
   { key: "case_studies", label: "Case Study" },
+  { key: "internal_document", label: "Internal Document" },
 ];
+
+// Categories that are internal by definition. Picking one locks Visibility to
+// Internal — the upload route enforces the same rule server-side.
+const INTERNAL_ONLY_CATEGORIES = new Set(["internal_document"]);
 
 // Tabs that should only appear for internal users. Archive is here because
 // retired documents are for internal reference only — a customer-facing rep
 // should never be handed a superseded sheet.
-const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook", "archive"]);
+const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook", "internal", "archive"]);
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
 const PDF_EXTS = new Set(["pdf"]);
@@ -215,6 +222,7 @@ function visibilityFromPath(path: string): "public" | "internal" {
 
   if (p.includes("/internal/") || p.startsWith("internal/")) return "internal";
   if (p.includes("/pricebook/") || p.includes("/test/") || p.includes("/test-reports/")) return "internal";
+  if (basename(p).includes("internal-document")) return "internal";
 
   return "public";
 }
@@ -239,6 +247,11 @@ function typeFromPath(path: string) {
 function tabFromPath(path: string): TabKey {
   const p = String(path || "").toLowerCase();
   const file = basename(p);
+
+  // Internal documents — checked first, because the original filename that
+  // follows the "internal-document-" prefix can contain any other token
+  // ("…-spec.pdf", "…-pricing.pdf") and must not be filed under that tab.
+  if (file.includes("internal-document")) return "internal";
 
   // Spec — each solution's own admin-uploaded spec lands here. Spec docs are
   // uploaded with a "spec-" filename prefix (see admin/assets/upload), so the
@@ -356,7 +369,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const TAB_LABELS: Record<TabKey, string> = {
     all: t("tabAll"), spec: t("tabSpec"), data: t("tabData"),
     install: t("tabInstall"), sales: t("tabSales"), intake: t("tabIntake"),
-    test: t("tabTest"), pricebook: t("tabPricebook"), approval: t("tabApproval"),
+    test: t("tabTest"), pricebook: t("tabPricebook"), internal: t("tabInternal"), approval: t("tabApproval"),
     presentation: t("tabPresentation"), pics: t("tabPics"), case: t("tabCase"),
     archive: t("tabArchive"), other: t("tabOther"),
   };
@@ -616,6 +629,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       intake: 0,
       test: 0,
       pricebook: 0,
+      internal: 0,
       approval: 0,
       presentation: 0,
       pics: 0,
@@ -1074,7 +1088,8 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     const archive = form.archive;
     // Archived material is superseded, so it is internal by definition — the
     // server enforces this too; mirroring it here keeps the UI honest.
-    const visibility = archive ? "internal" : form.visibility;
+    const visibility =
+      archive || INTERNAL_ONLY_CATEGORIES.has(category_key) ? "internal" : form.visibility;
     const manualPath = form.path.trim();
 
     if (!category_key) {
@@ -1716,8 +1731,12 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                 <label className="grid gap-1 text-sm">
                   <span className="font-semibold text-black">Visibility</span>
                   <select
-                    value={form.archive ? "internal" : form.visibility}
-                    disabled={form.archive}
+                    value={
+                      form.archive || INTERNAL_ONLY_CATEGORIES.has(form.category_key)
+                        ? "internal"
+                        : form.visibility
+                    }
+                    disabled={form.archive || INTERNAL_ONLY_CATEGORIES.has(form.category_key)}
                     onChange={(e) => setForm((s) => ({ ...s, visibility: e.target.value as any }))}
                     className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835] disabled:opacity-60"
                   >

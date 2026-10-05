@@ -57,7 +57,8 @@ function isInternalPath(path: string) {
     p.startsWith("internal/") ||
     p.includes("/pricebook/") ||
     p.includes("/test/") ||
-    p.includes("/test-reports/")
+    p.includes("/test-reports/") ||
+    p.includes("internal-document")
   );
 }
 

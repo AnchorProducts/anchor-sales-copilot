@@ -576,7 +576,7 @@ export const SOP_SECTIONS: SopSection[] = [
         heading: "Add a file",
         steps: [
           "Open the tackle box → **Add asset**.",
-          "Choose the **File**, **Category** (Spec, Data Sheet, Install Guide…), **Type** and **Visibility** (Public or Internal).",
+          "Choose the **File**, **Category** (Spec, Data Sheet, Install Guide…), **Type** and **Visibility** (Public or Internal). **Internal Document** is always Internal — staff only, never on the public website.",
           "Click save. Product photos go through **Upload Product Images** instead.",
         ],
       },
