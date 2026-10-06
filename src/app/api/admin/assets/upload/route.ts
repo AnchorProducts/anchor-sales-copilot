@@ -35,16 +35,6 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   pictures: "",
 };
 
-// Categories whose filenames should be fully replaced (not prefixed) so each
-// product has exactly one canonical file per sheet type. Combined with the
-// `upsert: true` storage upload below, re-uploading replaces the existing one.
-// Extension is preserved from the source file.
-const CATEGORY_FIXED_BASENAME: Record<string, string> = {
-  sales_sheet: "Sales-Sheet",
-  data_sheet: "Data-Sheet",
-  install_guide: "Install-Sheet",
-};
-
 function normalizePrefix(p: string) {
   return String(p || "").trim().replace(/^\/+|\/+$/g, "");
 }
@@ -87,6 +77,23 @@ async function storageFileExists(path: string): Promise<boolean> {
     .list(dir, { limit: 1000, search: name });
   if (error || !data) return false;
   return data.some((e: any) => String(e?.name) === name);
+}
+
+// A new upload never overwrites anything: if the name is taken in this folder
+// (a product can carry several sales/data/install sheets), it gets the first
+// free "-2", "-3"… suffix. Overwriting an existing file is what Replace is for.
+async function firstFreePath(folder: string, name: string): Promise<string> {
+  const { data } = await supabaseAdmin.storage
+    .from("knowledge")
+    .list(folder, { limit: 1000 });
+  const taken = new Set((data ?? []).map((e: any) => String(e?.name).toLowerCase()));
+  if (!taken.has(name.toLowerCase())) return `${folder}/${name}`;
+  const ext = extensionOf(name);
+  const stem = ext ? name.slice(0, -ext.length) : name;
+  for (let n = 2; ; n++) {
+    const candidate = `${stem}-${n}${ext}`;
+    if (!taken.has(candidate.toLowerCase())) return `${folder}/${candidate}`;
+  }
 }
 
 // Older clients (and this route's own earlier guesses) used names that were
@@ -289,32 +296,23 @@ export async function POST(req: NextRequest) {
 
       const baseName = sanitizeFilename(fileName);
 
-      let finalName: string;
-      const fixedBase = CATEGORY_FIXED_BASENAME[category];
-      if (fixedBase && !archive) {
-        finalName = `${fixedBase}${extensionOf(baseName)}`;
-      } else {
-        // An archived upload always keeps its own name. The canonical fixed
-        // basename ("Sales-Sheet.pdf") is reserved for the ONE current file per
-        // category — reusing it here would overwrite the live sheet with the
-        // retired one, which is the exact opposite of archiving.
-        const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
-        const alreadyTagged =
-          categoryPrefix &&
-          baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
-        finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
-      }
-      // The category token stays in the name so tabFromPath() still files this
-      // under Sales/Data/etc. — an archived sales sheet must show up when
-      // someone filters for sales sheets, just flagged as archived.
+      // The category token goes in the name so tabFromPath() files it under
+      // Sales/Data/etc. — and stays there when archived, so an archived sales
+      // sheet still shows up when someone filters for sales sheets.
+      const categoryPrefix = CATEGORY_FILENAME_PREFIX[category] ?? "";
+      const alreadyTagged =
+        categoryPrefix &&
+        baseName.toLowerCase().includes(categoryPrefix.replace(/-$/, ""));
+      let finalName = alreadyTagged ? baseName : `${categoryPrefix}${baseName}`;
       if (archive) finalName = withArchivePrefix(finalName);
 
       const folder = visibility === "internal" ? `${prefix}/internal` : prefix;
-      const path = `${folder}/${finalName}`;
+      const path = await firstFreePath(folder, finalName);
+      finalName = basename(path);
 
       const { data, error } = await supabaseAdmin.storage
         .from("knowledge")
-        .createSignedUploadUrl(path, { upsert: true });
+        .createSignedUploadUrl(path);
 
       if (error || !data) {
         return NextResponse.json(

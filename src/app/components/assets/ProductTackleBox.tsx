@@ -411,7 +411,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const [accessToken, setAccessToken] = useState("");
 
   const [adding, setAdding] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [replacingPath, setReplacingPath] = useState<string | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -1101,6 +1101,85 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     setUploadingImages(false);
   }
 
+  // Uploads one file through the sign → upload → commit flow. Resolves to null
+  // on success, or a short message describing what went wrong.
+  async function uploadOneAsset(
+    file: File,
+    opts: { prefix: string; category_key: string; type: string; visibility: string; archive: boolean; title: string },
+  ): Promise<string | null> {
+    const { prefix, category_key, type, visibility, archive, title } = opts;
+    try {
+      // Phase 1: ask the server to mint a signed upload URL (and resolve the
+      // final storage path/name from category + visibility rules).
+      const signRes = await fetch("/api/admin/assets/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phase: "sign",
+          prefix,
+          category: category_key,
+          visibility,
+          archive,
+          fileName: file.name,
+        }),
+      });
+      const signText = await signRes.text();
+      let sign: any = {};
+      try { sign = signText ? JSON.parse(signText) : {}; } catch { /* keep text */ }
+      if (!signRes.ok || !sign?.token || !sign?.path) {
+        // eslint-disable-next-line no-console
+        console.error("[Add asset] sign failed", { status: signRes.status, body: signText });
+        return sign?.error || (signText && signText.slice(0, 200)) || `HTTP ${signRes.status}`;
+      }
+
+      // Phase 2: upload the bytes straight to Supabase Storage.
+      const { error: upErr } = await supabase.storage
+        .from("knowledge")
+        .uploadToSignedUrl(sign.path, sign.token, file, {
+          contentType: file.type || "application/octet-stream",
+        });
+      if (upErr) return upErr.message;
+
+      // Phase 3: record the assets row + kick off ingestion.
+      const res = await fetch("/api/admin/assets/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phase: "commit",
+          prefix,
+          path: sign.path,
+          name: sign.name,
+          category: category_key,
+          visibility,
+          archive,
+          productId,
+          type,
+          title,
+        }),
+      });
+      const text = await res.text();
+      let json: any = {};
+      try { json = text ? JSON.parse(text) : {}; } catch { /* keep text */ }
+      if (!res.ok || !json?.path) {
+        // eslint-disable-next-line no-console
+        console.error("[Add asset] commit failed", { status: res.status, body: text });
+        return json?.error || (text && text.slice(0, 200)) || `HTTP ${res.status}`;
+      }
+      if (json?.row && json.row.ok === false && json.row.error) {
+        // Storage succeeded, server-side row insert had a known issue
+        // (e.g. category_key FK). Surface it but keep the upload.
+        return `uploaded, but row insert failed: ${json.row.error}`;
+      }
+      return null;
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error("[Add asset] upload threw", err);
+      return err?.message || "network error";
+    }
+  }
+
   async function submitAddAsset(e: React.FormEvent) {
     e.preventDefault();
     setFormMsg(null);
@@ -1118,16 +1197,14 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       setFormMsg("Please choose a category.");
       return;
     }
-    if (!uploadFile && !manualPath) {
+    if (!uploadFiles.length && !manualPath) {
       setFormMsg("Choose a file to upload, or paste an existing storage path.");
       return;
     }
 
     setAdding(true);
 
-    let finalPath = manualPath;
-
-    if (uploadFile) {
+    if (uploadFiles.length) {
       const prefix =
         storagePrefix ||
         (product ? prefixCandidatesForProduct(product)[0] : "") ||
@@ -1137,115 +1214,56 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
         setAdding(false);
         return;
       }
-      const title = form.title.trim();
-      try {
-        // Phase 1: ask the server to mint a signed upload URL (and resolve the
-        // final storage path/name from category + visibility rules).
-        const signRes = await fetch("/api/admin/assets/upload", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phase: "sign",
-            prefix,
-            category: category_key,
-            visibility,
-            archive,
-            fileName: uploadFile.name,
-          }),
-        });
-        const signText = await signRes.text();
-        let sign: any = {};
-        try { sign = signText ? JSON.parse(signText) : {}; } catch { /* keep text */ }
-        if (!signRes.ok || !sign?.token || !sign?.path) {
-          const detail = sign?.error || (signText && signText.slice(0, 200)) || `HTTP ${signRes.status}`;
-          // eslint-disable-next-line no-console
-          console.error("[Add asset] sign failed", { status: signRes.status, body: signText });
-          setFormMsg(`Upload failed: ${detail}`);
-          setAdding(false);
-          return;
-        }
+      // A typed title only makes sense for a single file; with several, each
+      // is titled from its own file name.
+      const title = uploadFiles.length === 1 ? form.title.trim() : "";
 
-        // Phase 2: upload the bytes straight to Supabase Storage.
-        const { error: upErr } = await supabase.storage
-          .from("knowledge")
-          .uploadToSignedUrl(sign.path, sign.token, uploadFile, {
-            contentType: uploadFile.type || "application/octet-stream",
-          });
-        if (upErr) {
-          setFormMsg(`Upload failed: ${upErr.message}`);
-          setAdding(false);
-          return;
-        }
+      // One at a time, so each file's free name is resolved after the
+      // previous one has landed.
+      const failed: { file: File; error: string }[] = [];
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const file = uploadFiles[i];
+        if (uploadFiles.length > 1) setFormMsg(`Uploading ${i + 1} of ${uploadFiles.length}…`);
+        const error = await uploadOneAsset(file, { prefix, category_key, type, visibility, archive, title });
+        if (error) failed.push({ file, error });
+      }
 
-        // Phase 3: record the assets row + kick off ingestion.
-        const res = await fetch("/api/admin/assets/upload", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phase: "commit",
-            prefix,
-            path: sign.path,
-            name: sign.name,
-            category: category_key,
-            visibility,
-            archive,
-            productId,
-            type,
-            title,
-          }),
-        });
-        const text = await res.text();
-        let json: any = {};
-        try { json = text ? JSON.parse(text) : {}; } catch { /* keep text */ }
-        if (!res.ok || !json?.path) {
-          const detail = json?.error || (text && text.slice(0, 200)) || `HTTP ${res.status}`;
-          // eslint-disable-next-line no-console
-          console.error("[Add asset] commit failed", { status: res.status, body: text });
-          setFormMsg(`Upload failed: ${detail}`);
-          setAdding(false);
-          return;
-        }
-        finalPath = json.path;
-        if (json?.row && json.row.ok === false && json.row.error) {
-          // Storage succeeded, server-side row insert had a known issue
-          // (e.g. category_key FK). Surface it but keep the upload.
-          setFormMsg(`Uploaded, but row insert failed: ${json.row.error}`);
-          setUploadFile(null);
-          setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public", archive: false });
-          await load();
-          setAdding(false);
-          return;
-        }
-      } catch (err: any) {
-        // eslint-disable-next-line no-console
-        console.error("[Add asset] upload threw", err);
-        setFormMsg(`Upload failed: ${err?.message || "network error"}`);
-        setAdding(false);
+      await load();
+      setAdding(false);
+      if (failed.length) {
+        // Keep only the failures selected so a retry doesn't duplicate the rest.
+        setUploadFiles(failed.map((f) => f.file));
+        const added = uploadFiles.length - failed.length;
+        setFormMsg(
+          (added ? `Added ${added}. ` : "") +
+            failed.map((f) => `${f.file.name}: ${f.error}`).join(" · "),
+        );
         return;
       }
-    } else if (manualPath) {
-      // Manual storage path was provided (no file uploaded). Fall back to a
-      // client-side insert for that legacy "point at an existing object" path.
-      const rawTitle = form.title.trim() || manualPath.split("/").pop() || "Asset";
-      const title = archive ? withArchivePrefix(rawTitle) : rawTitle;
-      const { error: insErr } = await supabase.from("assets").insert({
-        product_id: productId,
-        title,
-        type,
-        category_key,
-        path: finalPath,
-        visibility,
-      });
-      if (insErr) {
-        setFormMsg(`Row insert failed: ${insErr.message}`);
-        setAdding(false);
-        return;
-      }
+      setUploadFiles([]);
+      setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public", archive: false });
+      setFormMsg(uploadFiles.length > 1 ? `Added ${uploadFiles.length} files.` : "Added!");
+      return;
     }
 
-    setUploadFile(null);
+    // Manual storage path was provided (no file uploaded). Fall back to a
+    // client-side insert for that legacy "point at an existing object" path.
+    const rawTitle = form.title.trim() || manualPath.split("/").pop() || "Asset";
+    const title = archive ? withArchivePrefix(rawTitle) : rawTitle;
+    const { error: insErr } = await supabase.from("assets").insert({
+      product_id: productId,
+      title,
+      type,
+      category_key,
+      path: manualPath,
+      visibility,
+    });
+    if (insErr) {
+      setFormMsg(`Row insert failed: ${insErr.message}`);
+      setAdding(false);
+      return;
+    }
+
     setForm({ title: "", category_key: "data_sheet", type: "document", path: "", visibility: "public", archive: false });
     setFormMsg("Added!");
     await load();
@@ -1713,14 +1731,15 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   <span className="font-semibold text-black">File</span>
                   <input
                     type="file"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                    multiple
+                    onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
                     className="block w-full rounded-2xl border border-dashed border-black/15 bg-[#F6F7F8] px-4 py-2 text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-[#047835] file:px-3 file:py-1.5 file:text-white file:text-xs file:font-semibold"
                   />
-                  {uploadFile && (
-                    <span className="truncate text-[12px] text-black/60">
-                      {uploadFile.name} · {(uploadFile.size / 1024).toFixed(1)} KB
+                  {uploadFiles.map((f, i) => (
+                    <span key={`${f.name}-${f.size}-${i}`} className="truncate text-[12px] text-black/60">
+                      {f.name} · {(f.size / 1024).toFixed(1)} KB
                     </span>
-                  )}
+                  ))}
                 </label>
 
                 <label className="grid min-w-0 gap-1 text-sm">
@@ -1793,8 +1812,9 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
                   <input
                     value={form.title}
                     onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
-                    placeholder="Defaults to filename"
-                    className="h-10 rounded-2xl border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
+                    disabled={uploadFiles.length > 1}
+                    placeholder={uploadFiles.length > 1 ? "Each file uses its own name" : "Defaults to filename"}
+                    className="h-10 rounded-2xl disabled:opacity-60 border border-black/10 bg-[#F6F7F8] px-4 text-sm outline-none focus:border-[#047835]"
                   />
                 </label>
 
