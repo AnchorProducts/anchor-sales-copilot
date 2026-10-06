@@ -168,7 +168,7 @@ Hub `/admin` renders tiles from `src/app/admin/cards.tsx`.
 ### Assets / Uploads
 - `POST /api/assets/upload-images`, `/api/internal/asset-reviews/upload`, `/api/internal-assets/rep-agreements/upload`
   - _(`/api/internal-assets/revision` was **removed** 2026-07-29 along with the revision UI.)_
-- Admin: `/api/admin/assets/upload|delete|rename-sheets` — `upload` with `replace:true` overwrites bytes in place (path unchanged) and fires the **`document_replaced`** notification, `/api/admin/products`, `/api/admin/asset-reviews`, `/api/admin/oem-matrix`
+- Admin: `/api/admin/assets/upload|delete` — a new `upload` never overwrites (a taken name gets a `-2`, `-3`… suffix, so a product can hold several sheets of one type); `upload` with `replace:true` overwrites bytes in place (path unchanged) and fires the **`document_replaced`** notification, `/api/admin/products`, `/api/admin/asset-reviews`, `/api/admin/oem-matrix`
 
 ### Admin config
 - `GET/POST /api/admin/sales-reps`, `/api/admin/users`, `/api/admin/manufacturer-contacts[/[id]]`, `/api/admin/rooftop-logic`, `/api/admin/rooftop-reports`, `/api/admin/commission-claims`, `/api/admin/tools`, `/api/admin/user-activity`, `/api/admin/user-events`
