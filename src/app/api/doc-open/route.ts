@@ -1,6 +1,7 @@
 // src/app/api/doc-open/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { signStorageUrl } from "@/lib/storage/signedLinks";
 import { supabaseRoute } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -214,6 +215,13 @@ export async function GET(req: Request) {
   // in-app viewer to hand Office docs to the Microsoft Office Online viewer,
   // which needs a publicly fetchable URL string in its ?src= param.
   const mode = (searchParams.get("mode") || "").trim();
+  /* ?w=480 → a resized copy, for a thumbnail grid that was downloading every
+     full-size original (see lib/storage/signedLinks). Images only; clamped so
+     nobody can ask the transformer for something absurd. */
+  const widthParam = Number(searchParams.get("w") || "");
+  const width = Number.isFinite(widthParam) && widthParam > 0
+    ? Math.min(1600, Math.max(120, Math.round(widthParam)))
+    : undefined;
 
   // ✅ NEW: allow token via query param for mobile (because window.location can't send headers)
   const tokenFromQuery = (searchParams.get("token") || "").trim();
@@ -285,9 +293,9 @@ export async function GET(req: Request) {
     let signedUrl: string | null = null;
     let resolvedPath = "";
     for (const p of pathOptions) {
-      const { data, error } = await supabaseAdmin.storage.from("knowledge").createSignedUrl(p, 60 * 30);
-      if (!error && data?.signedUrl) {
-        signedUrl = data.signedUrl;
+      const url = await signStorageUrl("knowledge", p, { width });
+      if (url) {
+        signedUrl = url;
         resolvedPath = p;
         break;
       }
@@ -296,9 +304,9 @@ export async function GET(req: Request) {
     if (!signedUrl && pathOptions.some((p) => p.toLowerCase().includes("rep-agreements"))) {
       const fallbackPath = await findRepAgreementFallbackPath(pathOptions, path);
       if (fallbackPath) {
-        const { data, error } = await supabaseAdmin.storage.from("knowledge").createSignedUrl(fallbackPath, 60 * 30);
-        if (!error && data?.signedUrl) {
-          signedUrl = data.signedUrl;
+        const url = await signStorageUrl("knowledge", fallbackPath, { width });
+        if (url) {
+          signedUrl = url;
           resolvedPath = fallbackPath;
         }
       }
@@ -315,7 +323,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ url: signedUrl }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    return NextResponse.redirect(signedUrl, 302);
+    /* The redirect itself may be kept for ten minutes. The link it points at is
+       reused while at least fifteen minutes of its hour remain, so the browser
+       goes straight to a file it already has instead of asking again. Private:
+       the address carries the user's session token. */
+    return NextResponse.redirect(signedUrl, {
+      status: 302,
+      headers: { "Cache-Control": "private, max-age=600" },
+    });
   }
 
   /* ------------------------------------------------

@@ -696,8 +696,10 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
     return PDF_EXTS.has(extOf(path));
   }
 
+  // Thumbnails ask for a 480px copy — the grid draws them at card size, and the
+  // originals are full camera photos. Clicking opens the full-size file.
   function imgSrc(path: string) {
-    const base = docOpenHref(path, false);
+    const base = `${docOpenHref(path, false)}&w=480`;
     return accessToken ? `${base}&token=${encodeURIComponent(accessToken)}` : base;
   }
 

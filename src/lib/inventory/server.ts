@@ -2,6 +2,7 @@
 // service-role client (RLS-bypassing) — never import from client components.
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { signStorageUrl } from "@/lib/storage/signedLinks";
 import { sendPushToTool } from "@/lib/push/send";
 import { emailToolUsers } from "@/lib/push/recipients";
 import { internalAppUrl } from "@/lib/appUrl";
@@ -46,12 +47,12 @@ export function canViewInventory(role: string): boolean {
   return role === "admin" || role === "anchor_rep" || role === "external_rep";
 }
 
-// Short-lived signed URL for an item photo (null if no image / on error).
+// Signed link to an item photo, as a 480px thumbnail (null if no image / on
+// error). Every place an item photo appears — inventory, the store, the public
+// grab pages — draws it at 64px or a card's width, never full size. Reused
+// between loads; see lib/storage/signedLinks.
 export async function signItemImage(path: string | null | undefined): Promise<string | null> {
-  const p = clean(path);
-  if (!p) return null;
-  const { data } = await supabaseAdmin.storage.from(INVENTORY_BUCKET).createSignedUrl(p, 60 * 60);
-  return data?.signedUrl || null;
+  return signStorageUrl(INVENTORY_BUCKET, clean(path), { width: 480 });
 }
 
 // Sanitize an uploaded filename for a storage key.

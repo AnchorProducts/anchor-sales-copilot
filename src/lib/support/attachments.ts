@@ -2,6 +2,7 @@
 // storage bucket under support/<requestId>/; metadata is stored on the message
 // row (support_messages.attachments). Read access is via short-lived signed URLs.
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { signStorageUrl } from "@/lib/storage/signedLinks";
 
 const BUCKET = "knowledge";
 const MAX_FILES = 6;
@@ -55,15 +56,15 @@ export async function uploadSupportImages(
   return uploadImages(`support/${requestId}`, files);
 }
 
-// Attach short-lived signed URLs for display.
+// Attach signed URLs for display — reused between polls of the same thread, so
+// the browser keeps the photos it already has (lib/storage/signedLinks).
 export async function signSupportAttachments(
   attachments: SupportAttachment[]
 ): Promise<Array<SupportAttachment & { url: string | null }>> {
   const out: Array<SupportAttachment & { url: string | null }> = [];
   for (const a of attachments || []) {
     try {
-      const { data } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(a.path, 3600);
-      out.push({ ...a, url: data?.signedUrl ?? null });
+      out.push({ ...a, url: await signStorageUrl(BUCKET, a.path) });
     } catch {
       out.push({ ...a, url: null });
     }
