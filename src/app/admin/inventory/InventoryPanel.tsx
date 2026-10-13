@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { compressImage } from "@/lib/media/compressImage";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import Modal from "@/app/components/ui/Modal";
@@ -425,13 +426,16 @@ export default function AdminInventoryPage({
       }
       const savedId: string | undefined = json?.item?.id || itemModal.id;
       if (itemFile && savedId) {
+        // Phone photos arrive at 3–10 MB and are only ever shown as thumbnails;
+        // shrink before upload (max 2000px, JPEG). Non-images pass through.
+        const photo = await compressImage(itemFile);
         const imgUrl = `/api/inventory/${encodeURIComponent(savedId)}/image`;
-        const contentType = itemFile.type || "application/octet-stream";
+        const contentType = photo.type || "application/octet-stream";
         // Phase 1: ask the server for a signed upload URL.
         const signRes = await fetch(imgUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "sign", fileName: itemFile.name, contentType }),
+          body: JSON.stringify({ phase: "sign", fileName: photo.name, contentType }),
         });
         const sign = await signRes.json().catch(() => null);
         if (!signRes.ok || !sign?.token || !sign?.path) {
@@ -442,7 +446,7 @@ export default function AdminInventoryPage({
         // Phase 2: upload the bytes straight to Supabase Storage (no Vercel cap).
         const { error: upErr } = await supabase.storage
           .from(sign.bucket)
-          .uploadToSignedUrl(sign.path, sign.token, itemFile, { contentType });
+          .uploadToSignedUrl(sign.path, sign.token, photo, { contentType });
         if (upErr) {
           setModalErr(`Item saved, but the photo failed to upload: ${upErr.message}`);
           await loadAll();
