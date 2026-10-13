@@ -1,9 +1,11 @@
 import { Badge, ReviewNote, StatusBadge } from "@/app/components/showcase/ShowcaseBadges";
+import { KeeperBadge } from "@/app/components/showcase/KeeperReview";
 import {
   coverUrl,
   formatDay,
   needsPhotos,
   photoSummary,
+  toReview,
   type ScheduleStop,
 } from "@/lib/showcase/client";
 
@@ -13,11 +15,13 @@ import {
 export function StopList({
   stops,
   day,
+  canReview = false,
   onOpen,
   empty,
 }: {
   stops: ScheduleStop[];
   day: string;
+  canReview?: boolean;
   onOpen: (id: string) => void;
   empty?: string;
 }) {
@@ -28,7 +32,7 @@ export function StopList({
     <ul className="grid gap-2">
       {stops.map((stop) => (
         <li key={stop.id}>
-          <StopRow stop={stop} day={day} onOpen={onOpen} />
+          <StopRow stop={stop} day={day} canReview={canReview} onOpen={onOpen} />
         </li>
       ))}
     </ul>
@@ -38,13 +42,16 @@ export function StopList({
 function StopRow({
   stop,
   day,
+  canReview,
   onOpen,
 }: {
   stop: ScheduleStop;
   day: string;
+  canReview: boolean;
   onOpen: (id: string) => void;
 }) {
   const cover = coverUrl(stop.photos);
+  const reviewCount = canReview ? toReview(stop) : 0;
   return (
     <button
       type="button"
@@ -66,6 +73,10 @@ function StopRow({
           <StatusBadge status={stop.status} />
           {stop.requested && <Badge tone="gray">Requested</Badge>}
           {needsPhotos(stop, day) && <Badge tone="amber">Needs photos</Badge>}
+          {stop.keeperReview && <KeeperBadge review={stop.keeperReview} />}
+          {reviewCount > 0 && (
+            <Badge tone="amber">{reviewCount === 1 ? "Needs your review" : `${reviewCount} to review`}</Badge>
+          )}
         </span>
         <span className="mt-0.5 block text-sm text-[var(--anchor-gray)]">
           {stop.event} · {formatDay(stop.date)}

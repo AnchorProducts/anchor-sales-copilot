@@ -11,6 +11,19 @@ export type StopStatus = "pending" | "published" | "declined";
 
 export type PhotoStatus = "pending" | "published" | "declined";
 
+/** A keeper's approve / deny on something somebody else filed. Only a
+ *  recommendation: the item stays pending until an admin publishes or declines
+ *  it on anchorp.com, where this is shown beside the buttons. */
+export type KeeperReview = {
+  verdict: "approve" | "deny";
+  note: string | null;
+  /** Who said it, by name. */
+  by: string | null;
+  /** Said by the person looking at it. */
+  mine: boolean;
+  at: string;
+};
+
 /** One photograph on a stop. Each is reviewed on its own. */
 export type StopPhoto = {
   id: string;
@@ -21,6 +34,8 @@ export type StopPhoto = {
   reviewNote: string | null;
   mine: boolean;
   submittedAt: string;
+  /** On the schedule only; absent from "my submissions". */
+  keeperReview?: KeeperReview | null;
 };
 
 /** GET /api/showcase/submit — the caller's own filings, newest first. */
@@ -49,8 +64,19 @@ export type ScheduleStop = {
   reviewNote: string | null;
   mine: boolean;
   submittedAt: string | null;
+  keeperReview: KeeperReview | null;
   photos: StopPhoto[];
 };
+
+/** Pending, filed by somebody else, and nobody has approved or denied it yet. */
+export function awaitsKeeper(item: { status: StopStatus; mine: boolean; keeperReview?: KeeperReview | null }) {
+  return item.status === "pending" && !item.mine && !item.keeperReview;
+}
+
+/** How many things on this stop are waiting for the keeper's approve / deny. */
+export function toReview(stop: ScheduleStop): number {
+  return (awaitsKeeper(stop) ? 1 : 0) + stop.photos.filter(awaitsKeeper).length;
+}
 
 export const MAX_TEXT = 200;
 export const MAX_NOTE = 1000;

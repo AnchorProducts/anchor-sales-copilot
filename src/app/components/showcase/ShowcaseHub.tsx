@@ -14,6 +14,7 @@ import {
   NO_ACCESS,
   needsPhotos,
   showcaseFetch,
+  toReview,
   today,
   useRefetchOnFocus,
   type ScheduleStop,
@@ -32,14 +33,19 @@ import {
  * stops. That rule lives on the website, and copying it here would drift, so
  * the page asks: load the schedule, and a 200 means keeper, a 403 means not.
  *
- * Adding always goes through marketing's review, keepers included. There's no
- * publish button anywhere in the App.
+ * Adding always goes through review, keepers included. There's no publish
+ * button anywhere in the App. A keeper (Warren) also approves or denies what
+ * other people file, and that too is only a recommendation: an admin makes the
+ * call on anchorp.com with his verdict beside the buttons. Admins themselves
+ * get no Approve / Deny here — the website says who they are via canPublish.
  * ==========================================================================*/
 
 type View = { kind: "home" } | { kind: "add" } | { kind: "stop"; id: string };
 
 type HubData = {
   access: "keeper" | "submitter" | "unknown" | "noaccess";
+  /** May publish on anchorp.com, so decides rather than recommends. */
+  canPublish: boolean;
   stops: ScheduleStop[] | null;
   submissions: Submission[] | null;
   error: string | null;
@@ -67,21 +73,31 @@ export default function ShowcaseHub() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchHub = useCallback(async (): Promise<HubData> => {
-    const schedule = await showcaseFetch<{ stops?: unknown }>(supabase, "/api/showcase/stops");
+    const schedule = await showcaseFetch<{ stops?: unknown; canPublish?: unknown }>(
+      supabase,
+      "/api/showcase/stops"
+    );
     if (schedule.ok) {
-      return { access: "keeper", stops: listOf(schedule.data.stops), submissions: null, error: null };
+      return {
+        access: "keeper",
+        canPublish: schedule.data.canPublish === true,
+        stops: listOf(schedule.data.stops),
+        submissions: null,
+        error: null,
+      };
     }
     if (schedule.status === 401) {
-      return { access: "noaccess", stops: null, submissions: null, error: schedule.error };
+      return { access: "noaccess", canPublish: false, stops: null, submissions: null, error: schedule.error };
     }
 
     const access = schedule.status === 403 ? "submitter" : "unknown";
     const mine = await showcaseFetch<{ submissions?: unknown }>(supabase, "/api/showcase/submit");
     if (mine.ok) {
-      return { access, stops: null, submissions: listOf(mine.data.submissions), error: null };
+      return { access, canPublish: false, stops: null, submissions: listOf(mine.data.submissions), error: null };
     }
     return {
       access: mine.status === 401 ? "noaccess" : access,
+      canPublish: false,
       stops: null,
       submissions: null,
       error: mine.error,
@@ -153,6 +169,7 @@ export default function ShowcaseHub() {
   }
 
   const keeper = data.access === "keeper";
+  const canReview = keeper && !data.canPublish;
   const stops = data.stops ?? [];
   const openStop = view.kind === "stop" && keeper ? (stops.find((s) => s.id === view.id) ?? null) : null;
   const day = today();
@@ -167,7 +184,9 @@ export default function ShowcaseHub() {
           </Button>
         </div>
         <ShowcaseSubmitForm
-          onFiled={() => finish({ tone: "success", text: "Sent to marketing for review." })}
+          onFiled={() =>
+            finish({ tone: "success", text: keeper ? "Sent to admin for review." : "Sent to marketing for review." })
+          }
           onCancel={() => go({ kind: "home" })}
         />
       </div>
@@ -176,6 +195,7 @@ export default function ShowcaseHub() {
         <StopEditor
           key={openStop.id}
           stop={openStop}
+          canReview={canReview}
           onBack={() => go({ kind: "home" })}
           onDone={finish}
           onChanged={reload}
@@ -184,7 +204,7 @@ export default function ShowcaseHub() {
         <>
           <Hero
             keeper={keeper}
-            stats={keeper ? keeperStats(stops, day) : submitterStats(data.submissions ?? [])}
+            stats={keeper ? keeperStats(stops, day, canReview) : submitterStats(data.submissions ?? [])}
             refreshing={refreshing}
             onRefresh={() => void reload()}
             onAdd={() => go({ kind: "add" })}
@@ -197,7 +217,12 @@ export default function ShowcaseHub() {
           {data.error && <Alert tone="error">{data.error}</Alert>}
 
           {keeper ? (
-            <KeeperHome stops={stops} day={day} onOpen={(id) => go({ kind: "stop", id })} />
+            <KeeperHome
+              stops={stops}
+              day={day}
+              canReview={canReview}
+              onOpen={(id) => go({ kind: "stop", id })}
+            />
           ) : (
             data.submissions && (
               <Section id="showcase-mine" title="Your stops" count={data.submissions.length}>
@@ -211,13 +236,16 @@ export default function ShowcaseHub() {
   );
 }
 
-function keeperStats(stops: ScheduleStop[], day: string): Stat[] {
+function keeperStats(stops: ScheduleStop[], day: string, canReview: boolean): Stat[] {
   const waiting =
     stops.filter((s) => s.status === "pending").length +
     stops.reduce((n, s) => n + s.photos.filter((p) => p.status === "pending").length, 0);
   return [
     { label: "Coming up", value: stops.filter((s) => s.date >= day).length, target: "showcase-upcoming" },
-    { label: "Waiting on marketing", value: waiting, target: "showcase-waiting" },
+    ...(canReview
+      ? [{ label: "To review", value: stops.reduce((n, s) => n + toReview(s), 0), target: "showcase-review" }]
+      : []),
+    { label: "Waiting on admin", value: waiting, target: "showcase-waiting" },
     { label: "Need photos", value: stops.filter((s) => needsPhotos(s, day)).length, target: "showcase-needs-photos" },
   ];
 }
@@ -257,11 +285,11 @@ function Hero({
       </div>
       <p className="mt-1 text-sm text-[var(--anchor-gray)]">
         {keeper
-          ? "The van's whole schedule: add stops, fix details, and add photos. Marketing reviews anything new before it's on anchorp.com."
+          ? "The van's whole schedule: add stops, add photos at a stop, and approve or deny what others file. Admin approves anything new before it's on anchorp.com."
           : "Add a stop from the road with its photos. Marketing reviews it before it's on anchorp.com."}
       </p>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className={`mt-4 grid gap-2 ${stats.length > 3 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         {stats.map((stat) => (
           <button
             key={stat.label}
@@ -289,10 +317,12 @@ function Hero({
 function KeeperHome({
   stops,
   day,
+  canReview,
   onOpen,
 }: {
   stops: ScheduleStop[];
   day: string;
+  canReview: boolean;
   onOpen: (id: string) => void;
 }) {
   const [showAllPast, setShowAllPast] = useState(false);
@@ -301,13 +331,37 @@ function KeeperHome({
   const upcoming = stops.filter((s) => s.date >= day);
   const past = stops.filter((s) => s.date < day).reverse();
   const needing = past.filter((s) => needsPhotos(s, day));
+  const todays = stops.filter((s) => s.date === day && s.status !== "declined");
+  const reviewing = canReview ? stops.filter((s) => toReview(s) > 0) : [];
   const waiting = stops.filter(
-    (s) => s.status === "pending" || s.photos.some((p) => p.status === "pending")
+    (s) => (s.status === "pending" || s.photos.some((p) => p.status === "pending")) && !reviewing.includes(s)
   );
   const photoCount = stops.reduce((n, s) => n + s.photos.length, 0);
 
   return (
     <>
+      {todays.length > 0 && (
+        <Section
+          id="showcase-today"
+          title="Today"
+          count={todays.length}
+          note="At a stop? Open it to add photos from the day. Admin approves them before they're on the site."
+        >
+          <StopList stops={todays} day={day} canReview={canReview} onOpen={onOpen} />
+        </Section>
+      )}
+
+      {reviewing.length > 0 && (
+        <Section
+          id="showcase-review"
+          title="Needs your review"
+          count={reviewing.length}
+          note="Filed by someone else. Approve or deny each stop and photo; admin sees your call and decides."
+        >
+          <StopList stops={reviewing} day={day} canReview={canReview} onOpen={onOpen} />
+        </Section>
+      )}
+
       {needing.length > 0 && (
         <Section
           id="showcase-needs-photos"
@@ -315,7 +369,7 @@ function KeeperHome({
           count={needing.length}
           note="These happened and are on the site, but nothing's been added from the day."
         >
-          <StopList stops={needing} day={day} onOpen={onOpen} />
+          <StopList stops={needing} day={day} canReview={canReview} onOpen={onOpen} />
         </Section>
       )}
 
@@ -323,19 +377,20 @@ function KeeperHome({
         <StopList
           stops={upcoming}
           day={day}
+          canReview={canReview}
           onOpen={onOpen}
-          empty="Nothing booked yet. Add a stop to put it in front of marketing."
+          empty="Nothing booked yet. Add a stop to put it in front of admin."
         />
       </Section>
 
       {waiting.length > 0 && (
         <Section
           id="showcase-waiting"
-          title="Waiting on marketing"
+          title="Waiting on admin"
           count={waiting.length}
           note="Pending stops, and stops with photos in review. Nothing here needs you."
         >
-          <StopList stops={waiting} day={day} onOpen={onOpen} />
+          <StopList stops={waiting} day={day} canReview={canReview} onOpen={onOpen} />
         </Section>
       )}
 
@@ -347,6 +402,7 @@ function KeeperHome({
         <StopList
           stops={showAllPast ? past : past.slice(0, PAST_SHOWN)}
           day={day}
+          canReview={canReview}
           onOpen={onOpen}
           empty="No past stops yet."
         />

@@ -8,11 +8,13 @@ import { Input, Textarea } from "@/app/components/ui/Field";
 import Sheet from "@/app/components/ui/Sheet";
 import { PhotoTray, usePhotoUploads } from "@/app/components/showcase/PhotoTray";
 import { Badge, PhotoTile, ReviewNote, StatusBadge } from "@/app/components/showcase/ShowcaseBadges";
+import { KeeperBadge, PhotoReview, StopReview } from "@/app/components/showcase/KeeperReview";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   MAX_NOTE,
   MAX_TEXT,
   formatDay,
+  today,
   showcaseFetch,
   type ScheduleStop,
   type StopPhoto,
@@ -32,23 +34,31 @@ import {
  *
  * Save does both halves: the details, then any new photos. New photos sit in
  * the tray until then, so leaving with Cancel is the only way to lose them.
+ *
+ * Pending stops and photos somebody else filed get Approve / Deny — the
+ * keeper's recommendation to admin, saved on its own the moment it's tapped
+ * and never a status change. See KeeperReview.tsx.
  * ==========================================================================*/
 
 export type Flash = { tone: "success" | "error"; text: string };
 
 const REMOVE_STOP_WARNING: Record<StopStatus, string> = {
   published: "This stop is live on the website. Removing it takes it and its photos off the site.",
-  pending: "Marketing hasn't reviewed this stop yet. Removing it takes it out of their queue.",
+  pending: "Admin hasn't reviewed this stop yet. Removing it takes it out of their queue.",
   declined: "This stop was declined and isn't on the site. Removing it deletes it for good.",
 };
 
 export default function StopEditor({
   stop,
+  canReview,
   onBack,
   onDone,
   onChanged,
 }: {
   stop: ScheduleStop;
+  /** Show Approve / Deny on other people's pending items. Off for admins, who
+   *  decide on anchorp.com rather than recommend. */
+  canReview: boolean;
   onBack: () => void;
   onDone: (result: Flash) => void;
   /** Reload the schedule and stay on this stop. */
@@ -74,6 +84,8 @@ export default function StopEditor({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const live = stop.status === "published";
+  const reviewStop = canReview && stop.status === "pending" && !stop.mine;
+  const atStop = stop.date === today();
 
   // Only what changed is sent. On a live stop every field that goes up is a
   // live edit, so an untouched one shouldn't ride along.
@@ -146,7 +158,7 @@ export default function StopEditor({
     const parts = ["Saved."];
     if (detailsDirty && live) parts.push("The website shows the change now.");
     if (newPhotos) {
-      parts.push(`${newPhotos} photo${newPhotos === 1 ? "" : "s"} sent to marketing for review.`);
+      parts.push(`${newPhotos} photo${newPhotos === 1 ? "" : "s"} sent to admin for review.`);
     }
     onDone({ tone: "success", text: parts.join(" ") });
   }
@@ -196,6 +208,15 @@ export default function StopEditor({
         </Button>
       </div>
 
+      {reviewStop && (
+        <Card className="p-4 sm:p-5">
+          <h2 className="text-sm font-semibold text-black">Your review</h2>
+          <div className="mt-2">
+            <StopReview stopId={stop.id} review={stop.keeperReview} onChanged={onChanged} />
+          </div>
+        </Card>
+      )}
+
       <form onSubmit={save} className="grid gap-4">
         <Card className="p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-black">{stop.city}</h2>
@@ -207,10 +228,11 @@ export default function StopEditor({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={stop.status} />
             {stop.requested && <Badge tone="gray">Requested</Badge>}
+            {stop.keeperReview && <KeeperBadge review={stop.keeperReview} />}
             {stop.mine && <span className="text-xs text-[var(--anchor-gray)]">Filed by you</span>}
           </div>
           <p className="mt-2 text-xs text-[var(--anchor-gray)]">
-            Status and &ldquo;Requested&rdquo; are set by marketing on anchorp.com.
+            Status and &ldquo;Requested&rdquo; are set by admin on anchorp.com.
           </p>
           {stop.reviewNote && <ReviewNote note={stop.reviewNote} />}
 
@@ -244,8 +266,8 @@ export default function StopEditor({
             Photos <span className="font-normal text-[var(--anchor-gray)]">{stop.photos.length}</span>
           </h2>
           <p className="mt-1 text-xs text-[var(--anchor-gray)]">
-            Photos you add wait for marketing&rsquo;s review. Live photos can only be changed by
-            marketing.
+            {atStop ? "You're at this stop today. " : ""}Photos you add wait for admin&rsquo;s
+            review. Live photos can only be changed by admin.
           </p>
 
           {stop.photos.length > 0 ? (
@@ -253,6 +275,13 @@ export default function StopEditor({
               {stop.photos.map((photo) => (
                 <li key={photo.id} className="grid content-start gap-1">
                   <PhotoTile photo={photo} />
+                  {canReview && photo.status === "pending" && !photo.mine && (
+                    <PhotoReview
+                      photoId={photo.id}
+                      review={photo.keeperReview ?? null}
+                      onChanged={onChanged}
+                    />
+                  )}
                   {photo.status !== "published" && (
                     <button
                       type="button"
@@ -285,7 +314,7 @@ export default function StopEditor({
             {live && (
               <Alert tone="neutral">
                 This stop is live. Changes to its details show on the website immediately. New photos
-                wait for marketing.
+                wait for admin.
               </Alert>
             )}
             {error && <Alert tone="error">{error}</Alert>}
@@ -345,8 +374,8 @@ export default function StopEditor({
             <PhotoTile photo={removingPhoto} />
             <p className="text-sm text-[var(--anchor-deep)]">
               {removingPhoto.status === "declined"
-                ? "Marketing declined this photo. Removing it deletes it for good."
-                : "It's waiting for marketing's review. Removing it takes it out of their queue."}{" "}
+                ? "Admin declined this photo. Removing it deletes it for good."
+                : "It's waiting for admin's review. Removing it takes it out of their queue."}{" "}
               This can&rsquo;t be undone.
             </p>
           </div>
