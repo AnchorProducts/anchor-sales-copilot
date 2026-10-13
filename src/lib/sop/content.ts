@@ -965,6 +965,19 @@ export const SOP_SECTIONS: SopSection[] = [
           "A keeper's edit to a live stop goes on the website straight away.",
         ],
       },
+      {
+        heading: "Review what others file (keeper)",
+        steps: [
+          "Open the stop from **Needs your review**.",
+          "Under **Your review**, tap **Approve** or **Deny** (add a reason for admin if denying). For photos, use **Approve** / **Deny** under each one.",
+          "An admin then publishes or declines it on anchorp.com → Marketing Hub → Showcase, where the keeper's call shows on the entry.",
+        ],
+        bullets: [
+          "Approve / Deny is a recommendation only. Nothing goes on or comes off the site until an admin decides.",
+          "Your own stops and photos skip this and go straight to admin.",
+          "At a stop today? It's under **Today** at the top. Open it and use **Add photos**.",
+        ],
+      },
     ],
   },
   {
