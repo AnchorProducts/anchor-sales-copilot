@@ -24,7 +24,23 @@ import "server-only";
 
 import { requireToolAccessFromBearer } from "@/lib/toolAccessServer";
 
-const DEFAULT_PORTAL_BASE = "https://anchorp.com";
+// www, because the bare domain 308s there — and see sameSite below for why a
+// redirect matters at all.
+const DEFAULT_PORTAL_BASE = "https://www.anchorp.com";
+
+/** Hops followed by hand before giving up — a loop shouldn't hang a request. */
+const MAX_REDIRECTS = 3;
+
+/**
+ * The same site, give or take `www.` — the only redirect worth re-sending the
+ * token through. fetch strips `Authorization` on any cross-origin redirect, and
+ * anchorp.com → www.anchorp.com counts as one, so following it automatically
+ * turns every call into the website's 401. Anywhere else, the token stays home.
+ */
+function sameSite(a: URL, b: URL): boolean {
+  const bare = (host: string) => host.replace(/^www\./, "");
+  return a.protocol === "https:" && b.protocol === "https:" && bare(a.hostname) === bare(b.hostname);
+}
 
 /** The tool key these routes are gated on — see src/lib/toolAccess.ts. */
 export const SHOWCASE_TOOL_KEY = "showcase";
@@ -75,15 +91,24 @@ export async function proxyToPortal(
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${portalBaseUrl()}${path}`, {
-      method: init.method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      cache: "no-store",
-    });
+    let url = new URL(`${portalBaseUrl()}${path}`);
+    for (let hop = 0; ; hop++) {
+      upstream = await fetch(url, {
+        method: init.method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        cache: "no-store",
+        redirect: "manual",
+      });
+      const location = upstream.headers.get("location");
+      if (upstream.status < 300 || upstream.status >= 400 || !location || hop >= MAX_REDIRECTS) break;
+      const next = new URL(location, url);
+      if (!sameSite(url, next)) break;
+      url = next;
+    }
   } catch {
     // The website being unreachable is a different problem from being rejected
     // by it, and the form says so — a rep on a bad yard connection should be
