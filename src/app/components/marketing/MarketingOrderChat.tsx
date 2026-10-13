@@ -27,6 +27,34 @@ function formatStamp(iso: string) {
   }
 }
 
+/* KEEP THE LINKS WE ALREADY HAVE.
+ *
+ * Every poll comes back with each attachment signed afresh, and a signed URL
+ * carries a new token each time — so swapping it into the <img> made the browser
+ * download every photo in the thread again, every 8 seconds, for as long as the
+ * thread was open. That is Supabase storage egress, and in Oct 2026 the project
+ * went over its quota.
+ *
+ * So a message already on screen keeps the links it was first given, and an
+ * unchanged src is never re-fetched. Links are re-taken after 45 minutes, well
+ * inside the server's one-hour expiry, so opening a photo full-size still works
+ * on a thread left open all afternoon. */
+const RESIGN_AFTER_MS = 45 * 60 * 1000;
+
+function keepSignedLinks(prev: ChatMessage[], next: ChatMessage[], signedAt: Map<string, number>) {
+  const now = Date.now();
+  const before = new Map(prev.map((m) => [m.id, m]));
+  return next.map((m) => {
+    const old = before.get(m.id);
+    const at = signedAt.get(m.id);
+    if (old?.attachments?.length && at && now - at < RESIGN_AFTER_MS) {
+      return { ...m, attachments: old.attachments };
+    }
+    signedAt.set(m.id, now);
+    return m;
+  });
+}
+
 // Per-order chat thread between the submitting rep and admins. Used on both the
 // rep order-history view and the admin marketing-orders console. Loads the
 // thread, polls for new messages while open, and posts text + photo replies.
@@ -42,6 +70,8 @@ export default function MarketingOrderChat({ orderId }: { orderId: string }) {
   const [sendError, setSendError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // When each message's attachment links were signed — see keepSignedLinks.
+  const signedAt = useRef(new Map<string, number>());
 
   const load = useCallback(
     async (opts?: { quiet?: boolean }) => {
@@ -55,7 +85,7 @@ export default function MarketingOrderChat({ orderId }: { orderId: string }) {
         }
         setError(null);
         setMe(json?.me ?? null);
-        setMessages(json?.messages || []);
+        setMessages((prev) => keepSignedLinks(prev, json?.messages || [], signedAt.current));
         // Opening/viewing the thread counts as reading it — clear unread server-side.
         void fetch(`/api/marketing-orders/${orderId}/messages`, { method: "PATCH" }).catch(() => {});
       } catch (e) {
@@ -69,10 +99,19 @@ export default function MarketingOrderChat({ orderId }: { orderId: string }) {
 
   // Initial load + light polling so a reply from the other side shows up without
   // a manual refresh (the app uses polling, not realtime, elsewhere too).
+  // Not while the tab is in the background: nobody is reading it, and every poll
+  // is a request. Catches up the moment the tab is looked at again.
   useEffect(() => {
     load();
-    const t = setInterval(() => load({ quiet: true }), 8000);
-    return () => clearInterval(t);
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") load({ quiet: true });
+    }, 8000);
+    const onShow = () => document.visibilityState === "visible" && load({ quiet: true });
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onShow);
+    };
   }, [load]);
 
   // Keep the newest message in view as the thread grows.
