@@ -681,7 +681,7 @@ export default function MarketingStore({
     }
     return it?.image_url ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+      <img src={it.image_url} alt={it.name} className="h-full w-full object-contain" />
     ) : (
       <div className="flex h-full w-full items-center justify-center text-[var(--anchor-gray)] opacity-50">
         <Icon name={icon} className="h-10 w-10" strokeWidth={1.3} />
