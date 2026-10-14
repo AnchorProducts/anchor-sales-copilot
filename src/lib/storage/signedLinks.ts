@@ -73,7 +73,10 @@ export async function signStorageUrl(
 
   const { data, error } = await supabaseAdmin.storage
     .from(bucket)
-    .createSignedUrl(p, ttl, width ? { transform: { width, quality: 70 } } : undefined);
+    // resize: "contain" is required: with a width alone the transformer defaults
+    // to "cover" at the ORIGINAL height, so a 4032x3024 photo came back as a
+    // 480x4032 sliver. "contain" scales it down whole (480x640).
+    .createSignedUrl(p, ttl, width ? { transform: { width, quality: 70, resize: "contain" } } : undefined);
   if (error || !data?.signedUrl) return null;
   remember(key, data.signedUrl, ttl);
   return data.signedUrl;
