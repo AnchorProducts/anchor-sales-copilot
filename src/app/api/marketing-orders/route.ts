@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import {
   isMarketingCategory,
   isMarketingOrderStatus,
+  isApprovalDecision,
   marketingCategoriesLabel,
   marketingOrderStatusLabel,
   typesOverThreshold,
@@ -35,6 +36,7 @@ import {
   isBoxType,
   isOverlayPool,
   isSwapAnchor,
+  orderLimitFor,
   orderStockPlan,
   overlayUnits,
   resolvePackaging,
@@ -210,6 +212,8 @@ async function sendMarketingOrderEmail(params: {
   largeTypes: { label: string; units: number }[];
   // An OEM order names its partner rather than its categories.
   subject?: string;
+  // Set when the order is over a swag limit and waits on a marketing admin.
+  approvalReason?: string | null;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
@@ -221,6 +225,13 @@ async function sendMarketingOrderEmail(params: {
   const lines: string[] = [];
   lines.push(`New Marketing Order submitted (ID: ${params.orderId.slice(0, 8)})`);
   lines.push("");
+  if (params.approvalReason) {
+    lines.push("NEEDS MARKETING APPROVAL — this order is over a swag order limit:");
+    lines.push(params.approvalReason);
+    lines.push("It has not gone to inside sales. Approve or deny it here:");
+    lines.push(internalAppUrl("/admin/marketing-orders"));
+    lines.push("");
+  }
   lines.push(...netsuiteRecommendationLines(params.largeTypes));
   lines.push(`Categories: ${categoryLabel}`);
   lines.push(`Item(s): ${params.items}`);
@@ -237,7 +248,9 @@ async function sendMarketingOrderEmail(params: {
   lines.push("Notes:");
   lines.push(params.notes || "(none)");
 
-  const subject = params.subject || `Marketing Order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
+  const subject =
+    params.subject ||
+    `${params.approvalReason ? "Needs approval: " : ""}Marketing Order - ${categoryLabel} (${params.orderId.slice(0, 8)})`;
 
   const result = await resend.emails.send({ from, to: params.to, subject, text: lines.join("\n") });
   const maybeError = (result as any)?.error;
@@ -255,6 +268,7 @@ async function sendMarketingOrderCreatorEmail(params: {
   neededBy: string | null;
   shipTo: string | null;
   notes: string | null;
+  approvalReason?: string | null;
 }) {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return;
@@ -266,6 +280,12 @@ async function sendMarketingOrderCreatorEmail(params: {
   const lines: string[] = [];
   lines.push(`We received your marketing order (ID: ${params.orderId.slice(0, 8)}).`);
   lines.push("");
+  if (params.approvalReason) {
+    lines.push("Part of it is over the per-order limit, so marketing will review it before it's processed:");
+    lines.push(params.approvalReason);
+    lines.push("You'll hear from us as soon as it's approved.");
+    lines.push("");
+  }
   lines.push(`Categories: ${categoryLabel}`);
   lines.push(`Item(s): ${params.items}`);
   lines.push(`Quantity: ${params.quantity || "—"}`);
@@ -528,6 +548,274 @@ async function notifyAutoAssigned(
   }).catch((e) => console.warn("marketing order auto-assign push failed", e?.message || e));
 }
 
+// Tell the rep who placed a held order what marketing decided.
+async function sendApprovalDecisionEmail(params: {
+  orderId: string;
+  to: string;
+  approved: boolean;
+  categories: string[];
+  items: string;
+  note: string | null;
+  role: string | null;
+}) {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return;
+
+  const resend = new Resend(resendKey);
+  const from = clean(process.env.LEAD_NOTIFICATIONS_FROM) || "Anchor Co-Pilot <reports@anchorp.com>";
+  const categoryLabel = marketingCategoriesLabel(params.categories);
+  const shortId = params.orderId.slice(0, 8);
+
+  const lines: string[] = [];
+  lines.push(
+    params.approved
+      ? `Marketing approved your order (ID: ${shortId}). It's on its way to inside sales to be filled.`
+      : `Marketing didn't approve your order (ID: ${shortId}), so it has been cancelled.`
+  );
+  if (params.note) {
+    lines.push("");
+    lines.push(`${params.approved ? "Note" : "Reason"}: ${params.note}`);
+  }
+  lines.push("");
+  lines.push(`Categories: ${categoryLabel}`);
+  lines.push(`Item(s): ${params.items}`);
+  lines.push("");
+  lines.push(`Track it here: ${repAppUrl("/marketing-orders", params.role)}`);
+
+  const subject = params.approved
+    ? `Your marketing order was approved (${shortId})`
+    : `Your marketing order wasn't approved (${shortId})`;
+
+  const result = await resend.emails.send({ from, to: [params.to], subject, text: lines.join("\n") });
+  const maybeError = (result as any)?.error;
+  if (maybeError) throw new Error(clean(maybeError?.message) || "Resend error");
+}
+
+// A marketing admin's call on an order held over a swag limit. Approving hands
+// it to inside sales exactly as if it had come in under the limit; denying
+// cancels it. Either way the rep who placed it is told.
+async function decideApproval(
+  orderId: string,
+  admin: { id: string; profile: any },
+  decision: "approve" | "deny",
+  note: string
+) {
+  const { data: order, error: readErr } = await supabaseAdmin
+    .from("marketing_orders")
+    .select("id,status,approval_status,created_by,categories,items,quantity,needed_by,ship_to,notes,submitter_email")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (readErr) {
+    if (readErr.code === "42703" || /approval_status/.test(readErr.message || "")) {
+      return NextResponse.json(
+        { error: "Order approvals need migration 20261020_000001 — run it, then try again." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: readErr.message }, { status: 500 });
+  }
+  if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  if ((order as any).approval_status !== "pending") {
+    return NextResponse.json({ error: "This order isn't waiting on approval." }, { status: 409 });
+  }
+  if (decision === "deny" && !note) {
+    return NextResponse.json(
+      { error: "Say why it's denied — the rep who placed it is told." },
+      { status: 400 }
+    );
+  }
+
+  const o = order as any;
+  const approved = decision === "approve";
+  const now = new Date().toISOString();
+  const fromStatus = clean(o.status) || "new";
+  const toStatus = approved ? fromStatus : "cancelled";
+  const updates: Record<string, unknown> = {
+    approval_status: approved ? "approved" : "denied",
+    approval_note: note || null,
+    approval_by: admin.id,
+    approval_at: now,
+    updated_by: admin.id,
+    updated_at: now,
+  };
+  if (!approved) updates.status = "cancelled";
+
+  // Only while still pending, so two admins deciding at once can't both route
+  // it (or approve one and deny the other).
+  const { data: saved, error } = await supabaseAdmin
+    .from("marketing_orders")
+    .update(updates)
+    .eq("id", orderId)
+    .eq("approval_status", "pending")
+    .select("id,status,approval_status,approval_note,approval_at,updated_at")
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!saved) return NextResponse.json({ error: "Someone already decided this order." }, { status: 409 });
+
+  const adminName = clean(admin.profile?.full_name) || null;
+  const { data: act } = await supabaseAdmin
+    .from("marketing_order_activity")
+    .insert({
+      order_id: orderId,
+      admin_id: admin.id,
+      from_status: fromStatus,
+      to_status: toStatus,
+      note: approved
+        ? `Approved over the swag order limit.${note ? ` ${note}` : ""}`
+        : `Denied — over the swag order limit. ${note}`,
+    })
+    .select("id,from_status,to_status,note,created_at")
+    .single();
+
+  const categories = Array.isArray(o.categories) ? (o.categories as string[]) : [];
+  const items = clean(o.items);
+
+  const submitterProfile = o.created_by ? await getProfile(o.created_by).catch(() => null) : null;
+  if (approved && o.created_by) {
+    // Same hand-off an order under its limits gets on submit.
+    await routeToInsideSales(orderId, { id: o.created_by, profile: submitterProfile }, {
+      categories,
+      items,
+      quantity: clean(o.quantity) || null,
+      needed_by: clean(o.needed_by) || null,
+      ship_to: clean(o.ship_to) || null,
+      notes: clean(o.notes) || null,
+      largeTypes: [],
+    });
+  }
+
+  // Best-effort: the decision is saved whether or not the rep's email lands.
+  const to = clean(o.submitter_email);
+  if (to) {
+    try {
+      await sendApprovalDecisionEmail({
+        orderId,
+        to,
+        approved,
+        categories,
+        items,
+        note: note || null,
+        role: clean(submitterProfile?.role) || null,
+      });
+    } catch (e: any) {
+      console.warn("marketing order approval email failed", e?.message || e);
+    }
+  }
+  if (o.created_by) {
+    void sendPushToUser(o.created_by, {
+      title: approved ? "Marketing order approved" : "Marketing order not approved",
+      body: approved
+        ? `${marketingCategoriesLabel(categories)} — approved and on its way to inside sales.`
+        : `${marketingCategoriesLabel(categories)} — ${note}`,
+      url: "/marketing-orders",
+      tag: `mo-approval-${orderId}`,
+    }).catch((e) => console.warn("marketing order approval push failed", e?.message || e));
+  }
+
+  return NextResponse.json({
+    ok: true,
+    item: saved,
+    activity: act
+      ? { ...act, admin_name: adminName, admin_email: clean(admin.profile?.email) || null }
+      : null,
+  });
+}
+
+// Hand an order to inside sales: put it on the territory's inside rep, tell
+// them, and (for an outside rep's order) notify the region's manager(s). Runs
+// when an order lands — or, for one held over a swag limit, when a marketing
+// admin approves it, so nobody in inside sales hears about it before then.
+async function routeToInsideSales(
+  orderId: string,
+  submitter: { id: string; profile: any },
+  order: {
+    categories: string[];
+    items: string;
+    quantity: string | null;
+    needed_by: string | null;
+    ship_to: string | null;
+    notes: string | null;
+    largeTypes: { label: string; units: number }[];
+  }
+) {
+  const profile = submitter.profile;
+  const submitter_name = clean(profile?.full_name) || null;
+  const submitter_company = clean(profile?.company) || null;
+  const submitter_email = clean(profile?.email) || null;
+
+  // Put it on the rep who works this territory before anyone is notified, so
+  // the notifications name an owner rather than going to a queue nobody owns.
+  const assignee = await autoAssign(orderId, { id: submitter.id }, profile);
+  if (assignee) {
+    await notifyAutoAssigned(orderId, assignee, submitter.id, {
+      categories: order.categories,
+      items: order.items,
+      needed_by: order.needed_by,
+      who: submitter_name || submitter_company || "a rep",
+    });
+  }
+
+  // Route the order to its REGION'S MANAGER — not the inside rep directly. Per
+  // the inside sales manager, marketing orders must not go straight to the
+  // inside salespeople. So we resolve the submitter's territory to its inside
+  // rep(s) (existing routing), then notify each inside rep's per-region tool —
+  // whose recipients are the manager(s) an admin assigned in settings. If a
+  // region has no one assigned, nothing routes there and the marketing_order
+  // tool (admins) is the safety net. Only outside-rep submissions route
+  // this way; internal/admin submissions already reach the team via that tool.
+  // Inside reps still SEE and work their orders via the GET/PATCH scoping below.
+  // All best-effort — never block the successful submission.
+  if (clean(profile?.role) !== "external_rep") return;
+  try {
+    const insideReps = await resolveInsideRepsFor(profile);
+    const regionKeys = Array.from(
+      new Set(
+        insideReps.map((r) => clean(r.id)).filter(Boolean).map((id) => marketingRegionToolKey(id))
+      )
+    );
+    if (regionKeys.length === 0) {
+      console.warn("marketing order: no region resolved for submitter", submitter_email || orderId);
+    }
+
+    const who = submitter_name || submitter_company || "an outside rep";
+    const categoryLabel = marketingCategoriesLabel(order.categories);
+    const fulfillUrl = internalAppUrl("/admin/marketing-orders");
+    const text = [
+      `${who} submitted a marketing order (ID: ${orderId.slice(0, 8)}).`,
+      "",
+      ...netsuiteRecommendationLines(order.largeTypes),
+      `Submitted by: ${submitter_name || "—"}${submitter_company ? ` (${submitter_company})` : ""}`,
+      `Categories: ${categoryLabel}`,
+      `Item(s): ${order.items}`,
+      `Quantity: ${order.quantity || "—"}`,
+      `Needed by: ${order.needed_by || "—"}`,
+      "",
+      "Ship to:",
+      order.ship_to || "(none)",
+      "",
+      "Notes:",
+      order.notes || "(none)",
+      "",
+      `Fulfill this order: ${fulfillUrl}`,
+    ].join("\n");
+
+    for (const regionKey of regionKeys) {
+      void sendPushToTool(regionKey, {
+        title: "Marketing order in your region",
+        body: `${who} ordered ${categoryLabel}.`,
+        url: "/admin/marketing-orders",
+        tag: `mo-${orderId}`,
+      });
+      void emailToolUsers(regionKey, {
+        subject: `Marketing order from ${who} — ${categoryLabel} (${orderId.slice(0, 8)})`,
+        text,
+      });
+    }
+  } catch (regionErr: any) {
+    console.warn("marketing order region notify failed", regionErr?.message || regionErr);
+  }
+}
+
 // File an OEM pizza box order. Everything in it is printed custom for the
 // partner — the box, inserts, overlay, printables — and the anchors are printed
 // separately, so nothing is pulled from marketing inventory. The order is tagged
@@ -722,6 +1010,11 @@ export async function POST(req: Request) {
     // what fulfillment pre-fills. See orderStockPlan.
     let pizza_boxes = 0;
     let stock_plan: Record<string, number> = {};
+    // Swag lines over their item's per-order limit. Any at all and the order
+    // waits for a marketing admin instead of going to inside sales. Counted per
+    // item across the whole order, so splitting a pick into two lines doesn't
+    // slip under it.
+    const overLimit: string[] = [];
 
     if (body.requested_items !== undefined) {
       const rawPicks = Array.isArray(body.requested_items) ? body.requested_items : [];
@@ -775,7 +1068,12 @@ export async function POST(req: Request) {
           .select("value")
           .eq("key", PIZZA_BOX_EXTRAS_KEY)
           .maybeSingle();
-        let { data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of`);
+        let { data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of,max_order_qty`);
+        // max_order_qty arrives with 20261020_000001; before it nothing has a
+        // limit.
+        if (invErr && (invErr.code === "42703" || /max_order_qty/.test(invErr.message || ""))) {
+          ({ data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of`));
+        }
         // box_of arrives with 20260915_000002; before it nothing is assembled.
         if (invErr && (invErr.code === "42703" || /box_of/.test(invErr.message || ""))) {
           ({ data: invRows, error: invErr } = await readCatalog(CATALOG_COLS));
@@ -868,6 +1166,16 @@ export async function POST(req: Request) {
           total += p.quantity;
           const cat = clean(row.category) || "other";
           unitsByCategory[cat] = (unitsByCategory[cat] || 0) + p.quantity;
+        }
+
+        const unitsByItem = new Map<string, { item: any; units: number }>();
+        for (const { item, quantity: q } of resolved) {
+          const cur = unitsByItem.get(item.id);
+          unitsByItem.set(item.id, { item, units: (cur?.units || 0) + q });
+        }
+        for (const { item, units } of unitsByItem.values()) {
+          const limit = orderLimitFor(item);
+          if (limit !== null && units > limit) overLimit.push(`${units} × ${item.name} (limit ${limit} per order)`);
         }
 
         // A customer order is a small one. Past the cap — or for a manufacturing
@@ -974,6 +1282,10 @@ export async function POST(req: Request) {
       pizza_boxes,
       stock_plan,
     };
+    const approvalReason = overLimit.length ? overLimit.join("\n") : null;
+    if (approvalReason) {
+      Object.assign(orderRow, { approval_status: "pending", approval_reason: approvalReason });
+    }
     let { data: row, error: insErr } = await supabaseAdmin
       .from("marketing_orders")
       .insert(orderRow)
@@ -996,15 +1308,17 @@ export async function POST(req: Request) {
 
     const orderId = row.id as string;
 
-    // Put it on the rep who works this territory before anyone is notified, so
-    // the notifications name an owner rather than going to a queue nobody owns.
-    const assignee = await autoAssign(orderId, user, profile);
-    if (assignee) {
-      await notifyAutoAssigned(orderId, assignee, user.id, {
+    // Over a swag limit: marketing approves it first, and inside sales hears
+    // about it then (see the approval in PATCH). Otherwise straight through.
+    if (!approvalReason) {
+      await routeToInsideSales(orderId, { id: user.id, profile }, {
         categories,
         items,
+        quantity,
         needed_by,
-        who: submitter_name || submitter_company || "a rep",
+        ship_to,
+        notes,
+        largeTypes,
       });
     }
 
@@ -1032,6 +1346,7 @@ export async function POST(req: Request) {
         submitterPhone: submitter_phone,
         submitterEmail: submitter_email,
         largeTypes,
+        approvalReason,
       });
       emailNotification.sent = true;
     } catch (emailErr: any) {
@@ -1040,8 +1355,10 @@ export async function POST(req: Request) {
     }
 
     void sendPushToTool("marketing_order", {
-      title: "New marketing order",
-      body: `${marketingCategoriesLabel(categories)} — ${submitter_name || submitter_company || "a rep"}`,
+      title: approvalReason ? "Marketing order needs your approval" : "New marketing order",
+      body: approvalReason
+        ? `${submitter_name || submitter_company || "A rep"} is over a swag order limit — approve or deny it.`
+        : `${marketingCategoriesLabel(categories)} — ${submitter_name || submitter_company || "a rep"}`,
       url: "/admin/marketing-orders",
       tag: `mo-${orderId}`,
     });
@@ -1060,6 +1377,7 @@ export async function POST(req: Request) {
           neededBy: needed_by,
           shipTo: ship_to,
           notes,
+          approvalReason,
         });
       } catch (creatorEmailErr: any) {
         console.warn("marketing order creator email failed", creatorEmailErr?.message || creatorEmailErr);
@@ -1070,73 +1388,14 @@ export async function POST(req: Request) {
     // the fire-and-forget call to avoid an unhandled rejection after the 201.
     void sendPushToUser(user.id, {
       title: "Marketing order received",
-      body: `${marketingCategoriesLabel(categories)} — we got your order and it's being processed.`,
+      body: approvalReason
+        ? `${marketingCategoriesLabel(categories)} — we got your order. It's over a per-order limit, so marketing will review it first.`
+        : `${marketingCategoriesLabel(categories)} — we got your order and it's being processed.`,
       url: "/marketing-orders",
       tag: `mo-creator-${orderId}`,
     }).catch((pushErr) => {
       console.warn("marketing order creator push failed", pushErr?.message || pushErr);
     });
-
-    // Route the order to its REGION'S MANAGER — not the inside rep directly. Per
-    // the inside sales manager, marketing orders must not go straight to the
-    // inside salespeople. So we resolve the submitter's territory to its inside
-    // rep(s) (existing routing), then notify each inside rep's per-region tool —
-    // whose recipients are the manager(s) an admin assigned in settings. If a
-    // region has no one assigned, nothing routes there and the marketing_order
-    // tool above (admins) is the safety net. Only outside-rep submissions route
-    // this way; internal/admin submissions already reach the team via that tool.
-    // Inside reps still SEE and work their orders via the GET/PATCH scoping below.
-    // All best-effort — never block the successful submission.
-    if (profile.role === "external_rep") {
-      try {
-        const insideReps = await resolveInsideRepsFor(profile);
-        const regionKeys = Array.from(
-          new Set(
-            insideReps.map((r) => clean(r.id)).filter(Boolean).map((id) => marketingRegionToolKey(id))
-          )
-        );
-        if (regionKeys.length === 0) {
-          console.warn("marketing order: no region resolved for submitter", submitter_email || orderId);
-        }
-
-        const who = submitter_name || submitter_company || "an outside rep";
-        const categoryLabel = marketingCategoriesLabel(categories);
-        const fulfillUrl = internalAppUrl("/admin/marketing-orders");
-        const text = [
-          `${who} submitted a marketing order (ID: ${orderId.slice(0, 8)}).`,
-          "",
-          ...netsuiteRecommendationLines(largeTypes),
-          `Submitted by: ${submitter_name || "—"}${submitter_company ? ` (${submitter_company})` : ""}`,
-          `Categories: ${categoryLabel}`,
-          `Item(s): ${items}`,
-          `Quantity: ${quantity || "—"}`,
-          `Needed by: ${needed_by || "—"}`,
-          "",
-          "Ship to:",
-          ship_to || "(none)",
-          "",
-          "Notes:",
-          notes || "(none)",
-          "",
-          `Fulfill this order: ${fulfillUrl}`,
-        ].join("\n");
-
-        for (const regionKey of regionKeys) {
-          void sendPushToTool(regionKey, {
-            title: "Marketing order in your region",
-            body: `${who} ordered ${categoryLabel}.`,
-            url: "/admin/marketing-orders",
-            tag: `mo-${orderId}`,
-          });
-          void emailToolUsers(regionKey, {
-            subject: `Marketing order from ${who} — ${categoryLabel} (${orderId.slice(0, 8)})`,
-            text,
-          });
-        }
-      } catch (regionErr: any) {
-        console.warn("marketing order region notify failed", regionErr?.message || regionErr);
-      }
-    }
 
     return NextResponse.json({ ok: true, id: orderId, email_notification: emailNotification }, { status: 201 });
   } catch (e: any) {
@@ -1180,7 +1439,10 @@ export async function GET() {
     // 20260922_000001, pizza_boxes + stock_plan with 20260915_000001. Each
     // missing one drops out rather than the queue not loading at all.
     const missingCol = (e: any) => e && (e.code === "42703" || /does not exist/.test(e.message || ""));
-    let { data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan,order_type,oem_spec`);
+    const APPROVAL_COLS = "approval_status,approval_reason,approval_note,approval_at";
+    let { data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan,order_type,oem_spec,${APPROVAL_COLS}`);
+    // The approval columns arrive with 20261020_000001.
+    if (missingCol(error)) ({ data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan,order_type,oem_spec`));
     if (missingCol(error)) ({ data, error } = await listOrders(`${ORDER_COLS},pizza_boxes,stock_plan`));
     if (missingCol(error)) ({ data, error } = await listOrders(ORDER_COLS));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -1216,6 +1478,11 @@ export async function GET() {
         // Cache the territory test per submitter so shared submitters resolve once.
         const mineBySubmitter = new Map<string, boolean>();
         orders = orders.filter((o) => {
+          // Held for marketing's approval, or turned down: not inside sales'
+          // business — unless it's my own order, which I track like any other.
+          if (o.approval_status === "pending" || o.approval_status === "denied") {
+            return o.created_by === auth.user.id;
+          }
           // An order explicitly assigned to me is always mine — even one an admin
           // handed me outside my own territory (that's the point of assignment).
           if (clean(o.assigned_to) === auth.user.id) return true;
@@ -1361,6 +1628,18 @@ export async function PATCH(req: Request) {
     const id = clean(body?.id);
     if (!id) return NextResponse.json({ error: "Missing order id." }, { status: 400 });
 
+    // Approving or denying an order held over a swag limit is marketing's call:
+    // admins only, and nothing else rides in the same request.
+    if (body?.approval !== undefined) {
+      if (role !== "admin") {
+        return NextResponse.json({ error: "Only marketing admins can approve orders." }, { status: 403 });
+      }
+      if (!isApprovalDecision(body.approval)) {
+        return NextResponse.json({ error: "Invalid approval decision." }, { status: 400 });
+      }
+      return await decideApproval(id, { id: auth.user.id, profile }, body.approval, clean(body.note).slice(0, 1000));
+    }
+
     // Current state, so we can tell a real phase move from a no-op and record the
     // "from" status in the activity log.
     const { data: current, error: curErr } = await supabaseAdmin
@@ -1400,6 +1679,21 @@ export async function PATCH(req: Request) {
 
     if (!isFulfiller && !isReceiptConfirmation) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // An order held for approval hasn't reached inside sales yet: nobody works
+    // it, moves it or assigns it until a marketing admin decides. Read on its
+    // own so a database without the column (pre-20261020_000001) carries on.
+    const { data: approvalRow } = await supabaseAdmin
+      .from("marketing_orders")
+      .select("approval_status")
+      .eq("id", id)
+      .maybeSingle();
+    if ((approvalRow as any)?.approval_status === "pending") {
+      return NextResponse.json(
+        { error: "This order is over a swag limit — approve or deny it first." },
+        { status: 409 }
+      );
     }
 
     // Inside reps may only update orders in their own territory OR ones an admin

@@ -696,6 +696,9 @@ export type InventoryItem = {
   // nothing to say. Absent before 20260922_000002.
   marketing_alert?: string | null;
   marketing_alert_at?: string | null;
+  // Swag only: the most a rep can order on one order before it needs a
+  // marketing admin's approval. Null/0 = no limit. Absent before 20261020_000001.
+  max_order_qty?: number | null;
   created_at: string;
   updated_at: string;
   // Convenience flag computed by the API.
@@ -811,6 +814,15 @@ export const RETURNS_CHECKOUT_ONLY_NOTICE =
 
 // The items on an order that carry a "talk to marketing" note, by item id. Used
 // by the fulfillment queue to prompt before anything is packed.
+// The per-order limit that applies to an item, or null when there isn't one.
+// Limits are a swag rule; a stray value left on an item moved out of Swag is
+// ignored rather than holding orders for something that isn't swag any more.
+export function orderLimitFor(item: { category?: string | null; max_order_qty?: number | null }): number | null {
+  if ((item.category || "").trim() !== "swag") return null;
+  const n = Number(item.max_order_qty);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
 export function marketingAlertsFor<T extends { id: string; name: string; marketing_alert?: string | null }>(
   items: readonly T[],
   opts: { itemIds: readonly string[]; text?: string }

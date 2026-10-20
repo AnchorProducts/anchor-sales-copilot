@@ -28,6 +28,7 @@ import {
   PIZZA_BOX_COMPONENTS,
   PIZZA_BOX_KITS,
   isBoxType,
+  orderLimitFor,
   type BoxScanRow,
   type InventoryItem,
   type ItemCheckout,
@@ -72,6 +73,9 @@ type ItemDraft = {
   location: string;
   quantity_available: string;
   low_stock_threshold: string;
+  // Swag only: most per order before the order needs marketing's approval.
+  // "" = no limit.
+  max_order_qty: string;
   checkout_enabled: boolean;
   pizza_box: boolean;
   plastic_overlay: boolean;
@@ -94,6 +98,7 @@ const EMPTY_DRAFT: ItemDraft = {
   location: "",
   quantity_available: "0",
   low_stock_threshold: "0",
+  max_order_qty: "",
   checkout_enabled: false,
   pizza_box: false,
   plastic_overlay: false,
@@ -379,6 +384,7 @@ export default function AdminInventoryPage({
       location: it.location || "",
       quantity_available: String(it.quantity_available),
       low_stock_threshold: String(it.low_stock_threshold),
+      max_order_qty: it.max_order_qty ? String(it.max_order_qty) : "",
       checkout_enabled: !!it.checkout_enabled,
       pizza_box: !!it.pizza_box,
       plastic_overlay: !!it.plastic_overlay,
@@ -413,6 +419,11 @@ export default function AdminInventoryPage({
         product_of_month: itemModal.product_of_month,
         packaging_role: itemModal.packaging_role || null,
         packaging_kit: itemModal.packaging_kit || null,
+        // Marketing's call, so only an admin sends it (the API refuses anyone
+        // else). Cleared when the item isn't swag.
+        ...(role === "admin"
+          ? { max_order_qty: itemModal.category === "swag" ? itemModal.max_order_qty || null : null }
+          : {}),
       };
       const res = await fetch("/api/inventory", {
         method: itemModal.id ? "PATCH" : "POST",
@@ -1118,6 +1129,22 @@ export default function AdminInventoryPage({
                   />
                 </label>
               </div>
+              {itemModal.category === "swag" && role === "admin" && (
+                <label className="block text-sm">
+                  <span className="font-medium">Max per order</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="No limit"
+                    value={itemModal.max_order_qty}
+                    onChange={(e) => setItemModal({ ...itemModal, max_order_qty: e.target.value })}
+                  />
+                  <span className="mt-1 block text-xs text-[var(--anchor-gray)]">
+                    Orders over this wait for a marketing admin to approve them before they go to inside sales.
+                  </span>
+                </label>
+              )}
               {/* Options: checkout eligibility + packaging choices */}
               <div className="rounded-xl border border-[var(--border-default)] p-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">
@@ -1745,6 +1772,11 @@ function ItemsList({
                   {isLowWithBoxes(it, readyBoxes.get(it.id) || 0) && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       Low stock
+                    </span>
+                  )}
+                  {orderLimitFor(it) !== null && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-gray)]">
+                      Max {orderLimitFor(it)}/order
                     </span>
                   )}
                   {(it.marketing_alert || "").trim() && (

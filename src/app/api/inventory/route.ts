@@ -23,10 +23,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Columns added after the table shipped: product_of_month (20260817_000002),
-// packaging_kit (20260831_000001) and the marketing alert (20260922_000002).
+// packaging_kit (20260831_000001), the marketing alert (20260922_000002) and
+// the swag per-order limit (20261020_000001).
 // Kept separate so a deploy that lands before its migration still serves the
 // catalog instead of 500ing the order form — see the fallback in GET.
-const LATER_COLS = ["product_of_month", "packaging_kit", "marketing_alert", "marketing_alert_at"] as const;
+const LATER_COLS = [
+  "product_of_month",
+  "packaging_kit",
+  "marketing_alert",
+  "marketing_alert_at",
+  "max_order_qty",
+] as const;
 
 const ITEM_COLS_BASE =
   "id,name,description,category,sku,unit_cost,location,image_path,quantity_available,quantity_out,low_stock_threshold,checkout_enabled,pizza_box,plastic_overlay,packaging_role,created_at,updated_at";
@@ -171,7 +178,8 @@ export async function POST(req: Request) {
     const available = parseIntField(body.quantity_available) ?? 0;
     const threshold = parseIntField(body.low_stock_threshold) ?? 0;
     const cost = parseCost(body.unit_cost);
-    if (Number.isNaN(available) || Number.isNaN(threshold)) {
+    const maxOrder = parseIntField(body.max_order_qty);
+    if (Number.isNaN(available) || Number.isNaN(threshold) || Number.isNaN(maxOrder)) {
       return NextResponse.json({ error: "Quantities must be whole numbers." }, { status: 400 });
     }
     if (Number.isNaN(cost)) {
@@ -203,6 +211,8 @@ export async function POST(req: Request) {
         quantity_available: available,
         quantity_out: 0,
         low_stock_threshold: threshold,
+        // The order limit is marketing's call (see PATCH): admins only.
+        max_order_qty: clean(profile?.role) === "admin" ? maxOrder || null : null,
         // Tradeshow stock is loaned and returned, so it's always checkout-eligible.
         checkout_enabled: resolveCheckoutEnabled(category, parseBool(body.checkout_enabled)),
         pizza_box: parseBool(body.pizza_box),
@@ -310,6 +320,17 @@ export async function PATCH(req: Request) {
       if (Number.isNaN(threshold)) return NextResponse.json({ error: "Threshold must be a whole number." }, { status: 400 });
       updates.low_stock_threshold = threshold ?? 0;
     }
+    // Most a rep can order of this item before the order needs a marketing
+    // admin's approval. Marketing's call, like the marketing note. Empty or 0
+    // clears it.
+    if (body?.max_order_qty !== undefined) {
+      if (clean(profile?.role) !== "admin") {
+        return NextResponse.json({ error: "Only admins can set an order limit." }, { status: 403 });
+      }
+      const maxOrder = parseIntField(body.max_order_qty);
+      if (Number.isNaN(maxOrder)) return NextResponse.json({ error: "Order limit must be a whole number." }, { status: 400 });
+      updates.max_order_qty = maxOrder || null;
+    }
     if (body?.quantity_available !== undefined) {
       const available = parseIntField(body.quantity_available);
       if (Number.isNaN(available)) return NextResponse.json({ error: "Quantity must be a whole number." }, { status: 400 });
@@ -365,6 +386,14 @@ export async function PATCH(req: Request) {
       if (updates.marketing_alert !== undefined) {
         return NextResponse.json(
           { error: "Marketing notes need migration 20260922_000002 — run it, then try again." },
+          { status: 503 }
+        );
+      }
+      // Same for a limit: dropping it silently would let the next big order
+      // straight through to inside sales.
+      if (updates.max_order_qty !== undefined) {
+        return NextResponse.json(
+          { error: "Order limits need migration 20261020_000001 — run it, then try again." },
           { status: 503 }
         );
       }

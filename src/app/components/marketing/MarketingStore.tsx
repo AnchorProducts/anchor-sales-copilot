@@ -16,6 +16,7 @@ import {
   findReadyBox,
   isBoxType,
   isSwapAnchor,
+  orderLimitFor,
   TRADESHOW_CATEGORY,
   type BoxPart,
 } from "@/lib/inventory";
@@ -70,6 +71,7 @@ type InvItem = {
   packaging_role?: string | null;
   packaging_kit?: string | null;
   product_of_month?: boolean;
+  max_order_qty?: number | null;
 };
 
 type Section = "samples" | "swag" | "brochures" | "tradeshow" | "potm";
@@ -702,6 +704,7 @@ export default function MarketingStore({
     const box = boxInfo.get(it.id);
     const outOfStockLoan = loan && it.quantity_available <= 0;
     const added = flashKey === it.id;
+    const limit = orderLimitFor(it);
 
     return (
       <div key={it.id} className="group flex flex-col">
@@ -766,6 +769,11 @@ export default function MarketingStore({
                   )}
                 </div>
               )}
+              {!oem && !loan && limit !== null && qty + have > limit && (
+                <p className="text-[12px] font-medium text-orange-700">
+                  Over {limit} per order — marketing approves it before it ships.
+                </p>
+              )}
               {!oem && !loan && qty > avail && (
                 <p className="text-[12px] font-medium text-amber-600">
                   {avail > 0 ? `Only ${avail} on hand — the rest are made to order.` : "None on hand — made to order."}
@@ -829,6 +837,11 @@ export default function MarketingStore({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[14px] font-medium text-black">{lineName(l)}</div>
                   {detail && <div className="truncate text-[12px] text-[var(--anchor-gray)]">{detail}</div>}
+                  {l.kind === "stock" && it && orderLimitFor(it) !== null && inCart(it.id) > orderLimitFor(it)! && (
+                    <div className="text-[12px] font-medium text-orange-700">
+                      Over {orderLimitFor(it)} per order — needs marketing approval
+                    </div>
+                  )}
                   {short !== null && (
                     <div className="text-[12px] font-medium text-amber-600">
                       {short > 0 ? `${short} on hand, rest made to order` : "Made to order"}

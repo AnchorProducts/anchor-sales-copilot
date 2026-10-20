@@ -26,6 +26,11 @@ type MarketingOrder = {
   // Inside sales tagged this one as ordered in specially rather than pulled from
   // stock — the reason it takes longer, called out on the card below.
   needs_custom_order: boolean | null;
+  // Over a swag item's per-order limit: "pending" until marketing approves or
+  // denies it. Absent/null for every order that never needed approval.
+  approval_status?: "pending" | "approved" | "denied" | null;
+  approval_reason?: string | null;
+  approval_note?: string | null;
   // Overlays on this order — paired with samples and ordered alone, combined.
   overlay_units: number | null;
   pizza_boxes?: number | null;
@@ -326,6 +331,23 @@ export default function MarketingOrderHistory({
                       {confirmErr?.id === o.id && (
                         <div className="w-full rounded-[10px] bg-red-500/10 p-2 text-[12px] text-red-700">{confirmErr.msg}</div>
                       )}
+                    </div>
+                  )}
+
+                  {o.approval_status === "pending" && (
+                    <div className="mt-4 flex items-start gap-2.5 rounded-[14px] bg-orange-500/10 px-3.5 py-3 text-[13px] leading-snug text-orange-950">
+                      <Icon name="clock" className="mt-px h-4 w-4 text-orange-600" />
+                      <span>
+                        <span className="font-semibold">Waiting on marketing approval.</span> Part of this order is
+                        over the per-order limit, so marketing reviews it before it goes to inside sales.
+                        {o.approval_reason && <span className="mt-1 block whitespace-pre-line">{o.approval_reason}</span>}
+                      </span>
+                    </div>
+                  )}
+                  {o.approval_status === "denied" && (
+                    <div className="mt-4 rounded-[14px] bg-red-500/10 px-3.5 py-3 text-[13px] leading-snug text-red-800">
+                      <span className="font-semibold">Not approved by marketing.</span>
+                      {o.approval_note && <span className="mt-1 block">{o.approval_note}</span>}
                     </div>
                   )}
 

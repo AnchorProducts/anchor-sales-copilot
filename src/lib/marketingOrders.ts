@@ -236,3 +236,18 @@ export function marketingOrderStatusPill(key: string | null | undefined): string
       return "bg-[var(--surface-strong)] text-[var(--anchor-gray)]";
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Swag order limits
+//
+// Marketing can set a most-per-order on a swag item (InventoryItem.max_order_qty).
+// An order over any of them is held with approval_status "pending": it doesn't
+// go to inside sales until a marketing admin approves it. Denying it cancels it.
+// Orders that never needed approval carry null.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type MarketingApprovalStatus = "pending" | "approved" | "denied";
+
+export function isApprovalDecision(v: unknown): v is "approve" | "deny" {
+  return v === "approve" || v === "deny";
+}

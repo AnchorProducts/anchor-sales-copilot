@@ -67,6 +67,13 @@ type MarketingOrder = {
   assigned_to: string | null;
   assigned_to_name: string | null;
   assigned_to_email: string | null;
+  // Set only on an order that went over a swag item's per-order limit:
+  // "pending" until a marketing admin approves or denies it. Absent before
+  // 20261020_000001.
+  approval_status?: "pending" | "approved" | "denied" | null;
+  approval_reason?: string | null;
+  approval_note?: string | null;
+  approval_at?: string | null;
   last_activity: {
     note: string;
     to_status: string | null;
@@ -250,6 +257,10 @@ export default function AdminMarketingOrdersPage({
   // status stages it here and reveals a required note; saving applies both.
   const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
   const [phaseNoteDraft, setPhaseNoteDraft] = useState<Record<string, string>>({});
+  // Note to the rep on an approve / deny, per order.
+  const [approvalNoteDraft, setApprovalNoteDraft] = useState<Record<string, string>>({});
+  // "Needs approval" filter — orders over a swag limit waiting on marketing.
+  const [approvalOnly, setApprovalOnly] = useState(false);
   // Inventory items for the "what stock did this order consume?" picker shown
   // when fulfilling an order, plus the per-order draft rows {item_id, quantity}.
   const [inventory, setInventory] = useState<
@@ -332,6 +343,11 @@ export default function AdminMarketingOrdersPage({
     [inventory]
   );
 
+  const approvalCount = useMemo(
+    () => items.filter((o) => o.approval_status === "pending").length,
+    [items]
+  );
+
   const oemCount = useMemo(
     () => items.filter((o) => o.order_type === "oem" && !isArchived(o)).length,
     [items]
@@ -344,9 +360,10 @@ export default function AdminMarketingOrdersPage({
         if (mineOnly && o.assigned_to !== currentUserId) return false;
         if (customOnly && !o.needs_custom_order) return false;
         if (oemOnly && o.order_type !== "oem") return false;
+        if (approvalOnly && o.approval_status !== "pending") return false;
         return true;
       }),
-    [items, activeTab, mineOnly, customOnly, oemOnly, currentUserId]
+    [items, activeTab, mineOnly, customOnly, oemOnly, approvalOnly, currentUserId]
   );
 
   async function loadOrders() {
@@ -620,6 +637,35 @@ export default function AdminMarketingOrdersPage({
     }
   }
 
+  // Marketing's call on an order over a swag limit. Approve hands it to inside
+  // sales; deny cancels it. Either way the rep is told, with the note.
+  async function decideApproval(id: string, approval: "approve" | "deny") {
+    setSavingId(id);
+    setUpdateErr(null);
+    try {
+      const res = await fetch("/api/marketing-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, approval, note: (approvalNoteDraft[id] || "").trim() }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setUpdateErr(json?.error || "Failed to save the decision.");
+      } else {
+        setApprovalNoteDraft((d) => {
+          const next = { ...d };
+          delete next[id];
+          return next;
+        });
+        await loadOrders();
+      }
+    } catch (e: any) {
+      setUpdateErr(e?.message || "Failed to save the decision.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function deleteOrder(id: string) {
     if (!window.confirm("Delete this order from history? This can’t be undone.")) return;
     setSavingId(id);
@@ -727,6 +773,24 @@ export default function AdminMarketingOrdersPage({
                   ]}
                 />
                 <div className="ml-auto flex flex-wrap gap-2">
+                {/* Over a swag limit — waiting on a marketing admin. */}
+                {approvalCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setApprovalOnly((v) => !v)}
+                    aria-pressed={approvalOnly}
+                    title="Orders over a swag per-order limit, waiting on a marketing admin"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
+                      approvalOnly ? "bg-orange-600 text-white" : "bg-orange-500/15 text-orange-800 hover:bg-orange-500/25"
+                    }`}
+                  >
+                    Needs approval
+                    <span className={`rounded-full px-1.5 text-[10px] ${approvalOnly ? "bg-white/20" : "bg-black/10"}`}>
+                      {approvalCount}
+                    </span>
+                  </button>
+                )}
+
                 {/* Custom-printed OEM pizza boxes — a production job, not a pick. */}
                 {oemCount > 0 && (
                   <button
@@ -853,6 +917,14 @@ export default function AdminMarketingOrdersPage({
 
                       {/* The flags that change what you do next. */}
                       <span className="flex flex-wrap items-center gap-1.5 empty:hidden">
+                        {o.approval_status === "pending" && (
+                          <span
+                            className="rounded-full bg-orange-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-900"
+                            title={o.approval_reason || "Over a swag per-order limit"}
+                          >
+                            Needs approval
+                          </span>
+                        )}
                         {alertsFor(o).length > 0 && (
                           <span
                             className="inline-flex items-center gap-1 rounded-full bg-violet-500/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700"
@@ -978,6 +1050,23 @@ export default function AdminMarketingOrdersPage({
                             </span>
                           </div>
                         ))}
+
+                        {(o.approval_status === "approved" || o.approval_status === "denied") && (
+                          <div
+                            className={`mb-4 rounded-[16px] px-4 py-3 text-[13px] leading-snug ${
+                              o.approval_status === "approved"
+                                ? "bg-[var(--anchor-mint)]/50 text-[var(--anchor-deep)]"
+                                : "bg-red-500/10 text-red-800"
+                            }`}
+                          >
+                            <span className="font-semibold">
+                              {o.approval_status === "approved" ? "Approved over the swag limit" : "Denied — over the swag limit"}
+                              {o.approval_at ? ` · ${formatDateTime(o.approval_at)}` : ""}
+                            </span>
+                            {o.approval_reason && <span className="block whitespace-pre-line">{o.approval_reason}</span>}
+                            {o.approval_note && <span className="mt-1 block">Note: {o.approval_note}</span>}
+                          </div>
+                        )}
 
                         {/* What they ordered — the headline */}
                         <p className="whitespace-pre-line text-sm font-medium leading-snug text-black">{o.items}</p>
@@ -1260,6 +1349,57 @@ export default function AdminMarketingOrdersPage({
                         </div>
 
                         <div className="mt-5 grid gap-4 border-t border-[var(--border-default)] pt-4 lg:mt-0 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                        {o.approval_status === "pending" ? (
+                          // Over a swag limit: nobody in inside sales has it
+                          // yet, so the only thing to do is marketing's call.
+                          <div className="mt-4 rounded-[16px] bg-orange-500/10 p-4">
+                            <div className="text-[11px] font-bold uppercase tracking-wide text-orange-900">
+                              Needs marketing approval
+                            </div>
+                            <p className="mt-1 text-[13px] leading-snug text-orange-950">
+                              Over the per-order limit. It goes to inside sales once it&rsquo;s approved.
+                            </p>
+                            {o.approval_reason && (
+                              <p className="mt-2 whitespace-pre-line text-[13px] font-semibold text-orange-950">
+                                {o.approval_reason}
+                              </p>
+                            )}
+                            {role === "admin" ? (
+                              <>
+                                <Textarea
+                                  value={approvalNoteDraft[o.id] ?? ""}
+                                  onChange={(e) => setApprovalNoteDraft((d) => ({ ...d, [o.id]: e.target.value }))}
+                                  rows={3}
+                                  placeholder="Note for the rep — required to deny"
+                                  className="mt-3 w-full text-sm"
+                                  aria-label="Approval note"
+                                />
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => decideApproval(o.id, "approve")}
+                                    disabled={savingId === o.id}
+                                    className="inline-flex h-10 items-center justify-center rounded-full bg-[var(--anchor-green)] px-3 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => decideApproval(o.id, "deny")}
+                                    disabled={savingId === o.id || !(approvalNoteDraft[o.id] || "").trim()}
+                                    title={(approvalNoteDraft[o.id] || "").trim() ? undefined : "Add a note saying why"}
+                                    className="inline-flex h-10 items-center justify-center rounded-full bg-red-500/12 px-3 text-[13px] font-semibold text-red-700 transition hover:bg-red-500/20 disabled:opacity-50"
+                                  >
+                                    Deny
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="mt-2 text-[12px] text-orange-900">Waiting on a marketing admin.</p>
+                            )}
+                          </div>
+                        ) : (
+                        <>
                         {/* Status control: a clear, full-width tap target on mobile */}
                         <div className="mt-4">
                           <label
@@ -1514,6 +1654,8 @@ export default function AdminMarketingOrdersPage({
                           </label>
                         </div>
 
+                        </>
+                        )}
                         </div>
                       </div>
                     </div>
