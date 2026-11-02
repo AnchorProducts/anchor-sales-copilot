@@ -27,6 +27,13 @@ export type CompressOptions = {
    * (then dimension) down until the result fits or we hit the floor.
    */
   targetBytes?: number;
+  /**
+   * Keep transparency: a PNG/WebP/GIF is re-encoded as WebP (which has an
+   * alpha channel) instead of being flattened onto white as a JPEG. Product
+   * cut-outs need this. Browsers that can't encode WebP (older Safari) hand
+   * back a PNG, which keeps the alpha too.
+   */
+  preserveAlpha?: boolean;
 };
 
 const DEFAULTS: Required<CompressOptions> = {
@@ -34,7 +41,13 @@ const DEFAULTS: Required<CompressOptions> = {
   quality: 0.7,
   skipUnderBytes: 300 * 1024, // 300 KB
   targetBytes: 1.5 * 1024 * 1024, // 1.5 MB
+  preserveAlpha: false,
 };
+
+function mayHaveAlpha(file: File): boolean {
+  const type = (file.type || "").toLowerCase();
+  return /^image\/(png|webp|gif|avif)$/.test(type) || /\.(png|webp|gif|avif)$/i.test(file.name || "");
+}
 
 // Quality floor and the ladder we walk down toward the target size.
 const QUALITY_STEPS = [0.7, 0.6, 0.5, 0.42, 0.35];
@@ -84,7 +97,8 @@ function encode(
   bitmap: { draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void },
   targetW: number,
   targetH: number,
-  quality: number
+  quality: number,
+  alpha = false
 ): Promise<Blob | null> {
   const canvas = document.createElement("canvas");
   canvas.width = targetW;
@@ -94,10 +108,13 @@ function encode(
   // We always encode to JPEG, which has no alpha channel. Without a fill,
   // transparent regions of a PNG/WebP flatten to black; paint white first so
   // transparency reads as a normal background instead.
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, targetW, targetH);
+  // (With `alpha`, the canvas stays transparent and the output is WebP.)
+  if (!alpha) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, targetW, targetH);
+  }
   bitmap.draw(ctx, targetW, targetH);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  return new Promise((resolve) => canvas.toBlob(resolve, alpha ? "image/webp" : "image/jpeg", quality));
 }
 
 /**
@@ -106,7 +123,7 @@ function encode(
  * small, or the re-encoded result would be larger.
  */
 export async function compressImage(file: File, opts: CompressOptions = {}): Promise<File> {
-  const { maxDimension, quality, skipUnderBytes, targetBytes } = { ...DEFAULTS, ...opts };
+  const { maxDimension, quality, skipUnderBytes, targetBytes, preserveAlpha } = { ...DEFAULTS, ...opts };
 
   if (typeof document === "undefined") return file; // SSR / non-browser guard
   if (!isImageCandidate(file)) return file; // videos and non-images pass through
@@ -115,6 +132,9 @@ export async function compressImage(file: File, opts: CompressOptions = {}): Pro
   // short-circuit true JPEGs here.)
   const isJpeg = (file.type || "").toLowerCase() === "image/jpeg";
   if (isJpeg && file.size <= skipUnderBytes) return file;
+  const alpha = preserveAlpha && mayHaveAlpha(file);
+  // A cut-out that's already small enough is kept exactly as it was made.
+  if (alpha && file.size <= targetBytes) return file;
 
   let bitmap: Awaited<ReturnType<typeof loadBitmap>> | null = null;
   try {
@@ -134,7 +154,7 @@ export async function compressImage(file: File, opts: CompressOptions = {}): Pro
 
       for (const q of QUALITY_STEPS) {
         if (q > quality) continue; // respect a lower caller-supplied ceiling
-        const blob = await encode(bitmap, targetW, targetH, q);
+        const blob = await encode(bitmap, targetW, targetH, q, alpha);
         if (!blob) continue;
         best = blob;
         if (blob.size <= targetBytes) {
@@ -156,8 +176,10 @@ export async function compressImage(file: File, opts: CompressOptions = {}): Pro
 }
 
 function finalize(blob: Blob, original: File): File {
-  const newName = original.name.replace(/\.[^.]+$/, "") + ".jpg";
-  return new File([blob], newName, { type: "image/jpeg", lastModified: original.lastModified });
+  const type = blob.type || "image/jpeg";
+  const ext = type === "image/webp" ? ".webp" : type === "image/png" ? ".png" : ".jpg";
+  const newName = original.name.replace(/\.[^.]+$/, "") + ext;
+  return new File([blob], newName, { type, lastModified: original.lastModified });
 }
 
 /** Compress a batch of files, preserving order. Non-images pass through. */

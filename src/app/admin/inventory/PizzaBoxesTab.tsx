@@ -578,10 +578,10 @@ export default function PizzaBoxesTab({
                   return (
                     <div key={it.id} className="rounded-xl border border-[var(--border-default)] p-2">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                        <div className="h-11 w-11 shrink-0">
                           {it.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                            <img src={it.image_url} alt="" className="h-full w-full object-contain" />
                           ) : null}
                         </div>
                         <div className="min-w-0 flex-1">

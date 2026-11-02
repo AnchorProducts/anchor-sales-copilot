@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { compressImage } from "@/lib/media/compressImage";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import Modal from "@/app/components/ui/Modal";
@@ -13,6 +12,7 @@ import Button from "@/app/components/ui/Button";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import PizzaBoxesTab from "./PizzaBoxesTab";
+import { ItemPhotosEditor, pendingCount, uploadPendingPhotos, type PendingPhotos } from "./ItemPhotos";
 import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 import {
   INVENTORY_CATEGORIES,
@@ -29,6 +29,7 @@ import {
   PIZZA_BOX_KITS,
   isBoxType,
   orderLimitFor,
+  photoKindsFor,
   type BoxScanRow,
   type InventoryItem,
   type ItemCheckout,
@@ -208,7 +209,7 @@ export default function AdminInventoryPage({
 
   // Modals
   const [itemModal, setItemModal] = useState<ItemDraft | null>(null);
-  const [itemFile, setItemFile] = useState<File | null>(null);
+  const [itemFiles, setItemFiles] = useState<PendingPhotos>({});
   const [checkoutItem, setCheckoutItem] = useState<InventoryItem | null>(null);
   const [checkinLoan, setCheckinLoan] = useState<ItemCheckout | null>(null);
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
@@ -366,13 +367,13 @@ export default function AdminInventoryPage({
   // ── Item create/edit ───────────────────────────────────────────────────────
   function openCreate() {
     setModalErr(null);
-    setItemFile(null);
+    setItemFiles({});
     setNewLocation(false);
     setItemModal({ ...EMPTY_DRAFT });
   }
   function openEdit(it: InventoryItem) {
     setModalErr(null);
-    setItemFile(null);
+    setItemFiles({});
     setNewLocation(false);
     setItemModal({
       id: it.id,
@@ -436,48 +437,21 @@ export default function AdminInventoryPage({
         return;
       }
       const savedId: string | undefined = json?.item?.id || itemModal.id;
-      if (itemFile && savedId) {
-        // Phone photos arrive at 3–10 MB and are only ever shown as thumbnails;
-        // shrink before upload (max 2000px, JPEG). Non-images pass through.
-        const photo = await compressImage(itemFile);
-        const imgUrl = `/api/inventory/${encodeURIComponent(savedId)}/image`;
-        const contentType = photo.type || "application/octet-stream";
-        // Phase 1: ask the server for a signed upload URL.
-        const signRes = await fetch(imgUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "sign", fileName: photo.name, contentType }),
-        });
-        const sign = await signRes.json().catch(() => null);
-        if (!signRes.ok || !sign?.token || !sign?.path) {
-          setModalErr(sign?.error || "Item saved, but the photo failed to upload.");
-          await loadAll();
-          return;
-        }
-        // Phase 2: upload the bytes straight to Supabase Storage (no Vercel cap).
-        const { error: upErr } = await supabase.storage
-          .from(sign.bucket)
-          .uploadToSignedUrl(sign.path, sign.token, photo, { contentType });
+      if (savedId && pendingCount(itemFiles) > 0) {
+        // Each file: shrunk if huge (transparency kept), signed, uploaded
+        // straight to Storage, then added to the item under its kind.
+        const upErr = await uploadPendingPhotos(savedId, itemFiles, supabase);
         if (upErr) {
-          setModalErr(`Item saved, but the photo failed to upload: ${upErr.message}`);
-          await loadAll();
-          return;
-        }
-        // Phase 3: point the item at the uploaded photo.
-        const commit = await fetch(imgUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "commit", path: sign.path }),
-        });
-        if (!commit.ok) {
-          const cJson = await commit.json().catch(() => null);
-          setModalErr(cJson?.error || "Item saved, but the photo failed to upload.");
+          setItemFiles({});
+          // Keep the modal open on the saved item so the failure is seen.
+          if (!itemModal.id) setItemModal({ ...itemModal, id: savedId });
+          setModalErr(upErr);
           await loadAll();
           return;
         }
       }
       setItemModal(null);
-      setItemFile(null);
+      setItemFiles({});
       await loadAll();
     } catch (e: any) {
       setModalErr(e?.message || "Failed to save item.");
@@ -515,6 +489,8 @@ export default function AdminInventoryPage({
   }
 
   async function removeImage(it: InventoryItem) {
+    const n = it.photos?.length || 0;
+    if (n > 1 && !window.confirm(`Remove all ${n} photos of "${it.name}"?`)) return;
     setBusy(true);
     try {
       await fetch(`/api/inventory/${encodeURIComponent(it.id)}/image`, { method: "DELETE" });
@@ -740,7 +716,7 @@ export default function AdminInventoryPage({
   // way the seeded pieces are so a hand-made one lines up with them.
   function openCreatePiece(kit: PackagingKit, role: PackagingRole, label: string) {
     setModalErr(null);
-    setItemFile(null);
+    setItemFiles({});
     setNewLocation(false);
     setItemModal({
       ...EMPTY_DRAFT,
@@ -1245,20 +1221,15 @@ export default function AdminInventoryPage({
                 </div>
               </div>
 
-              <label className="block text-sm">
-                <span className="font-medium">Photo</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setItemFile(e.target.files?.[0] || null)}
-                  className="mt-1 block w-full text-sm"
-                />
-                {itemModal.id && (
-                  <span className="text-xs text-[var(--anchor-gray)]">
-                    Choosing a file replaces the current photo.
-                  </span>
-                )}
-              </label>
+              <ItemPhotosEditor
+                key={itemModal.id || "new"}
+                itemId={itemModal.id}
+                kinds={photoKindsFor({ category: itemModal.category, packaging_role: itemModal.packaging_role })}
+                pending={itemFiles}
+                onPendingChange={setItemFiles}
+                onChanged={() => void loadAll()}
+                disabled={busy}
+              />
             </div>
             {itemModal.id && deleteErr?.id === itemModal.id && (
               <div className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{deleteErr.msg}</div>
@@ -1739,10 +1710,10 @@ function ItemsList({
               aria-expanded={open}
               className="flex w-full min-w-0 items-center gap-2 p-2.5 text-left transition hover:bg-[var(--anchor-mint)]/20 sm:gap-3 sm:p-3"
             >
-              <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)] sm:h-16 sm:w-16">
+              <div className="h-11 w-11 shrink-0 sm:h-16 sm:w-16">
                 {it.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                  <img src={it.image_url} alt={it.name} className="h-full w-full object-contain" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--anchor-gray)]">
                     No photo
@@ -1949,7 +1920,7 @@ function ItemsList({
                   </Button>
                   {it.image_url && (
                     <Button variant="ghost" onClick={() => onRemoveImage(it)} disabled={busy}>
-                      Remove photo
+                      {(it.photos?.length || 0) > 1 ? "Remove all photos" : "Remove photo"}
                     </Button>
                   )}
                   <Button variant="destructive" onClick={() => onDelete(it)} disabled={busy}>
@@ -2588,10 +2559,10 @@ function PizzaBoxKits({
               // width and the truncate below do its job.
               className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2"
             >
-              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+              <div className="h-12 w-12 shrink-0">
                 {it?.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                  <img src={it.image_url} alt={it.name} className="h-full w-full object-contain" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--anchor-gray)]">
                     No photo

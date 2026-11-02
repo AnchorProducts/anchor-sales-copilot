@@ -22,6 +22,7 @@ import {
   type InventoryItem,
 } from "@/lib/inventory";
 import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
+import ItemPhotoViewer from "@/app/components/marketing/ItemPhotoViewer";
 
 // The chip for pre-assembled pizza boxes on their own — not a real category.
 const BOXES_FILTER = "boxes";
@@ -85,6 +86,8 @@ export default function MarketingInventoryPage() {
   );
 
   const [checkoutItem, setCheckoutItem] = useState<InventoryItem | null>(null);
+  // The item whose photos are open in the viewer.
+  const [viewItem, setViewItem] = useState<InventoryItem | null>(null);
   const [eventName, setEventName] = useState("");
   const [qty, setQty] = useState("1");
   const [dueBack, setDueBack] = useState("");
@@ -331,12 +334,12 @@ export default function MarketingInventoryPage() {
                   {boxes.map(({ it, ready }) => (
                     <div
                       key={it.id}
-                      className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] p-2.5"
+                      className="flex min-w-0 items-center gap-3 p-1"
                     >
-                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                      <div className="h-14 w-14 shrink-0">
                         {it.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={it.image_url} alt="" className="h-full w-full object-cover" />
+                          <img src={it.image_url} alt="" className="h-full w-full object-contain" />
                         ) : null}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -375,22 +378,33 @@ export default function MarketingInventoryPage() {
             ) : filteredItems.length === 0 ? (
               <Card className="p-6 text-sm text-[var(--anchor-gray)]">No items match your search.</Card>
             ) : (
-              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 items-start gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
                 {filteredItems.map((it) => (
-                  <Card key={it.id} className="flex gap-4 p-4">
-                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-soft)]">
+                  // No card, border or frame: the photos are transparent
+                  // cut-outs, and float on the page as they are.
+                  <div key={it.id} className="flex min-w-0 flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setViewItem(it)}
+                      disabled={!it.image_url}
+                      aria-label={it.image_url ? `View photos of ${it.name}` : undefined}
+                      className="relative flex aspect-square w-full items-center justify-center disabled:cursor-default"
+                    >
                       {it.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                        <img src={it.image_url} alt={it.name} className="h-full w-full object-contain" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-[var(--anchor-gray)]">
-                          No photo
-                        </div>
+                        <span className="text-xs text-[var(--anchor-gray)]">No photo</span>
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
+                      {(it.photos?.length || 0) > 1 && (
+                        <span className="absolute bottom-1 right-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          {it.photos!.length} photos
+                        </span>
+                      )}
+                    </button>
+                    <div className="mt-2 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-bold leading-snug text-[var(--anchor-deep)] break-words">
+                        <h3 className="text-[15px] font-semibold leading-snug text-[var(--anchor-deep)] break-words">
                           {it.name}
                         </h3>
                         {it.category && (
@@ -400,9 +414,9 @@ export default function MarketingInventoryPage() {
                         )}
                       </div>
                       {it.description && (
-                        <p className="mt-0.5 text-sm text-[var(--anchor-gray)]">{it.description}</p>
+                        <p className="mt-0.5 line-clamp-3 text-[13px] text-[var(--anchor-gray)]">{it.description}</p>
                       )}
-                      <p className="mt-2 text-sm">
+                      <p className="mt-1 text-[13px]">
                         {isBoxType(it) ? (
                           <BoxedStock
                             ready={findReadyBox(items, it.id)?.quantity_available ?? 0}
@@ -430,13 +444,15 @@ export default function MarketingInventoryPage() {
                         </Button>
                       )}
                     </div>
-                  </Card>
+                  </div>
                 ))}
               </div>
             )}
           </>
         )}
       </div>
+
+      <ItemPhotoViewer key={viewItem?.id || "none"} item={viewItem} onClose={() => setViewItem(null)} />
 
       <Modal open={!!checkoutItem} onClose={() => setCheckoutItem(null)} className="max-w-md">
         {checkoutItem && (

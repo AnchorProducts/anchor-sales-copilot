@@ -660,6 +660,69 @@ export function overlayUnits(lines: OverlayLine[]): {
   return { paired, standalone, total: paired + standalone, byKit };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Item photos
+//
+// An item can carry several photos, each tagged with what it shows. Anchor
+// samples get three kinds — the anchor alone, the anchor in its plastic
+// overlay, and the full pizza box; everything else just has photos ("other").
+// image_path stays as the MAIN photo (see itemCoverPath) so every page that only
+// knows image_path keeps working. Added in 20261102_000001.
+// ────────────────────────────────────────────────────────────────────────────
+
+export const PHOTO_KINDS = [
+  { key: "anchor", label: "Anchor", hint: "The anchor on its own" },
+  { key: "overlay", label: "Anchor with overlay", hint: "The anchor in its plastic overlay" },
+  { key: "box", label: "Full box", hint: "The finished pizza box" },
+  { key: "other", label: "Photos", hint: "" },
+] as const;
+
+export type PhotoKind = (typeof PHOTO_KINDS)[number]["key"];
+
+export type ItemPhoto = { path: string; kind: PhotoKind };
+
+export function isPhotoKind(v: unknown): v is PhotoKind {
+  return PHOTO_KINDS.some((k) => k.key === v);
+}
+
+export function photoKindLabel(kind: string): string {
+  return PHOTO_KINDS.find((k) => k.key === kind)?.label || "Photos";
+}
+
+// The kinds offered for an item: an anchor sample gets the three shots, any
+// other item one plain set.
+export function photoKindsFor(item: { category?: string | null; packaging_role?: string | null }): PhotoKind[] {
+  return item.category === "samples" && !item.packaging_role ? ["anchor", "overlay", "box"] : ["other"];
+}
+
+// Clean whatever is stored into a well-formed list (unknown kinds become
+// "other", blanks and duplicates dropped).
+export function parseItemPhotos(v: unknown): ItemPhoto[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: ItemPhoto[] = [];
+  for (const raw of v as { path?: unknown; kind?: unknown }[]) {
+    const path = String(raw?.path ?? "").trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    const kind = raw?.kind;
+    out.push({ path, kind: isPhotoKind(kind) ? kind : "other" });
+  }
+  return out;
+}
+
+// The item's main photo: the first of the first kind that has any. Anchor
+// before "other" before overlay before full box — the plain anchor is what
+// people recognise an item by.
+const COVER_ORDER: PhotoKind[] = ["anchor", "other", "overlay", "box"];
+export function itemCoverPath(photos: readonly ItemPhoto[]): string | null {
+  for (const k of COVER_ORDER) {
+    const hit = photos.find((p) => p.kind === k);
+    if (hit) return hit.path;
+  }
+  return null;
+}
+
 export type InventoryItem = {
   id: string;
   name: string;
@@ -671,6 +734,8 @@ export type InventoryItem = {
   image_path: string | null;
   // Resolved by the API for display; not stored.
   image_url?: string | null;
+  // Every photo, main one included. Absent before 20261102_000001.
+  photos?: ItemPhoto[];
   quantity_available: number;
   quantity_out: number;
   low_stock_threshold: number;

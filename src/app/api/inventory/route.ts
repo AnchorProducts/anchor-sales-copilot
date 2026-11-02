@@ -7,6 +7,7 @@ import {
   isPackagingRole,
   isTradeshowCategory,
   resolveCheckoutEnabled,
+  parseItemPhotos,
 } from "@/lib/inventory";
 import {
   clean,
@@ -117,7 +118,12 @@ export async function GET() {
 
     // box_of (20260915_000002) first: before that migration nothing is
     // assembled, and the catalog loads without it.
-    let { data, error } = await listItems(`${ITEM_COLS},box_of`);
+    // photos (20261102_000001) on its own, before anything else: missing, it
+    // should cost the item photos only, not every other later column.
+    let { data, error } = await listItems(`${ITEM_COLS},box_of,photos`);
+    if (error && (error.code === "42703" || /photos/.test(error.message || ""))) {
+      ({ data, error } = await listItems(`${ITEM_COLS},box_of`));
+    }
     if (error && (error.code === "42703" || /box_of/.test(error.message || ""))) {
       ({ data, error } = await listItems(ITEM_COLS));
     }
@@ -132,6 +138,16 @@ export async function GET() {
       (data || []).map(async (row: any) => ({
         ...row,
         image_url: await signItemImage(row.image_path),
+        // Paths + kinds only; the links are signed when an item's photos are
+        // opened (GET /api/inventory/[id]/image), not for the whole catalog.
+        photos: (() => {
+          const photos = parseItemPhotos(row.photos);
+          // Not migrated yet, or set before the backfill: the one photo counts.
+          if (!photos.length && row.image_path) {
+            return [{ path: row.image_path, kind: row.category === "samples" ? "anchor" : "other" }];
+          }
+          return photos;
+        })(),
         low_stock:
           (row.low_stock_threshold || 0) > 0 &&
           row.quantity_available <= row.low_stock_threshold,
@@ -438,7 +454,7 @@ export async function DELETE(req: Request) {
 
     const { data: current } = await supabaseAdmin
       .from("marketing_inventory_items")
-      .select("quantity_out,image_path")
+      .select("*")
       .eq("id", id)
       .maybeSingle();
     if (current && ((current as any).quantity_out || 0) > 0) {
@@ -454,8 +470,14 @@ export async function DELETE(req: Request) {
     // The row is gone, so nothing points at the photo any more — drop it too,
     // or the bucket accumulates files no item can ever reference. Best-effort:
     // a failed cleanup leaves a stray file, which must not fail the delete.
-    const imagePath = clean((current as any)?.image_path);
-    if (imagePath) void supabaseAdmin.storage.from(INVENTORY_BUCKET).remove([imagePath]);
+    const imagePaths = [
+      ...new Set(
+        [clean((current as any)?.image_path), ...parseItemPhotos((current as any)?.photos).map((p) => p.path)].filter(
+          Boolean
+        )
+      ),
+    ];
+    if (imagePaths.length) void supabaseAdmin.storage.from(INVENTORY_BUCKET).remove(imagePaths);
 
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
