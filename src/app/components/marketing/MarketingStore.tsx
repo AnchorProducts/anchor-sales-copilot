@@ -18,6 +18,8 @@ import {
   isSwapAnchor,
   itemSizes,
   findSize,
+  groupSizesByFit,
+  splitSizeLabel,
   orderLimitFor,
   TRADESHOW_CATEGORY,
   type BoxPart,
@@ -796,29 +798,41 @@ export default function MarketingStore({
                 </div>
               )}
               {sizes.length > 0 && (
-                <div role="radiogroup" aria-label={`${it.name} size`} className="flex flex-wrap gap-1.5">
-                  {sizes.map((sz) => {
-                    const on = sz.label === size;
-                    return (
-                      <button
-                        key={sz.label}
-                        type="button"
-                        role="radio"
-                        aria-checked={on}
-                        title={`${sz.quantity} in stock`}
-                        onClick={() => setDraftSize((prev) => ({ ...prev, [it.id]: sz.label }))}
-                        className={`h-8 min-w-[2.5rem] rounded-full px-3 text-[13px] font-semibold transition ${
-                          on
-                            ? "bg-[var(--anchor-green)] text-white"
-                            : sz.quantity > 0
-                              ? "bg-[var(--mo-fill)] text-black hover:bg-[var(--mo-thin)]"
-                              : "bg-[var(--mo-fill)] text-[var(--anchor-gray)] line-through decoration-1"
-                        }`}
-                      >
-                        {sz.label}
-                      </button>
-                    );
-                  })}
+                <div role="radiogroup" aria-label={`${it.name} size`} className="grid gap-1.5">
+                  {/* Men's and women's runs on their own rows, each labelled;
+                      a unisex-only item is just the one row. */}
+                  {groupSizesByFit(sizes).map((g, _i, groups) => (
+                    <div key={g.fit || "unisex"}>
+                      {groups.length > 1 && (
+                        <div className="mb-1 text-[11px] font-semibold text-[var(--anchor-gray)]">{g.fit || "Unisex"}</div>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.sizes.map((sz) => {
+                          const on = sz.label === size;
+                          return (
+                            <button
+                              key={sz.label}
+                              type="button"
+                              role="radio"
+                              aria-checked={on}
+                              aria-label={sz.label}
+                              title={`${sz.label}: ${sz.quantity} in stock`}
+                              onClick={() => setDraftSize((prev) => ({ ...prev, [it.id]: sz.label }))}
+                              className={`h-8 min-w-[2.5rem] rounded-full px-3 text-[13px] font-semibold transition ${
+                                on
+                                  ? "bg-[var(--anchor-green)] text-white"
+                                  : sz.quantity > 0
+                                    ? "bg-[var(--mo-fill)] text-black hover:bg-[var(--mo-thin)]"
+                                    : "bg-[var(--mo-fill)] text-[var(--anchor-gray)] line-through decoration-1"
+                              }`}
+                            >
+                              {splitSizeLabel(sz.label).size}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               {!oem && !loan && limit !== null && qty + have > limit && (

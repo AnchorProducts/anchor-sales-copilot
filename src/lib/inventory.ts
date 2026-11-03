@@ -945,6 +945,48 @@ export function findSize(sizes: readonly ItemSize[], label: string | null | unde
 }
 
 // "S 4 · M 2 · L 0"
+// Men's / women's cuts. The fit is part of the size's label ("Women's M"), so a
+// shirt can carry both runs side by side, each size counted on its own, with no
+// change to how sizes are stored, ordered or picked. A size with no fit prefix
+// is unisex.
+export const SIZE_FITS = ["Men's", "Women's"] as const;
+export type SizeFit = (typeof SIZE_FITS)[number];
+
+export function sizeLabel(fit: SizeFit | null, size: string): string {
+  return fit ? `${fit} ${size}` : size;
+}
+
+export function splitSizeLabel(label: string): { fit: SizeFit | null; size: string } {
+  for (const f of SIZE_FITS) {
+    if (label.toLowerCase().startsWith(`${f.toLowerCase()} `)) return { fit: f, size: label.slice(f.length + 1) };
+  }
+  return { fit: null, size: label };
+}
+
+// Sizes grouped by fit, unisex first, then men's, then women's, each group in
+// its stored order. One group (fit null) for an item with no fits at all.
+export function groupSizesByFit<T extends { label: string }>(sizes: readonly T[]): { fit: SizeFit | null; sizes: T[] }[] {
+  const order: (SizeFit | null)[] = [null, ...SIZE_FITS];
+  return order
+    .map((fit) => ({ fit, sizes: sizes.filter((s) => splitSizeLabel(s.label).fit === fit) }))
+    .filter((g) => g.sizes.length > 0);
+}
+
+// Natural order: by fit (unisex, men's, women's), then S before M before L,
+// anything typed in after the presets.
+export function sortSizes<T extends { label: string }>(sizes: readonly T[]): T[] {
+  const fitRank = (f: SizeFit | null) => (f ? SIZE_FITS.indexOf(f) + 1 : 0);
+  const sizeRank = (x: string) => {
+    const i = (SIZE_PRESETS as readonly string[]).indexOf(x.toUpperCase());
+    return i < 0 ? SIZE_PRESETS.length : i;
+  };
+  return [...sizes].sort((a, b) => {
+    const A = splitSizeLabel(a.label);
+    const B = splitSizeLabel(b.label);
+    return fitRank(A.fit) - fitRank(B.fit) || sizeRank(A.size) - sizeRank(B.size);
+  });
+}
+
 export function describeSizes(sizes: readonly ItemSize[]): string {
   return sizes.map((s) => `${s.label} ${s.quantity}`).join(" · ");
 }

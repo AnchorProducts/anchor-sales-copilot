@@ -775,7 +775,7 @@ export default function GrabPage({
                         const m = sizeQty[it.id]?.[sz.label] || 0;
                         return (
                           <div key={sz.label} className="flex items-center gap-2">
-                            <span className="w-12 text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{sz.label}</span>
+                            <span className="min-w-12 text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{sz.label}</span>
                             <span
                               className={`flex-1 text-xs ${sz.quantity > 0 ? "text-[var(--anchor-gray,#5b6b66)]" : "text-black/35"}`}
                             >

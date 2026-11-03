@@ -33,13 +33,19 @@ import {
   itemSizes,
   sizesSupported,
   SIZE_PRESETS,
+  SIZE_FITS,
+  sizeLabel,
+  splitSizeLabel,
+  groupSizesByFit,
+  sortSizes,
+  type SizeFit,
   type BoxScanRow,
   type InventoryItem,
   type ItemCheckout,
   type PackagingKit,
   type PackagingRole,
 } from "@/lib/inventory";
-import { Icon } from "@/app/components/ui/kit";
+import { Icon, Segmented } from "@/app/components/ui/kit";
 
 function fmtDate(s: string | null) {
   if (!s) return "—";
@@ -2965,8 +2971,9 @@ function CheckoutsList({
 }
 
 // The sizes a swag item comes in, each with its own count. Presets are a tap
-// each; anything else (a youth size, a waist) can be typed. No sizes = the item
-// has one plain count, as before.
+// each; anything else (a youth size, a waist) can be typed. Pick a fit first —
+// unisex, men's or women's — and the sizes added are that cut ("Women's M"), so
+// one shirt can carry both runs. No sizes = the item has one plain count.
 function SizesEditor({
   sizes,
   onChange,
@@ -2975,49 +2982,66 @@ function SizesEditor({
   onChange: (sizes: { label: string; quantity: string }[]) => void;
 }) {
   const [custom, setCustom] = useState("");
+  // Start on the fit the item already uses, so editing a women's tee doesn't
+  // open on unisex.
+  const [fit, setFit] = useState<SizeFit | "">(() => {
+    const fits = sizes.map((sz) => splitSizeLabel(sz.label).fit);
+    return fits.find((f): f is SizeFit => !!f) || "";
+  });
+  const labelFor = (size: string) => sizeLabel(fit || null, size.trim());
   const has = (label: string) => sizes.some((sz) => sz.label.trim().toLowerCase() === label.trim().toLowerCase());
   const add = (label: string) => {
     const l = label.trim().slice(0, 20);
     if (!l || has(l)) return;
-    // Presets keep their natural order (S before M before L) however they're tapped.
-    const order = (x: string) => {
-      const i = (SIZE_PRESETS as readonly string[]).indexOf(x);
-      return i < 0 ? SIZE_PRESETS.length : i;
-    };
-    const next = [...sizes, { label: l, quantity: "0" }];
-    next.sort((a, b) => order(a.label) - order(b.label));
-    onChange(next);
+    onChange(sortSizes([...sizes, { label: l, quantity: "0" }]));
   };
   const toggle = (label: string) =>
     has(label) ? onChange(sizes.filter((sz) => sz.label.toLowerCase() !== label.toLowerCase())) : add(label);
+  const removeAt = (label: string) => onChange(sizes.filter((sz) => sz.label !== label));
+  const setCount = (label: string, quantity: string) =>
+    onChange(sizes.map((x) => (x.label === label ? { ...x, quantity } : x)));
 
   return (
     <div className="rounded-xl border border-[var(--border-default)] p-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Sizes</div>
       <p className="mt-1 text-xs text-[var(--anchor-gray)]">
-        One item, counted per size — no need for a separate item for each size. Leave empty if it doesn&apos;t come in sizes.
+        One item, counted per size — no need for a separate item for each size. Leave empty if it doesn&apos;t come in
+        sizes. For men&apos;s and women&apos;s cuts, pick the fit, then its sizes; do both on one item if it comes in both.
       </p>
+      <div className="mt-2">
+        <Segmented
+          size="sm"
+          ariaLabel="Fit"
+          value={fit}
+          onChange={(v) => setFit(v as SizeFit | "")}
+          options={[{ value: "", label: "Unisex" }, ...SIZE_FITS.map((f) => ({ value: f, label: f }))]}
+        />
+      </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {SIZE_PRESETS.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => toggle(p)}
-            aria-pressed={has(p)}
-            className={`h-8 min-w-[2.5rem] rounded-full px-3 text-xs font-semibold transition ${
-              has(p)
-                ? "bg-[var(--anchor-deep)] text-white"
-                : "border border-[var(--border-default)] text-[var(--anchor-deep)] hover:bg-[var(--surface-strong)]"
-            }`}
-          >
-            {p}
-          </button>
-        ))}
+        {SIZE_PRESETS.map((p) => {
+          const label = labelFor(p);
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => toggle(label)}
+              aria-pressed={has(label)}
+              aria-label={label}
+              className={`h-8 min-w-[2.5rem] rounded-full px-3 text-xs font-semibold transition ${
+                has(label)
+                  ? "bg-[var(--anchor-deep)] text-white"
+                  : "border border-[var(--border-default)] text-[var(--anchor-deep)] hover:bg-[var(--surface-strong)]"
+              }`}
+            >
+              {p}
+            </button>
+          );
+        })}
         <form
           className="flex items-center gap-1"
           onSubmit={(e) => {
             e.preventDefault();
-            add(custom);
+            add(labelFor(custom));
             setCustom("");
           }}
         >
@@ -3027,37 +3051,43 @@ function SizesEditor({
             placeholder="Other size"
             className="h-8 w-28 text-xs"
           />
-          <Button type="submit" variant="secondary" disabled={!custom.trim() || has(custom)}>
+          <Button type="submit" variant="secondary" disabled={!custom.trim() || has(labelFor(custom))}>
             Add
           </Button>
         </form>
       </div>
-      {sizes.length > 0 && (
-        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {sizes.map((sz, idx) => (
-            <label key={sz.label} className="block text-xs">
-              <span className="flex items-center justify-between">
-                <span className="font-semibold text-[var(--anchor-deep)]">{sz.label}</span>
-                <button
-                  type="button"
-                  aria-label={`Remove size ${sz.label}`}
-                  onClick={() => onChange(sizes.filter((_, i) => i !== idx))}
-                  className="text-[var(--anchor-gray)] hover:text-red-600"
-                >
-                  ×
-                </button>
-              </span>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={sz.quantity}
-                onChange={(e) => onChange(sizes.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
-              />
-            </label>
-          ))}
-        </div>
-      )}
+      {sizes.length > 0 &&
+        groupSizesByFit(sizes).map((g) => (
+          <div key={g.fit || "unisex"} className="mt-3">
+            {(g.fit || groupSizesByFit(sizes).length > 1) && (
+              <div className="mb-1 text-[11px] font-semibold text-[var(--anchor-gray)]">{g.fit || "Unisex"}</div>
+            )}
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {g.sizes.map((sz) => (
+                <label key={sz.label} className="block text-xs">
+                  <span className="flex items-center justify-between">
+                    <span className="font-semibold text-[var(--anchor-deep)]">{splitSizeLabel(sz.label).size}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove size ${sz.label}`}
+                      onClick={() => removeAt(sz.label)}
+                      className="text-[var(--anchor-gray)] hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={sz.quantity}
+                    onChange={(e) => setCount(sz.label, e.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
     </div>
   );
 }
