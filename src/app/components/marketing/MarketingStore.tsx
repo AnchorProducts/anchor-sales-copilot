@@ -16,9 +16,12 @@ import {
   findReadyBox,
   isBoxType,
   isSwapAnchor,
+  itemSizes,
+  findSize,
   orderLimitFor,
   TRADESHOW_CATEGORY,
   type BoxPart,
+  type ItemSize,
 } from "@/lib/inventory";
 import type { BoxExtra } from "@/lib/settings/pizzaBoxExtras";
 import {
@@ -72,6 +75,8 @@ type InvItem = {
   packaging_kit?: string | null;
   product_of_month?: boolean;
   max_order_qty?: number | null;
+  // Swag that comes in sizes, each with its own count. Empty = no sizes.
+  sizes?: ItemSize[];
 };
 
 type Section = "samples" | "swag" | "brochures" | "tradeshow" | "potm";
@@ -88,6 +93,9 @@ type StockLine = {
   quantity: number;
   // Samples only; null for swag and printables.
   build: SampleBuild | null;
+  // The size picked, for swag that comes in sizes; null otherwise. The same
+  // item in two sizes is two lines.
+  size: string | null;
   note: string;
   // A fully built box the rep customized at checkout: exactly what was taken
   // out (the anchor included) and what, if anything, replaces the anchor.
@@ -171,6 +179,7 @@ export default function MarketingStore({
   // Per-card choices before "Add to cart".
   const [draftBuild, setDraftBuild] = useState<Record<string, SampleBuild>>({});
   const [draftQty, setDraftQty] = useState<Record<string, number>>({});
+  const [draftSize, setDraftSize] = useState<Record<string, string>>({});
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [capNotice, setCapNotice] = useState(false);
 
@@ -283,7 +292,8 @@ export default function MarketingStore({
   }
 
   // What's on the shelf for a sample built a given way.
-  function onHand(it: InvItem, build: SampleBuild | null): number {
+  function onHand(it: InvItem, build: SampleBuild | null, size?: string | null): number {
+    if (size) return findSize(itemSizes(it), size)?.quantity ?? 0;
     const box = boxInfo.get(it.id);
     if (box && build === "full") return box.ready + box.loose;
     return it.quantity_available;
@@ -308,14 +318,22 @@ export default function MarketingStore({
     window.setTimeout(() => setFlashKey((k) => (k === key ? null : k)), 1400);
   }
 
-  function addToCart(it: InvItem, kind: "stock" | "oem" | "loan", build: SampleBuild | null, qty: number) {
+  function addToCart(
+    it: InvItem,
+    kind: "stock" | "oem" | "loan",
+    build: SampleBuild | null,
+    qty: number,
+    size: string | null = null
+  ) {
     if (qty <= 0) return;
+    if (kind === "stock" && itemSizes(it).length > 0 && !size) return;
     setCapNotice(false);
     if (kind === "stock" && isSampleAnchor(it) && customerSamples + qty > CUSTOMER_SAMPLE_CAP) {
       setCapNotice(true);
       return;
     }
-    const key = kind === "loan" ? `l:${it.id}` : `${kind === "oem" ? "o" : "s"}:${it.id}:${build || "-"}`;
+    const key =
+      kind === "loan" ? `l:${it.id}` : `${kind === "oem" ? "o" : "s"}:${it.id}:${build || "-"}${size ? `:${size}` : ""}`;
     setCart((prev) => {
       const hit = prev.find((l) => l.key === key);
       if (hit) {
@@ -326,7 +344,7 @@ export default function MarketingStore({
         return [...prev, { key, kind, item_id: it.id, model: it.name, build: build || "full", quantity: qty, imprint: "", print: "" }];
       }
       if (kind === "loan") return [...prev, { key, kind, item_id: it.id, quantity: Math.min(qty, it.quantity_available) }];
-      return [...prev, { key, kind, item_id: it.id, quantity: qty, build, note: "", remove: null, swap: null }];
+      return [...prev, { key, kind, item_id: it.id, quantity: qty, build, size, note: "", remove: null, swap: null }];
     });
     setDraftQty((prev) => ({ ...prev, [it.id]: 1 }));
     flash(it.id);
@@ -592,6 +610,7 @@ export default function MarketingStore({
           return {
             item_id: l.item_id,
             quantity: l.quantity,
+            ...(l.size ? { size: l.size } : {}),
             packaging,
             note: l.note.trim(),
             plastic_overlay: packaging === "overlay",
@@ -700,7 +719,10 @@ export default function MarketingStore({
     const build = builds.length ? (builds.includes(draftBuild[it.id]) ? draftBuild[it.id] : builds[0]) : null;
     const qty = draftQty[it.id] ?? 1;
     const have = inCart(it.id);
-    const avail = onHand(it, build);
+    const sizes = loan || oem ? [] : itemSizes(it);
+    const size = sizes.length ? findSize(sizes, draftSize[it.id])?.label ?? null : null;
+    const needsSize = sizes.length > 0 && !size;
+    const avail = sizes.length ? (size ? onHand(it, null, size) : it.quantity_available) : onHand(it, build);
     const box = boxInfo.get(it.id);
     const outOfStockLoan = loan && it.quantity_available <= 0;
     const added = flashKey === it.id;
@@ -739,7 +761,11 @@ export default function MarketingStore({
                     : `${it.quantity_available} available to borrow`
                   : box && build === "full"
                     ? `${box.ready} built · ${box.loose} loose`
-                    : avail > 0
+                    : sizes.length && size
+                      ? avail > 0
+                        ? `${avail} in ${size}`
+                        : `None in ${size} — made to order`
+                      : avail > 0
                       ? `${avail} in stock`
                       : "Made to order"}
             </div>
@@ -769,12 +795,38 @@ export default function MarketingStore({
                   )}
                 </div>
               )}
+              {sizes.length > 0 && (
+                <div role="radiogroup" aria-label={`${it.name} size`} className="flex flex-wrap gap-1.5">
+                  {sizes.map((sz) => {
+                    const on = sz.label === size;
+                    return (
+                      <button
+                        key={sz.label}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        title={`${sz.quantity} in stock`}
+                        onClick={() => setDraftSize((prev) => ({ ...prev, [it.id]: sz.label }))}
+                        className={`h-8 min-w-[2.5rem] rounded-full px-3 text-[13px] font-semibold transition ${
+                          on
+                            ? "bg-[var(--anchor-green)] text-white"
+                            : sz.quantity > 0
+                              ? "bg-[var(--mo-fill)] text-black hover:bg-[var(--mo-thin)]"
+                              : "bg-[var(--mo-fill)] text-[var(--anchor-gray)] line-through decoration-1"
+                        }`}
+                      >
+                        {sz.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {!oem && !loan && limit !== null && qty + have > limit && (
                 <p className="text-[12px] font-medium text-orange-700">
                   Over {limit} per order — marketing approves it before it ships.
                 </p>
               )}
-              {!oem && !loan && qty > avail && (
+              {!oem && !loan && !needsSize && qty > avail && (
                 <p className="text-[12px] font-medium text-amber-600">
                   {avail > 0 ? `Only ${avail} on hand — the rest are made to order.` : "None on hand — made to order."}
                 </p>
@@ -790,11 +842,11 @@ export default function MarketingStore({
                 <Pill
                   size="sm"
                   variant={oem ? "violet" : "filled"}
-                  disabled={outOfStockLoan}
-                  onClick={() => addToCart(it, oem ? "oem" : loan ? "loan" : "stock", build, qty)}
+                  disabled={outOfStockLoan || needsSize}
+                  onClick={() => addToCart(it, oem ? "oem" : loan ? "loan" : "stock", build, qty, size)}
                   className="min-w-[4.25rem]"
                 >
-                  {added ? <Icon name="check" className="h-4 w-4" strokeWidth={2.6} /> : "Add"}
+                  {added ? <Icon name="check" className="h-4 w-4" strokeWidth={2.6} /> : needsSize ? "Pick size" : "Add"}
                 </Pill>
               </div>
             </>
@@ -812,6 +864,7 @@ export default function MarketingStore({
   function lineDetail(l: CartLine): string | null {
     if (l.kind === "loan") return "Borrowed, returned after the show";
     if (l.kind === "oem") return `${sampleBuildLabel(l.build)} · printed custom`;
+    if (l.size) return `Size ${l.size}`;
     if (!l.build) return null;
     const box = boxInfo.get(l.item_id);
     if (box && l.remove) return describeBoxChoice(box.parts, l.remove, swapFor(l)?.name);
@@ -830,7 +883,8 @@ export default function MarketingStore({
           {lines.map((l) => {
             const it = byId.get(l.item_id);
             const detail = lineDetail(l);
-            const short = l.kind === "stock" && it && l.quantity > onHand(it, l.build) ? onHand(it, l.build) : null;
+            const lineStock = l.kind === "stock" && it ? onHand(it, l.build, l.size) : 0;
+            const short = l.kind === "stock" && it && l.quantity > lineStock ? lineStock : null;
             return (
               <li key={l.key} className="flex items-center gap-3 py-2.5">
                 {thumb(it, "line", l.kind === "oem")}

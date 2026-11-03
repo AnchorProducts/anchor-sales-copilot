@@ -764,6 +764,10 @@ export type InventoryItem = {
   // Swag only: the most a rep can order on one order before it needs a
   // marketing admin's approval. Null/0 = no limit. Absent before 20261020_000001.
   max_order_qty?: number | null;
+  // Swag only: the sizes it comes in, each with its own count. Empty = no
+  // sizes. When set, quantity_available is their sum. Absent before
+  // 20261103_000001.
+  sizes?: ItemSize[];
   created_at: string;
   updated_at: string;
   // Convenience flag computed by the API.
@@ -886,6 +890,90 @@ export function orderLimitFor(item: { category?: string | null; max_order_qty?: 
   if ((item.category || "").trim() !== "swag") return null;
   const n = Number(item.max_order_qty);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sizes
+//
+// Apparel is one item with sizes, not one item per size. Each size keeps its own
+// count; the item's quantity_available is their sum (a DB trigger holds that,
+// see 20261103_000001). Swag only, like the order limit.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ItemSize = { label: string; quantity: number };
+
+// One tap each in the editor. Anything else can be typed (a youth size, a waist).
+export const SIZE_PRESETS = ["XS", "S", "M", "L", "XL", "2XL", "3XL"] as const;
+
+export function sizesSupported(category: string | null | undefined): boolean {
+  return (category || "").trim() === "swag";
+}
+
+// Keep a stored or posted sizes list honest: labels trimmed and non-empty, no
+// duplicates (case-insensitive — "m" and "M" are one size), whole non-negative
+// counts, order kept.
+export function parseItemSizes(raw: unknown): ItemSize[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: ItemSize[] = [];
+  const seen = new Set<string>();
+  for (const r of list) {
+    const label = String((r as any)?.label ?? "").trim().slice(0, 20);
+    if (!label || seen.has(label.toLowerCase())) continue;
+    seen.add(label.toLowerCase());
+    const q = Math.floor(Number((r as any)?.quantity));
+    out.push({ label, quantity: Number.isFinite(q) && q > 0 ? q : 0 });
+  }
+  return out;
+}
+
+// The sizes an item actually offers — none at all for anything that isn't swag,
+// even if a stray list was left on it.
+export function itemSizes(item: { category?: string | null; sizes?: unknown }): ItemSize[] {
+  return sizesSupported(item.category) ? parseItemSizes(item.sizes) : [];
+}
+
+export function sizesTotal(sizes: readonly ItemSize[]): number {
+  return sizes.reduce((n, s) => n + s.quantity, 0);
+}
+
+// Match a requested size to one the item has, case-insensitively, returning the
+// item's own spelling. Null when it isn't one of them.
+export function findSize(sizes: readonly ItemSize[], label: string | null | undefined): ItemSize | null {
+  const k = (label || "").trim().toLowerCase();
+  if (!k) return null;
+  return sizes.find((s) => s.label.toLowerCase() === k) || null;
+}
+
+// "S 4 · M 2 · L 0"
+export function describeSizes(sizes: readonly ItemSize[]): string {
+  return sizes.map((s) => `${s.label} ${s.quantity}`).join(" · ");
+}
+
+// Take `qty` units off an item's sizes: first the sizes asked for (`want`, by
+// label), then — for anything left over — whichever size has the most. Returns
+// the new sizes; never below zero.
+export function takeFromSizes(
+  sizes: readonly ItemSize[],
+  qty: number,
+  want: Record<string, number> = {}
+): ItemSize[] {
+  const next = sizes.map((s) => ({ ...s }));
+  let left = Math.max(0, Math.floor(qty));
+  for (const [label, n] of Object.entries(want)) {
+    const s = next.find((x) => x.label.toLowerCase() === label.toLowerCase());
+    if (!s || left <= 0) continue;
+    const take = Math.min(s.quantity, Math.max(0, Math.floor(n)), left);
+    s.quantity -= take;
+    left -= take;
+  }
+  while (left > 0) {
+    let best: ItemSize | null = null;
+    for (const s of next) if (s.quantity > 0 && (!best || s.quantity > best.quantity)) best = s;
+    if (!best) break;
+    best.quantity -= 1;
+    left -= 1;
+  }
+  return next;
 }
 
 export function marketingAlertsFor<T extends { id: string; name: string; marketing_alert?: string | null }>(

@@ -8,6 +8,9 @@ import {
   isTradeshowCategory,
   resolveCheckoutEnabled,
   parseItemPhotos,
+  parseItemSizes,
+  sizesSupported,
+  sizesTotal,
 } from "@/lib/inventory";
 import {
   clean,
@@ -93,6 +96,11 @@ function parseBool(v: unknown): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
+// sizes arrives with 20261103_000001.
+function isMissingSizesColumn(error: { code?: string; message?: string } | null): boolean {
+  return !!error && /sizes/.test(error.message || "");
+}
+
 // A second item claiming the same (kit, role) trips the partial unique index.
 function isPackagingRoleConflict(err: { code?: string; message?: string } | null): boolean {
   return err?.code === "23505" || /packaging_(kit_)?role_uq/i.test(err?.message || "");
@@ -120,7 +128,11 @@ export async function GET() {
     // assembled, and the catalog loads without it.
     // photos (20261102_000001) on its own, before anything else: missing, it
     // should cost the item photos only, not every other later column.
-    let { data, error } = await listItems(`${ITEM_COLS},box_of,photos`);
+    // sizes (20261103_000001) the same way: missing, nothing has sizes.
+    let { data, error } = await listItems(`${ITEM_COLS},box_of,photos,sizes`);
+    if (isMissingSizesColumn(error)) {
+      ({ data, error } = await listItems(`${ITEM_COLS},box_of,photos`));
+    }
     if (error && (error.code === "42703" || /photos/.test(error.message || ""))) {
       ({ data, error } = await listItems(`${ITEM_COLS},box_of`));
     }
@@ -138,6 +150,7 @@ export async function GET() {
       (data || []).map(async (row: any) => ({
         ...row,
         image_url: await signItemImage(row.image_path),
+        sizes: sizesSupported(row.category) ? parseItemSizes(row.sizes) : [],
         // Paths + kinds only; the links are signed when an item's photos are
         // opened (GET /api/inventory/[id]/image), not for the whole catalog.
         photos: (() => {
@@ -239,11 +252,25 @@ export async function POST(req: Request) {
         created_by: auth.user.id,
         updated_by: auth.user.id,
     };
+    // Sizes (swag only). Their sum IS the count, so it's written as such rather
+    // than left to the trigger — the row reads right even before the migration's
+    // trigger exists.
+    const sizes = body.sizes !== undefined && sizesSupported(category) ? parseItemSizes(body.sizes) : [];
+    if (sizes.length) {
+      insertPayload.sizes = sizes;
+      insertPayload.quantity_available = sizesTotal(sizes);
+    }
 
     const insertItem = (payload: Record<string, unknown>, cols: string) =>
       supabaseAdmin.from("marketing_inventory_items").insert(payload).select(cols).single();
 
     let { data: row, error } = await insertItem(insertPayload, ITEM_COLS);
+    if (sizes.length && isMissingSizesColumn(error)) {
+      return NextResponse.json(
+        { error: "Sizes need migration 20261103_000001 — run it, then try again." },
+        { status: 503 }
+      );
+    }
     if (isMissingLaterColumn(error)) {
       ({ data: row, error } = await insertItem(withoutLaterCols(insertPayload), ITEM_COLS_BASE));
     }
@@ -353,6 +380,17 @@ export async function PATCH(req: Request) {
       updates.quantity_available = available ?? 0;
     }
     if (body?.checkout_enabled !== undefined) updates.checkout_enabled = parseBool(body.checkout_enabled);
+    // Sizes replace the count: their sum is quantity_available. An item moved
+    // out of Swag loses them (its total stays as it was).
+    const categoryAfter =
+      body?.category !== undefined ? (updates.category as string | null) : ((current as any).category ?? null);
+    if (body?.sizes !== undefined) {
+      const sizes = sizesSupported(categoryAfter) ? parseItemSizes(body.sizes) : [];
+      updates.sizes = sizes;
+      if (sizes.length) updates.quantity_available = sizesTotal(sizes);
+    } else if (body?.category !== undefined && !sizesSupported(categoryAfter)) {
+      updates.sizes = [];
+    }
     // Re-apply the tradeshow rule against the category the item will HAVE after
     // this update, not the one it had before — so moving an item into Tradeshow
     // turns checkout on even when the request never mentions the flag, and an
@@ -396,6 +434,18 @@ export async function PATCH(req: Request) {
       supabaseAdmin.from("marketing_inventory_items").update(payload).eq("id", id).select(cols).single();
 
     let { data: row, error } = await updateItem(updates, ITEM_COLS);
+    if (updates.sizes !== undefined && isMissingSizesColumn(error)) {
+      // Only an actual list of sizes needs the column; clearing them on an
+      // un-migrated database is a no-op, so retry without.
+      if ((updates.sizes as unknown[]).length) {
+        return NextResponse.json(
+          { error: "Sizes need migration 20261103_000001 — run it, then try again." },
+          { status: 503 }
+        );
+      }
+      delete updates.sizes;
+      ({ data: row, error } = await updateItem(updates, ITEM_COLS));
+    }
     if (isMissingLaterColumn(error)) {
       // A marketing note can't quietly fall back: the point of it is that a
       // fulfiller is told, so "saved" has to mean saved.

@@ -30,6 +30,9 @@ import {
   isBoxType,
   orderLimitFor,
   photoKindsFor,
+  itemSizes,
+  sizesSupported,
+  SIZE_PRESETS,
   type BoxScanRow,
   type InventoryItem,
   type ItemCheckout,
@@ -77,6 +80,9 @@ type ItemDraft = {
   // Swag only: most per order before the order needs marketing's approval.
   // "" = no limit.
   max_order_qty: string;
+  // Swag only: the sizes it comes in, each with its own count. Empty = no
+  // sizes, and the plain quantity applies.
+  sizes: { label: string; quantity: string }[];
   checkout_enabled: boolean;
   pizza_box: boolean;
   plastic_overlay: boolean;
@@ -100,6 +106,7 @@ const EMPTY_DRAFT: ItemDraft = {
   quantity_available: "0",
   low_stock_threshold: "0",
   max_order_qty: "",
+  sizes: [],
   checkout_enabled: false,
   pizza_box: false,
   plastic_overlay: false,
@@ -214,6 +221,8 @@ export default function AdminInventoryPage({
   const [checkinLoan, setCheckinLoan] = useState<ItemCheckout | null>(null);
   const [restockItem, setRestockItem] = useState<InventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState("");
+  // Per size, for an item that comes in sizes.
+  const [restockSizes, setRestockSizes] = useState<Record<string, string>>({});
   // "Talk to marketing": the item whose note is being written, and its draft.
   const [alertItem, setAlertItem] = useState<InventoryItem | null>(null);
   const [alertDraft, setAlertDraft] = useState("");
@@ -386,6 +395,7 @@ export default function AdminInventoryPage({
       quantity_available: String(it.quantity_available),
       low_stock_threshold: String(it.low_stock_threshold),
       max_order_qty: it.max_order_qty ? String(it.max_order_qty) : "",
+      sizes: itemSizes(it).map((sz) => ({ label: sz.label, quantity: String(sz.quantity) })),
       checkout_enabled: !!it.checkout_enabled,
       pizza_box: !!it.pizza_box,
       plastic_overlay: !!it.plastic_overlay,
@@ -420,6 +430,13 @@ export default function AdminInventoryPage({
         product_of_month: itemModal.product_of_month,
         packaging_role: itemModal.packaging_role || null,
         packaging_kit: itemModal.packaging_kit || null,
+        // Sizes replace the plain count (their sum is the count). Cleared when
+        // the item isn't swag.
+        sizes: sizesSupported(itemModal.category)
+          ? itemModal.sizes
+              .filter((sz) => sz.label.trim())
+              .map((sz) => ({ label: sz.label.trim(), quantity: Math.max(0, Math.floor(Number(sz.quantity)) || 0) }))
+          : [],
         // Marketing's call, so only an admin sends it (the API refuses anyone
         // else). Cleared when the item isn't swag.
         ...(role === "admin"
@@ -624,14 +641,18 @@ export default function AdminInventoryPage({
   function openRestock(it: InventoryItem) {
     setModalErr(null);
     setRestockQty("");
+    setRestockSizes({});
     setRestockItem(it);
   }
 
   async function submitRestock() {
     if (!restockItem) return;
-    const add = Math.floor(Number(restockQty));
+    const sized = itemSizes(restockItem);
+    const add = sized.length
+      ? sized.reduce((n, sz) => n + Math.max(0, Math.floor(Number(restockSizes[sz.label])) || 0), 0)
+      : Math.floor(Number(restockQty));
     if (!Number.isFinite(add) || add <= 0) {
-      setModalErr("Enter how many units to add (1 or more).");
+      setModalErr(sized.length ? "Enter how many of at least one size to add." : "Enter how many units to add (1 or more).");
       return;
     }
     setBusy(true);
@@ -640,10 +661,17 @@ export default function AdminInventoryPage({
       const res = await fetch("/api/inventory", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: restockItem.id,
-          quantity_available: restockItem.quantity_available + add,
-        }),
+        body: JSON.stringify(
+          sized.length
+            ? {
+                id: restockItem.id,
+                sizes: sized.map((sz) => ({
+                  label: sz.label,
+                  quantity: sz.quantity + Math.max(0, Math.floor(Number(restockSizes[sz.label])) || 0),
+                })),
+              }
+            : { id: restockItem.id, quantity_available: restockItem.quantity_available + add }
+        ),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
@@ -688,16 +716,31 @@ export default function AdminInventoryPage({
   // Add or subtract units on a piece in place — the whole point of the kit card
   // is that restocking a stack of boxes shouldn't mean opening the item editor.
   // Never below zero: a negative count is a data error, not a shortage.
-  async function adjustStock(it: InventoryItem, delta: number) {
-    const next = Math.max(0, it.quantity_available + delta);
-    if (next === it.quantity_available) return;
+  // With a size, that size's count moves (and the total with it).
+  async function adjustStock(it: InventoryItem, delta: number, size?: string) {
+    const sized = itemSizes(it);
+    let payload: Record<string, unknown>;
+    if (size && sized.length) {
+      const target = sized.find((sz) => sz.label === size);
+      if (!target) return;
+      const nextQty = Math.max(0, target.quantity + delta);
+      if (nextQty === target.quantity) return;
+      payload = {
+        id: it.id,
+        sizes: sized.map((sz) => (sz.label === size ? { ...sz, quantity: nextQty } : sz)),
+      };
+    } else {
+      const next = Math.max(0, it.quantity_available + delta);
+      if (next === it.quantity_available) return;
+      payload = { id: it.id, quantity_available: next };
+    }
     setBusy(true);
     setLoadErr(null);
     try {
       const res = await fetch("/api/inventory", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: it.id, quantity_available: next }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
@@ -1083,17 +1126,35 @@ export default function AdminInventoryPage({
                   />
                 </label>
               </div>
+              {sizesSupported(itemModal.category) && (
+                <SizesEditor
+                  sizes={itemModal.sizes}
+                  onChange={(sizes) => setItemModal({ ...itemModal, sizes })}
+                />
+              )}
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm">
-                  <span className="font-medium">Quantity on hand</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={itemModal.quantity_available}
-                    onChange={(e) => setItemModal({ ...itemModal, quantity_available: e.target.value })}
-                  />
-                </label>
+                {sizesSupported(itemModal.category) && itemModal.sizes.length > 0 ? (
+                  <div className="block text-sm">
+                    <span className="font-medium">Quantity on hand</span>
+                    <div className="mt-1 flex h-10 items-center rounded-xl bg-[var(--surface-strong)] px-3 text-[var(--anchor-deep)]">
+                      <strong>
+                        {itemModal.sizes.reduce((n, sz) => n + Math.max(0, Math.floor(Number(sz.quantity)) || 0), 0)}
+                      </strong>
+                      <span className="ml-1.5 text-xs text-[var(--anchor-gray)]">across sizes</span>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="block text-sm">
+                    <span className="font-medium">Quantity on hand</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={itemModal.quantity_available}
+                      onChange={(e) => setItemModal({ ...itemModal, quantity_available: e.target.value })}
+                    />
+                  </label>
+                )}
                 <label className="block text-sm">
                   <span className="font-medium">Low-stock alert at</span>
                   <Input
@@ -1406,21 +1467,45 @@ export default function AdminInventoryPage({
               {restockItem.quantity_available} on hand now.
             </p>
             {modalErr && <div className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{modalErr}</div>}
-            <label className="mt-3 block text-sm">
-              <span className="font-medium">Units to add</span>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={restockQty}
-                onChange={(e) => setRestockQty(e.target.value)}
-                placeholder="e.g. 20"
-              />
-            </label>
-            {Number(restockQty) > 0 && (
-              <p className="mt-2 text-xs text-[var(--anchor-gray)]">
-                New total: <strong>{restockItem.quantity_available + Math.floor(Number(restockQty))}</strong>
-              </p>
+            {itemSizes(restockItem).length > 0 ? (
+              <div className="mt-3">
+                <span className="text-sm font-medium">Units to add, by size</span>
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
+                  {itemSizes(restockItem).map((sz) => (
+                    <label key={sz.label} className="block text-xs">
+                      <span className="font-semibold text-[var(--anchor-deep)]">{sz.label}</span>
+                      <span className="ml-1 text-[var(--anchor-gray)]">({sz.quantity})</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={restockSizes[sz.label] || ""}
+                        onChange={(e) => setRestockSizes({ ...restockSizes, [sz.label]: e.target.value })}
+                        placeholder="0"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <label className="mt-3 block text-sm">
+                  <span className="font-medium">Units to add</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={restockQty}
+                    onChange={(e) => setRestockQty(e.target.value)}
+                    placeholder="e.g. 20"
+                  />
+                </label>
+                {Number(restockQty) > 0 && (
+                  <p className="mt-2 text-xs text-[var(--anchor-gray)]">
+                    New total: <strong>{restockItem.quantity_available + Math.floor(Number(restockQty))}</strong>
+                  </p>
+                )}
+              </>
             )}
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setRestockItem(null)} disabled={busy}>
@@ -1674,7 +1759,7 @@ function ItemsList({
   onDelete: (it: InventoryItem) => Promise<boolean> | void;
   onRemoveImage: (it: InventoryItem) => void;
   onRestock: (it: InventoryItem) => void;
-  onAdjust: (it: InventoryItem, delta: number) => void;
+  onAdjust: (it: InventoryItem, delta: number, size?: string) => void;
   onMarketingAlert: (it: InventoryItem) => void;
   // Pizza boxes already built for an anchor, by anchor id.
   readyBoxes: Map<string, number>;
@@ -1691,6 +1776,7 @@ function ItemsList({
     <div className="grid grid-cols-2 items-start gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const open = openId === it.id;
+        const sized = itemSizes(it);
         return (
           <Card
             key={it.id}
@@ -1748,6 +1834,11 @@ function ItemsList({
                   {orderLimitFor(it) !== null && (
                     <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-gray)]">
                       Max {orderLimitFor(it)}/order
+                    </span>
+                  )}
+                  {sized.length > 0 && (
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-semibold text-[var(--anchor-gray)]">
+                      {sized.length} sizes
                     </span>
                   )}
                   {(it.marketing_alert || "").trim() && (
@@ -1824,6 +1915,8 @@ function ItemsList({
                 )}
               </div>
               <div className="mt-1.5 flex shrink-0 items-center gap-1 sm:mt-0">
+                {sized.length === 0 && (
+                  <>
                 <button
                   type="button"
                   aria-label={`Subtract one ${it.name}`}
@@ -1844,6 +1937,8 @@ function ItemsList({
                 >
                   +
                 </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => onEdit(it)}
@@ -1859,6 +1954,40 @@ function ItemsList({
                 </button>
               </div>
             </div>
+            {/* Each size counts on its own, so each gets its own stepper. */}
+            {sized.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-default)] px-2.5 py-2 sm:px-3">
+                {sized.map((sz) => (
+                  <div
+                    key={sz.label}
+                    className="flex items-center gap-1 rounded-full border border-[var(--border-default)] py-0.5 pl-2.5 pr-0.5 text-xs"
+                  >
+                    <span className="font-semibold text-[var(--anchor-deep)]">{sz.label}</span>
+                    <span className={`min-w-[1.25rem] text-center tabular-nums ${sz.quantity === 0 ? "text-red-600" : "text-[var(--anchor-gray)]"}`}>
+                      {sz.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Subtract one ${it.name} size ${sz.label}`}
+                      onClick={() => onAdjust(it, -1, sz.label)}
+                      disabled={busy || sz.quantity <= 0}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-[var(--anchor-deep)] hover:bg-[var(--surface-strong)] disabled:opacity-30"
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Add one ${it.name} size ${sz.label}`}
+                      onClick={() => onAdjust(it, 1, sz.label)}
+                      disabled={busy}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-[var(--anchor-deep)] hover:bg-[var(--surface-strong)] disabled:opacity-30"
+                    >
+                      +
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {open && (
               <div className="border-t border-[var(--border-default)] px-3 py-3">
@@ -2831,6 +2960,104 @@ function CheckoutsList({
           </div>
         </Card>
       ))}
+    </div>
+  );
+}
+
+// The sizes a swag item comes in, each with its own count. Presets are a tap
+// each; anything else (a youth size, a waist) can be typed. No sizes = the item
+// has one plain count, as before.
+function SizesEditor({
+  sizes,
+  onChange,
+}: {
+  sizes: { label: string; quantity: string }[];
+  onChange: (sizes: { label: string; quantity: string }[]) => void;
+}) {
+  const [custom, setCustom] = useState("");
+  const has = (label: string) => sizes.some((sz) => sz.label.trim().toLowerCase() === label.trim().toLowerCase());
+  const add = (label: string) => {
+    const l = label.trim().slice(0, 20);
+    if (!l || has(l)) return;
+    // Presets keep their natural order (S before M before L) however they're tapped.
+    const order = (x: string) => {
+      const i = (SIZE_PRESETS as readonly string[]).indexOf(x);
+      return i < 0 ? SIZE_PRESETS.length : i;
+    };
+    const next = [...sizes, { label: l, quantity: "0" }];
+    next.sort((a, b) => order(a.label) - order(b.label));
+    onChange(next);
+  };
+  const toggle = (label: string) =>
+    has(label) ? onChange(sizes.filter((sz) => sz.label.toLowerCase() !== label.toLowerCase())) : add(label);
+
+  return (
+    <div className="rounded-xl border border-[var(--border-default)] p-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--anchor-gray)]">Sizes</div>
+      <p className="mt-1 text-xs text-[var(--anchor-gray)]">
+        One item, counted per size — no need for a separate item for each size. Leave empty if it doesn&apos;t come in sizes.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {SIZE_PRESETS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => toggle(p)}
+            aria-pressed={has(p)}
+            className={`h-8 min-w-[2.5rem] rounded-full px-3 text-xs font-semibold transition ${
+              has(p)
+                ? "bg-[var(--anchor-deep)] text-white"
+                : "border border-[var(--border-default)] text-[var(--anchor-deep)] hover:bg-[var(--surface-strong)]"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            add(custom);
+            setCustom("");
+          }}
+        >
+          <Input
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            placeholder="Other size"
+            className="h-8 w-28 text-xs"
+          />
+          <Button type="submit" variant="secondary" disabled={!custom.trim() || has(custom)}>
+            Add
+          </Button>
+        </form>
+      </div>
+      {sizes.length > 0 && (
+        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {sizes.map((sz, idx) => (
+            <label key={sz.label} className="block text-xs">
+              <span className="flex items-center justify-between">
+                <span className="font-semibold text-[var(--anchor-deep)]">{sz.label}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove size ${sz.label}`}
+                  onClick={() => onChange(sizes.filter((_, i) => i !== idx))}
+                  className="text-[var(--anchor-gray)] hover:text-red-600"
+                >
+                  ×
+                </button>
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={sz.quantity}
+                onChange={(e) => onChange(sizes.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
+              />
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

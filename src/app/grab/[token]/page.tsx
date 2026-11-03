@@ -46,6 +46,8 @@ type GrabItem = {
   packaging_role: string | null;
   // Which pizza box kit this sample's box comes from, when it has one.
   packaging_kit: string | null;
+  // Swag that comes in sizes, each with its own count. Empty = no sizes.
+  sizes?: { label: string; quantity: number }[];
   image_url: string | null;
 };
 
@@ -148,6 +150,8 @@ export default function GrabPage({
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
   const [qty, setQty] = useState<Record<string, number>>({}); // item id -> units
+  // Sized items: item id -> size -> units. qty[id] is their sum.
+  const [sizeQty, setSizeQty] = useState<Record<string, Record<string, number>>>({});
   // Per item: whether this pick is FOR a pizza box, and which pieces are needed.
   // undefined = not answered yet, so neither Yes nor No reads as chosen.
   const [forBox, setForBox] = useState<Record<string, boolean | undefined>>({});
@@ -232,6 +236,17 @@ export default function GrabPage({
     load();
   }, [load]);
 
+  function setSizeUnits(it: GrabItem, label: string, next: number) {
+    const sz = (it.sizes || []).find((x) => x.label === label);
+    if (!sz) return;
+    const clamped = Math.max(0, Math.min(next, sz.quantity));
+    const cur = { ...(sizeQty[it.id] || {}) };
+    if (clamped <= 0) delete cur[label];
+    else cur[label] = clamped;
+    setSizeQty((prev) => ({ ...prev, [it.id]: cur }));
+    setItemQty(it, Object.values(cur).reduce((n, v) => n + v, 0));
+  }
+
   function setItemQty(it: GrabItem, next: number) {
     const clamped = Math.max(0, Math.min(next, it.quantity_available));
     setQty((prev) => {
@@ -296,12 +311,20 @@ export default function GrabPage({
           name: name.trim(),
           email: email.trim(),
           website,
-          items: selected.map((it) => ({
-            item_id: it.id,
-            quantity: qty[it.id],
-            kit: kitFor(it) || null,
-            components: comps[it.id] || [],
-          })),
+          items: selected.flatMap((it) =>
+            (it.sizes || []).length
+              ? Object.entries(sizeQty[it.id] || {})
+                  .filter(([, n]) => n > 0)
+                  .map(([size, n]) => ({ item_id: it.id, quantity: n, size, kit: null, components: [] }))
+              : [
+                  {
+                    item_id: it.id,
+                    quantity: qty[it.id],
+                    kit: kitFor(it) || null,
+                    components: comps[it.id] || [],
+                  },
+                ]
+          ),
         }),
       });
       const json = await res.json().catch(() => null);
@@ -323,6 +346,7 @@ export default function GrabPage({
         failed: failed.map((f) => `${f.item_name}: ${f.error}`),
       });
       setQty({});
+      setSizeQty({});
       setComps({});
       setForBox({});
       setLineKit({});
@@ -709,8 +733,8 @@ export default function GrabPage({
                       )}
                     </div>
 
-                    {/* Quantity stepper */}
-                    {!out && (
+                    {/* Quantity stepper (sized items get one per size, below) */}
+                    {!out && !(it.sizes || []).length && (
                       <div className="flex shrink-0 items-center gap-1.5">
                         <button
                           type="button"
@@ -743,6 +767,44 @@ export default function GrabPage({
                       </div>
                     )}
                   </div>
+
+                  {/* Sized swag: a stepper per size, each capped at that size's count. */}
+                  {!out && (it.sizes || []).length > 0 && (
+                    <div className="grid grid-cols-1 gap-1.5 border-t border-black/10 pt-2">
+                      {(it.sizes || []).map((sz) => {
+                        const m = sizeQty[it.id]?.[sz.label] || 0;
+                        return (
+                          <div key={sz.label} className="flex items-center gap-2">
+                            <span className="w-12 text-sm font-bold text-[var(--anchor-deep,#0f2e2a)]">{sz.label}</span>
+                            <span
+                              className={`flex-1 text-xs ${sz.quantity > 0 ? "text-[var(--anchor-gray,#5b6b66)]" : "text-black/35"}`}
+                            >
+                              {sz.quantity > 0 ? `${sz.quantity} in stock` : "Out of stock"}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remove one ${it.name} size ${sz.label}`}
+                              onClick={() => setSizeUnits(it, sz.label, m - 1)}
+                              disabled={m <= 0}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-black/15 text-base font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                            >
+                              −
+                            </button>
+                            <span className="w-6 text-center text-sm tabular-nums">{m}</span>
+                            <button
+                              type="button"
+                              aria-label={`Add one ${it.name} size ${sz.label}`}
+                              onClick={() => setSizeUnits(it, sz.label, m + 1)}
+                              disabled={m >= sz.quantity}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-black/15 text-base font-bold text-[var(--anchor-deep,#0f2e2a)] disabled:opacity-30"
+                            >
+                              +
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Pizza box: the question first, the pieces only if it's a
                       yes — and the series in between when the item doesn't

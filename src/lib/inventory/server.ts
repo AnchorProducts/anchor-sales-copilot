@@ -248,15 +248,21 @@ export async function reserveStock(
 // Atomically decrement available stock for a marketing-order fulfillment
 // (no checkout involved — the units leave inventory). Guarded on the current
 // available count so concurrent writes can't drive it negative.
+//
+// `sizes`, for an item that comes in sizes: its size counts after this take
+// (see takeFromSizes). Written in the same guarded update, so the right size
+// comes off; without it the DB trigger takes from whichever size has the most.
 export async function consumeStock(
   itemId: string,
   qty: number,
-  prevAvailable: number
+  prevAvailable: number,
+  sizes?: { label: string; quantity: number }[]
 ): Promise<{ ok: true; available: number } | { ok: false; reason: "conflict" }> {
   const { data, error } = await supabaseAdmin
     .from("marketing_inventory_items")
     .update({
       quantity_available: prevAvailable - qty,
+      ...(sizes && sizes.length ? { sizes } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", itemId)

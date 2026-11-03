@@ -44,6 +44,9 @@ import {
 import {
   isInventoryCategory,
   isPackagingKit,
+  itemSizes,
+  findSize,
+  takeFromSizes,
   normalizeComponents,
   packagingKitLabel,
   PACKAGING_KITS,
@@ -140,7 +143,9 @@ export async function GET(req: Request) {
       return query.order("name", { ascending: true }).limit(1000);
     };
 
-    let { data, error } = await listItems(`${ITEM_COLS_BASE},packaging_kit`);
+    // sizes (20261103_000001): missing, nothing is sized.
+    let { data, error } = await listItems(`${ITEM_COLS_BASE},packaging_kit,sizes`);
+    if (error && /sizes/.test(error.message || "")) ({ data, error } = await listItems(`${ITEM_COLS_BASE},packaging_kit`));
     // Pre-migration this column doesn't exist. The shelf list still loads; it
     // just can't offer kit pieces (getPackagingPools returns none either).
     if (isMissingKitColumn(error)) ({ data, error } = await listItems(ITEM_COLS_BASE));
@@ -157,6 +162,8 @@ export async function GET(req: Request) {
         plastic_overlay: !!row.plastic_overlay,
         packaging_role: row.packaging_role || null,
         packaging_kit: row.packaging_kit || null,
+        // Only sizes with something on the shelf can be taken.
+        sizes: itemSizes(row),
         image_url: await signItemImage(row.image_path),
       }))
     );
@@ -176,7 +183,9 @@ export async function GET(req: Request) {
 // `kit` is only consulted when the item itself has no kit set; an item that
 // knows its own series always wins, so nobody can spend the wrong count by
 // posting a different one.
-type Line = { item_id: string; quantity: number; kit: string | null; components: PackagingRole[] };
+// `size`: for swag that comes in sizes, which one ("" otherwise). The same item
+// in two sizes is two lines.
+type Line = { item_id: string; quantity: number; kit: string | null; components: PackagingRole[]; size: string };
 
 function lineComponents(o: Record<string, unknown>): PackagingRole[] {
   if (Array.isArray(o.components)) return normalizeComponents(o.components);
@@ -197,14 +206,15 @@ function parseLines(body: Record<string, unknown>): Line[] {
     if (!Number.isFinite(qty) || qty <= 0) continue;
     const components = lineComponents(o);
     const kit = isPackagingKit(clean(o.kit)) ? clean(o.kit) : null;
-    // Collapse duplicate lines for the same item (a chosen piece stays chosen).
-    const existing = lines.find((l) => l.item_id === id);
+    const size = clean(o.size).slice(0, 20);
+    // Collapse duplicate lines for the same item and size (a chosen piece stays chosen).
+    const existing = lines.find((l) => l.item_id === id && l.size.toLowerCase() === size.toLowerCase());
     if (existing) {
       existing.quantity += qty;
       existing.components = normalizeComponents([...existing.components, ...components]);
       existing.kit = existing.kit || kit;
     } else {
-      lines.push({ item_id: id, quantity: qty, kit, components });
+      lines.push({ item_id: id, quantity: qty, kit, components, size });
     }
   }
   return lines;
@@ -252,8 +262,13 @@ async function grabOne(
     const readItem = (cols: string) =>
       supabaseAdmin.from("marketing_inventory_items").select(cols).eq("id", line.item_id).maybeSingle();
     let { data: item, error: itemErr } = await readItem(
-      "id,name,quantity_available,pizza_box,plastic_overlay,packaging_kit"
+      "id,name,category,quantity_available,pizza_box,plastic_overlay,packaging_kit,sizes"
     );
+    if (itemErr && /sizes/.test(itemErr.message || "")) {
+      ({ data: item, error: itemErr } = await readItem(
+        "id,name,category,quantity_available,pizza_box,plastic_overlay,packaging_kit"
+      ));
+    }
     if (isMissingKitColumn(itemErr)) {
       ({ data: item } = await readItem("id,name,quantity_available,pizza_box,plastic_overlay"));
     }
@@ -262,6 +277,23 @@ async function grabOne(
     }
     itemName = clean((item as any).name);
     const available = (item as any).quantity_available as number;
+    // Sized swag: the size has to be one of the item's, and that size's count
+    // is what caps the pickup.
+    const sizes = itemSizes(item as any);
+    const size = sizes.length ? findSize(sizes, line.size) : null;
+    if (sizes.length && !size) {
+      return { ok: false, item_id: line.item_id, item_name: itemName, quantity: line.quantity, error: "Pick a size." };
+    }
+    if (size) itemName = `${itemName} (${size.label})`;
+    if (size && line.quantity > size.quantity) {
+      return {
+        ok: false,
+        item_id: line.item_id,
+        item_name: itemName,
+        quantity: line.quantity,
+        error: size.quantity > 0 ? `Only ${size.quantity} left in ${size.label}.` : `${size.label} is out of stock.`,
+      };
+    }
     if (line.quantity > available) {
       return {
         ok: false,
@@ -272,7 +304,12 @@ async function grabOne(
       };
     }
 
-    const moved = await consumeStock(line.item_id, line.quantity, available);
+    const moved = await consumeStock(
+      line.item_id,
+      line.quantity,
+      available,
+      size ? takeFromSizes(sizes, line.quantity, { [size.label]: line.quantity }) : undefined
+    );
     if (moved.ok) {
       // The item's own series is authoritative; the request's kit only fills in
       // for an item nobody has assigned one to yet.
@@ -293,8 +330,15 @@ async function grabOne(
         pizza_box: components.includes("pizza_box"),
         plastic_overlay: components.includes("overlay"),
         ip: who.ip,
+        ...(size ? { size: size.label } : {}),
       };
-      const { error: logErr } = await supabaseAdmin.from("marketing_item_grabs").insert(logRow);
+      let { error: logErr } = await supabaseAdmin.from("marketing_item_grabs").insert(logRow);
+      // The size is in item_name too, so before 20261103_000001 drop the column
+      // and keep the record.
+      if (logErr && /size/.test(logErr.message || "") && "size" in logRow) {
+        const { size: _s, ...rest } = logRow as typeof logRow & { size?: string };
+        ({ error: logErr } = await supabaseAdmin.from("marketing_item_grabs").insert(rest));
+      }
       // Stock has already moved, so the pickup MUST be logged. Pre-migration,
       // log it without the kit columns rather than lose the record.
       if (isMissingKitColumn(logErr)) {

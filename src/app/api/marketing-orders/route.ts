@@ -36,6 +36,9 @@ import {
   isBoxType,
   isOverlayPool,
   isSwapAnchor,
+  itemSizes,
+  findSize,
+  takeFromSizes,
   orderLimitFor,
   orderStockPlan,
   overlayUnits,
@@ -1010,6 +1013,9 @@ export async function POST(req: Request) {
     // what fulfillment pre-fills. See orderStockPlan.
     let pizza_boxes = 0;
     let stock_plan: Record<string, number> = {};
+    // Sizes asked for, per item id: { "<id>": { "M": 2 } }. Fulfillment takes
+    // those sizes off the shelf rather than whichever has the most.
+    const size_plan: Record<string, Record<string, number>> = {};
     // Swag lines over their item's per-order limit. Any at all and the order
     // waits for a marketing admin instead of going to inside sales. Counted per
     // item across the whole order, so splitting a pick into two lines doesn't
@@ -1026,6 +1032,7 @@ export async function POST(req: Request) {
         packaging: string;
         remove?: string[];
         swap?: { item_id: string; custom: string };
+        size: string;
         note: string;
       }[] = [];
       for (const raw of rawPicks) {
@@ -1051,6 +1058,8 @@ export async function POST(req: Request) {
                 custom: clean((raw as any).swap_anchor.custom).slice(0, 200),
               }
             : undefined,
+          // Swag that comes in sizes: which one. Checked against the item below.
+          size: clean((raw as any)?.size).slice(0, 20),
           note: clean((raw as any)?.note).slice(0, 500),
         });
       }
@@ -1068,7 +1077,11 @@ export async function POST(req: Request) {
           .select("value")
           .eq("key", PIZZA_BOX_EXTRAS_KEY)
           .maybeSingle();
-        let { data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of,max_order_qty`);
+        let { data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of,max_order_qty,sizes`);
+        // sizes arrives with 20261103_000001; before it nothing has sizes.
+        if (invErr && /sizes/.test(invErr.message || "")) {
+          ({ data: invRows, error: invErr } = await readCatalog(`${CATALOG_COLS},box_of,max_order_qty`));
+        }
         // max_order_qty arrives with 20261020_000001; before it nothing has a
         // limit.
         if (invErr && (invErr.code === "42703" || /max_order_qty/.test(invErr.message || ""))) {
@@ -1142,6 +1155,20 @@ export async function POST(req: Request) {
               { status: 400 }
             );
           }
+          // An item that comes in sizes needs one, and it has to be one of its
+          // own. Kept on the order so fulfillment takes that size off the shelf.
+          const sizes = itemSizes(row);
+          const size = sizes.length ? findSize(sizes, p.size) : null;
+          if (sizes.length && !size) {
+            return NextResponse.json(
+              { error: `Pick a size for ${row.name}${p.size ? ` — ${p.size} isn't one of its sizes` : ""}.` },
+              { status: 400 }
+            );
+          }
+          if (size) {
+            const forItem = (size_plan[row.id] ||= {});
+            forItem[size.label] = (forItem[size.label] || 0) + p.quantity;
+          }
           resolved.push({ item: row, quantity: p.quantity, packaging, remove, swapItemId: swapItem?.id ?? null });
 
           // Asking for more than we have on the shelf doesn't reject the order —
@@ -1156,6 +1183,9 @@ export async function POST(req: Request) {
             if (swapItem && p.quantity > (swapItem.quantity_available || 0)) {
               line += ` (only ${swapItem.quantity_available || 0} ${swapItem.name} in stock)`;
             }
+          } else if (size) {
+            line += ` — Size ${size.label}`;
+            if (p.quantity > size.quantity) line += ` (only ${size.quantity} in stock)`;
           } else {
             if (packaging === "overlay") line += " + plastic overlay";
             const short = p.quantity - row.quantity_available;
@@ -1281,6 +1311,7 @@ export async function POST(req: Request) {
       overlay_kits,
       pizza_boxes,
       stock_plan,
+      ...(Object.keys(size_plan).length ? { size_plan } : {}),
     };
     const approvalReason = overLimit.length ? overLimit.join("\n") : null;
     if (approvalReason) {
@@ -1291,6 +1322,16 @@ export async function POST(req: Request) {
       .insert(orderRow)
       .select("id")
       .single();
+    // Before 20261103_000001 there's no size_plan. The lines still name each
+    // size; fulfillment just takes from whichever size has the most.
+    if (insErr && /size_plan/.test(insErr.message || "")) {
+      delete (orderRow as Record<string, unknown>).size_plan;
+      ({ data: row, error: insErr } = await supabaseAdmin
+        .from("marketing_orders")
+        .insert(orderRow)
+        .select("id")
+        .single());
+    }
     // Before 20260915_000001 there are no box columns. The order still files —
     // its lines say what's in each box — it just has no plan to pre-fill from.
     if (insErr && (insErr.code === "42703" || /pizza_boxes|stock_plan/.test(insErr.message || ""))) {
@@ -1862,6 +1903,18 @@ export async function PATCH(req: Request) {
       Array.isArray(body?.consumed) &&
       body.consumed.length
     ) {
+      // The sizes the order asked for, per item, so those sizes come off the
+      // shelf. Used up as rows consume them. Absent before 20261103_000001 (or
+      // on an order with nothing sized): sized stock then comes off whichever
+      // size has the most.
+      const { data: planRow } = await supabaseAdmin
+        .from("marketing_orders")
+        .select("size_plan")
+        .eq("id", id)
+        .maybeSingle();
+      const sizePlan: Record<string, Record<string, number>> = JSON.parse(
+        JSON.stringify((planRow as any)?.size_plan || {})
+      );
       for (const raw of body.consumed as any[]) {
         const itemId = clean(raw?.item_id);
         const qty = Math.floor(Number(raw?.quantity));
@@ -1882,11 +1935,15 @@ export async function PATCH(req: Request) {
           );
           continue;
         }
-        const { data: item } = await supabaseAdmin
-          .from("marketing_inventory_items")
-          .select("id,name,quantity_available,quantity_out,low_stock_threshold")
-          .eq("id", itemId)
-          .maybeSingle();
+        const readItem = (cols: string) =>
+          supabaseAdmin.from("marketing_inventory_items").select(cols).eq("id", itemId).maybeSingle();
+        const firstRead = await readItem(
+          "id,name,category,quantity_available,quantity_out,low_stock_threshold,sizes"
+        );
+        let item = firstRead.data;
+        if (firstRead.error && /sizes/.test(firstRead.error.message || "")) {
+          ({ data: item } = await readItem("id,name,category,quantity_available,quantity_out,low_stock_threshold"));
+        }
         if (!item) {
           consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "not_found" });
           continue;
@@ -1896,7 +1953,20 @@ export async function PATCH(req: Request) {
           consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "insufficient" });
           continue;
         }
-        const moved = await consumeStock(itemId, qty, available);
+        // Sized: take the sizes the order asked for (what's left of them), and
+        // anything beyond that from whichever size has the most.
+        const sized = itemSizes(item as any);
+        let nextSizes: { label: string; quantity: number }[] | undefined;
+        if (sized.length) {
+          const want = sizePlan[itemId] || {};
+          nextSizes = takeFromSizes(sized, qty, want);
+          for (const s of sized) {
+            const took = s.quantity - (nextSizes.find((n) => n.label === s.label)?.quantity ?? s.quantity);
+            const k = Object.keys(want).find((w) => findSize([s], w));
+            if (k && took > 0) want[k] = Math.max(0, want[k] - took);
+          }
+        }
+        const moved = await consumeStock(itemId, qty, available, nextSizes);
         if (!moved.ok) {
           consumption.push({ item_id: itemId, quantity: qty, ok: false, reason: "conflict" });
           continue;
