@@ -295,11 +295,28 @@ export default function GrabPage({
     [selected, qty]
   );
 
+  function toTop() {
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function submit() {
     setFormErr(null);
     if (!selected.length) return setFormErr("Add a quantity to at least one item.");
-    if (!name.trim()) return setFormErr("Enter your name.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setFormErr("Enter a valid email.");
+    // The name and email sit at the top of the page while Take is in the bar at
+    // the bottom, so someone who scrolled straight to the items would never see
+    // why nothing happened. Take them back up to the fields.
+    if (!name.trim()) {
+      setFormErr("Enter your name at the top before tapping Take.");
+      return toTop();
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setFormErr("Enter a valid email at the top before tapping Take.");
+      return toTop();
+    }
 
     setBusy(true);
     try {
@@ -350,6 +367,7 @@ export default function GrabPage({
       setComps({});
       setForBox({});
       setLineKit({});
+      toTop(); // the "Thanks" confirmation is at the top
       setPickups(null); // the return list is stale now
       await load(); // refresh remaining counts
     } catch {
@@ -923,6 +941,13 @@ export default function GrabPage({
       {/* Sticky action bar — appears once something is selected. */}
       {mode === "take" && selected.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-black/10 bg-white/95 p-3 backdrop-blur">
+          {/* Repeated here, next to the button: the top-of-page copy is usually
+              scrolled out of view by the time someone taps Take. */}
+          {formErr && (
+            <div role="alert" className="mx-auto mb-2 max-w-md rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formErr}
+            </div>
+          )}
           <div className="mx-auto flex max-w-md items-center gap-3">
             <div className="min-w-0 flex-1 text-sm">
               <div className="font-semibold text-[var(--anchor-deep,#0f2e2a)]">
@@ -933,6 +958,8 @@ export default function GrabPage({
                 type="button"
                 onClick={() => {
                   setQty({});
+                  setSizeQty({});
+                  setFormErr(null);
                   setComps({});
                   setForBox({});
                   setLineKit({});
@@ -951,6 +978,11 @@ export default function GrabPage({
 
       {mode === "return" && returning.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-black/10 bg-white/95 p-3 backdrop-blur">
+          {formErr && (
+            <div role="alert" className="mx-auto mb-2 max-w-md rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formErr}
+            </div>
+          )}
           <div className="mx-auto flex max-w-md items-center gap-3">
             <div className="min-w-0 flex-1 text-sm">
               <div className="font-semibold text-[var(--anchor-deep,#0f2e2a)]">
