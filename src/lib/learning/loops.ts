@@ -125,7 +125,7 @@ export async function maybeSummarizeSession(
     .map((m: any) => `${String(m.role).toUpperCase()}: ${m.content}`)
     .join("\n");
 
-  const model = process.env.OPENAI_MODEL || "gpt-5-mini";
+  const model = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 
   const resp = await client.responses.create({
     model,
@@ -200,7 +200,7 @@ export async function maybeExtractKnowledge(
     .map((m: any) => `${String(m.role).toUpperCase()}: ${m.content}`)
     .join("\n");
 
-  const model = process.env.OPENAI_MODEL || "gpt-5-mini";
+  const model = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 
   const resp = await client.responses.create({
     model,

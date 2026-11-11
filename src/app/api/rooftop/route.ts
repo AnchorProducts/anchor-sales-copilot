@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 
 // Load the admin-editable prompt template (from /admin/rooftop-logic). Falls
 // back to the built-in default if there's no override row or the service key
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     const response = await openai.responses.create({
       model: DEFAULT_MODEL,
       max_output_tokens: 800,
-      reasoning: { effort: "minimal" },
+      reasoning: { effort: "none" },
       text: { format: { type: "text" }, verbosity: "low" },
       input: [
         { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
