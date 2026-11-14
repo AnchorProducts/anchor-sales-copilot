@@ -5,6 +5,7 @@ import { Alert } from "@/app/components/ui/Alert";
 import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import Modal from "@/app/components/ui/Modal";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { authedFetch } from "@/lib/supabase/sessionSync";
 import { trackEvent } from "@/lib/analytics/track";
 import { PRODUCT_OF_MONTH_KEY, parseProductOfMonth } from "@/lib/settings/productOfMonth";
 import { CUSTOMER_SAMPLE_CAP, isSampleAnchor } from "@/lib/marketingOrders";
@@ -218,7 +219,7 @@ export default function MarketingStore({
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/api/inventory", { cache: "no-store" });
+        const res = await authedFetch("/api/inventory", { cache: "no-store" });
         const json = await res.json().catch(() => null);
         if (!alive) return;
         if (!res.ok) setInvError(json?.error || "Couldn't load the catalog.");
@@ -451,7 +452,7 @@ export default function MarketingStore({
     const fail = (key: string, msg: string) =>
       setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, error: msg } : u)));
     try {
-      const res = await fetch("/api/marketing-orders/artwork", {
+      const res = await authedFetch("/api/marketing-orders/artwork", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })) }),
@@ -565,7 +566,7 @@ export default function MarketingStore({
     setPlacing(true);
     const placed: string[] = [];
     const post = async (url: string, body: unknown) => {
-      const res = await fetch(url, {
+      const res = await authedFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

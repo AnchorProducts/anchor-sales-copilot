@@ -7,6 +7,7 @@ import { HelpMenuButton } from "@/app/components/ui/HelpMenuButton";
 import { MobileBackButton } from "@/app/components/ui/MobileBackButton";
 import { AppSidebar } from "@/app/components/ui/AppSidebar";
 import { UserEventTracker } from "@/app/components/UserEventTracker";
+import { ServerSessionSync } from "@/app/components/ServerSessionSync";
 import { AdminViewAsSwitcher } from "@/app/components/admin/AdminViewAsSwitcher";
 import { AppTutorial } from "@/app/components/tutorial/AppTutorial";
 import { ProfileCompletionPrompt } from "@/app/components/ProfileCompletionPrompt";
@@ -95,6 +96,7 @@ export default function RootLayout({
         `}} />
       </head>
       <body>
+        <ServerSessionSync />
         <AppSidebar />
         {children}
         <MobileBackButton />
