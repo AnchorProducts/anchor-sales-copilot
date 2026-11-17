@@ -108,6 +108,15 @@ export const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "U3600 SBS": ["anchor/u-anchors/u3600/sbs"],
   "U3600 SBS Torch": ["anchor/u-anchors/u3600/sbs-torch"],
   "U3800 Coatings": ["anchor/u-anchors/u3800/coatings"],
+  "U5200 Plate": ["anchor/u-anchors/u5200/plate"],
+  "U5400 EPDM": ["anchor/u-anchors/u5400/epdm"],
+  "U5400 KEE": ["anchor/u-anchors/u5400/kee"],
+  "U5400 PVC": ["anchor/u-anchors/u5400/pvc"],
+  "U5400 TPO": ["anchor/u-anchors/u5400/tpo"],
+  "U5600 APP": ["anchor/u-anchors/u5600/app"],
+  "U5600 SBS": ["anchor/u-anchors/u5600/sbs"],
+  "U5600 SBS Torch": ["anchor/u-anchors/u5600/sbs-torch"],
+  "U5800 Coatings": ["anchor/u-anchors/u5800/coatings"],
 };
 
 /* ---------------------------------------------
@@ -124,8 +133,10 @@ export const SHARED_FILE_TITLES: Record<string, string> = {
   [U_ANCHOR_SPEC_PATH]: "U2000 / U3000 Series Spec",
 };
 
+// The master spec covers only the 2000 and 3000 series, so 5000-series boxes
+// (anchor/u-anchors/u5xxx/) don't get it; each gets its own uploaded spec.
 export function sharedFilesForPrefixes(prefixes: string[]): string[] {
-  const hit = prefixes.some((p) => normalizePrefix(p).startsWith("anchor/u-anchors/"));
+  const hit = prefixes.some((p) => /^anchor\/u-anchors\/u[23]\d{3}\//.test(normalizePrefix(p) + "/"));
   return hit ? [U_ANCHOR_SPEC_PATH] : [];
 }
 

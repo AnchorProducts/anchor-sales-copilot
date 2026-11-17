@@ -25,6 +25,15 @@ export const U_ANCHOR_OPTIONS = [
   "U3600 SBS",
   "U3600 SBS Torch",
   "U3800 Coatings",
+  "U5200 Plate",
+  "U5400 EPDM",
+  "U5400 KEE",
+  "U5400 PVC",
+  "U5400 TPO",
+  "U5600 APP",
+  "U5600 SBS",
+  "U5600 SBS Torch",
+  "U5800 Coatings",
 ];
 
 // "Other items" for the commission claim = every solution label.
