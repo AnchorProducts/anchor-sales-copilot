@@ -2,7 +2,7 @@ export const ROOF_TYPES: string[] = [
   "KEE",
   "PVC",
   "TPO",
-  "EDPM",
+  "EPDM",
   "APP",
   "SBS",
   "SBS TORCH",
