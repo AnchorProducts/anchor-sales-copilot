@@ -101,6 +101,7 @@ function docTypeFromPath(path: string) {
   const p = path.toLowerCase();
   const file = (p.split("/").pop() || "").toLowerCase();
   if (file.includes("internal-document")) return "Internal Document";
+  if (file.startsWith("fab-sheet-")) return "Fab Sheet";
   if (file.startsWith("assembly-")) return "Assembly";
   if (file.startsWith("cad-")) return "CAD";
   if (file.includes("sales-sheet") || file.includes("salessheet")) return "Sales Sheet";

@@ -30,11 +30,14 @@ export type AssetCategoryKey =
   | "manufacturer_approval_letters"
   | "presentations"
   | "case_studies"
+  | "fab_sheet"
   | "pictures";
 
 export function categoryKeyFromPath(path: string): AssetCategoryKey | null {
   const p = String(path || "").toLowerCase();
   const file = basename(p);
+
+  if (file.startsWith("fab-sheet-")) return "fab_sheet";
 
   // Assembly and CAD — matched on their upload prefix before the substring rules
   // below, so "cad-install-detail.dwg" isn't filed as an install guide.

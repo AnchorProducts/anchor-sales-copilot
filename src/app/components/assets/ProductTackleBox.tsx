@@ -74,6 +74,7 @@ type TabKey =
   | "test"
   | "pricebook"
   | "internal"
+  | "fab"
   | "approval"
   | "presentation"
   | "pics"
@@ -95,6 +96,7 @@ const TAB_ORDER: TabKey[] = [
   "test",
   "pricebook",
   "internal",
+  "fab",
   "approval",
   "presentation",
   "pics",
@@ -122,16 +124,17 @@ const ASSET_CATEGORY_OPTIONS: { key: string; label: string }[] = [
   { key: "presentations", label: "Presentation" },
   { key: "case_studies", label: "Case Study" },
   { key: "internal_document", label: "Internal Document" },
+  { key: "fab_sheet", label: "Fab Sheet" },
 ];
 
 // Categories that are internal by definition. Picking one locks Visibility to
 // Internal — the upload route enforces the same rule server-side.
-const INTERNAL_ONLY_CATEGORIES = new Set(["internal_document"]);
+const INTERNAL_ONLY_CATEGORIES = new Set(["internal_document", "fab_sheet"]);
 
 // Tabs that should only appear for internal users. Archive is here because
 // retired documents are for internal reference only — a customer-facing rep
 // should never be handed a superseded sheet.
-const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook", "internal", "archive"]);
+const INTERNAL_ONLY_TABS = new Set<TabKey>(["test", "pricebook", "internal", "fab", "archive"]);
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "svg", "gif"]);
 const PDF_EXTS = new Set(["pdf"]);
@@ -235,6 +238,7 @@ function visibilityFromPath(path: string): "public" | "internal" {
   if (p.includes("/internal/") || p.startsWith("internal/")) return "internal";
   if (p.includes("/pricebook/") || p.includes("/test/") || p.includes("/test-reports/")) return "internal";
   if (basename(p).includes("internal-document")) return "internal";
+  if (basename(p).startsWith("fab-sheet-")) return "internal";
 
   return "public";
 }
@@ -264,6 +268,8 @@ function tabFromPath(path: string): TabKey {
   // follows the "internal-document-" prefix can contain any other token
   // ("…-spec.pdf", "…-pricing.pdf") and must not be filed under that tab.
   if (file.includes("internal-document")) return "internal";
+  // Fab sheets — same reason: "fab-sheet-" prefix wins over any later token.
+  if (file.startsWith("fab-sheet-")) return "fab";
 
   // Assembly and CAD — matched on the upload prefix (start of the filename) for
   // the same reason, and before "install"/"spec" so "cad-install-detail.dwg"
@@ -389,7 +395,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
   const TAB_LABELS: Record<TabKey, string> = {
     all: t("tabAll"), spec: t("tabSpec"), data: t("tabData"),
     install: t("tabInstall"), assembly: t("tabAssembly"), cad: t("tabCad"), sales: t("tabSales"), intake: t("tabIntake"),
-    test: t("tabTest"), pricebook: t("tabPricebook"), internal: t("tabInternal"), approval: t("tabApproval"),
+    test: t("tabTest"), pricebook: t("tabPricebook"), internal: t("tabInternal"), fab: t("tabFab"), approval: t("tabApproval"),
     presentation: t("tabPresentation"), pics: t("tabPics"), case: t("tabCase"),
     archive: t("tabArchive"), other: t("tabOther"),
   };
@@ -652,6 +658,7 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
       test: 0,
       pricebook: 0,
       internal: 0,
+      fab: 0,
       approval: 0,
       presentation: 0,
       pics: 0,

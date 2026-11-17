@@ -30,6 +30,7 @@ const CATEGORY_FILENAME_PREFIX: Record<string, string> = {
   presentations: "presentation-",
   case_studies: "case-study-",
   internal_document: "internal-document-",
+  fab_sheet: "fab-sheet-",
   assembly: "assembly-",
   cad: "cad-",
   pictures: "",
@@ -115,6 +116,9 @@ const CATEGORY_ALIASES: Record<string, string> = {
   case: "case_studies",
   internal: "internal_document",
   internal_doc: "internal_document",
+  fab: "fab_sheet",
+  fab_sheets: "fab_sheet",
+  fabrication: "fab_sheet",
   assembly_instructions: "assembly",
   cad_file: "cad",
   cad_files: "cad",
@@ -191,9 +195,10 @@ export async function POST(req: NextRequest) {
     // superseded, so it must never reach a customer — which also keeps it out
     // of the public Webflow feed via the existing internal-path gate.
     const archive = body?.archive === true;
-    // An internal document is internal by definition, whatever the client sent.
+    // Internal documents and fab sheets are internal by definition, whatever
+    // the client sent.
     const visibility =
-      archive || category === "internal_document"
+      archive || category === "internal_document" || category === "fab_sheet"
         ? "internal"
         : String(body?.visibility || "public").trim();
 

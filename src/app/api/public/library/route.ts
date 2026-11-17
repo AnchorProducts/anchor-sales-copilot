@@ -58,7 +58,8 @@ function isInternalPath(path: string) {
     p.includes("/pricebook/") ||
     p.includes("/test/") ||
     p.includes("/test-reports/") ||
-    p.includes("internal-document")
+    p.includes("internal-document") ||
+    p.includes("fab-sheet-")
   );
 }
 
