@@ -17,6 +17,7 @@ import {
 import {
   prefixCandidatesForProduct,
   sharedFilesForPrefixes,
+  mergedFoldersForProduct,
   isFolderLike,
 } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
@@ -123,24 +124,35 @@ function slugify(input: string) {
 async function fetchTackleBoxFileCount(product: ProductRow, accessToken: string): Promise<number> {
   const candidates = prefixCandidatesForProduct(product);
 
+  const list = async (prefix: string): Promise<string[]> => {
+    const res = await fetch(`/api/knowledge-list?prefix=${encodeURIComponent(prefix)}`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+    if (!res.ok) return [];
+    const json = await res.json().catch(() => ({}));
+    return ((json?.paths as string[]) || []).filter((p) => !isFolderLike(p));
+  };
+
   let paths: string[] = [];
   for (const candidate of candidates) {
     try {
-      const res = await fetch(`/api/knowledge-list?prefix=${encodeURIComponent(candidate)}`, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      });
-      if (!res.ok) continue;
-      const json = await res.json().catch(() => ({}));
-      const got = ((json?.paths as string[]) || []).filter((p) => !isFolderLike(p));
+      const got = await list(candidate);
       if (got.length > 0) {
         paths = got;
         break;
       }
     } catch {
       // try next candidate
+    }
+  }
+  for (const folder of mergedFoldersForProduct(product.name)) {
+    try {
+      paths = [...paths, ...(await list(folder))];
+    } catch {
+      // a missing merged folder just adds nothing
     }
   }
 
@@ -539,8 +551,13 @@ export default function AssetsBrowser({ solutionsOnly = false }: AssetsBrowserPr
   // placeholder.
   function isItemHidden(item: CatalogSolution): boolean {
     if (hiddenSolutionKeys.size === 0) return false;
-    const keys = [norm(item.label), slugify(item.label)];
-    if (item.legacyName) keys.push(norm(item.legacyName), slugify(item.legacyName));
+    // A card is the box of its backing product, so only that product's
+    // tombstone hides it. When a legacyName backs the card, a deleted row that
+    // merely shares the label (the old "Equipment Screen" and "Weather Station"
+    // rows) must not take the live card down with it.
+    const keys = item.legacyName
+      ? [norm(item.legacyName), slugify(item.legacyName)]
+      : [norm(item.label), slugify(item.label)];
     return keys.some((k) => hiddenSolutionKeys.has(k));
   }
 

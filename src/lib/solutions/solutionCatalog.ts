@@ -5,17 +5,12 @@
 // the UI, and the chatbot replies with high-level "coming soon" info only.
 
 export type SolutionCategoryKey =
-  | "mechanical"
-  | "box-frames"
-  | "pipe-conduit-supports"
-  | "snow-retention"
-  | "elevated-structure-securement"
-  | "h-frame-supports"
-  | "rooftop-solar"
-  | "equipment-screen"
-  | "safety-access"
-  | "lightning-protection"
-  | "security-monitoring-communication";
+  | "solar"
+  | "snow"
+  | "mep"
+  | "safety"
+  | "communications"
+  | "accessories";
 
 export type CatalogSolution = {
   key: string;
@@ -34,100 +29,69 @@ export type SolutionCategory = {
   label: string;
 };
 
+// Mirrors anchorp.com's solutions catalog (site_catalog_group / site_catalog_item,
+// kind = 'solution', in the shared Supabase project): same groups, same order,
+// same names, and the same knowledge-bucket folders the website reads
+// (anchorp-website src/lib/literatureLinks.ts SOLUTION_PREFIXES). Category keys
+// are the website's group slugs and item keys its item slugs.
+//
+// Where one website page covers several tackle boxes here, the boxes stay
+// separate: the five Pipe Support Securement boxes each hold their own data
+// sheet, install sheet and fab sheet under identical file names, so merging
+// them into one box would list five indistinguishable "Data Sheet"s.
+//
+// `legacyName` is the shared `products.name` that backs the card when it
+// differs from the label (the website renamed some rows, not others).
+// `legacyFolder` is the folder the website reads for that page.
 export const SOLUTION_CATEGORIES: SolutionCategory[] = [
-  { key: "mechanical", label: "Mechanical" },
-  { key: "box-frames", label: "Electrical Box Frames" },
-  { key: "pipe-conduit-supports", label: "Small Pipe & Conduit Supports" },
-  { key: "snow-retention", label: "Snow Retention" },
-  { key: "elevated-structure-securement", label: "Elevated Structure Securement" },
-  { key: "h-frame-supports", label: "Large Pipe & Duct Securements" },
-  { key: "rooftop-solar", label: "Rooftop Solar" },
-  { key: "equipment-screen", label: "Equipment Screen" },
-  { key: "safety-access", label: "Safety & Access" },
-  { key: "lightning-protection", label: "Lightning Protection" },
-  { key: "security-monitoring-communication", label: "Security, Monitoring, & Communication" },
+  { key: "solar", label: "Solar Solutions" },
+  { key: "snow", label: "Snow Retention" },
+  { key: "mep", label: "Mechanical, Electrical & Plumbing" },
+  { key: "safety", label: "Safety, Access & Egress" },
+  { key: "communications", label: "Communications" },
+  { key: "accessories", label: "Rooftop Accessories" },
 ];
 
 export const SOLUTION_CATALOG: CatalogSolution[] = [
-  // Mechanical
-  { key: "existing-mechanical-tie-down-2000", label: "Existing Mechanical Tie Down - 2000 Series U-Anchor", category: "mechanical", legacyName: "Existing Mechanical Tie Down", legacyFolder: "solutions/hvac" },
-  { key: "mechanical-support-u-anchor", label: "Mechanical Support - U-Anchor", category: "mechanical", comingSoon: true },
-
-  // Electrical Box Frames
-  { key: "small-electrical-box-frame-3000", label: "Small Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
-  // Medium ← old "Electrical Disconnect" tackle box (assets live there)
-  { key: "medium-electrical-box-frame-3000", label: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames", legacyName: "Electrical Disconnect", legacyFolder: "solutions/electrical-disconnect" },
-  // Large — matches the active "Large Electrical Box Frame - w/ 3000 Series
-  // U-Anchor" product by name → solutions/large-electrical-box-frame-w-3000-series-u-anchor.
-  // (Dropped the stale "Roof Mounted Box" / solutions/roof-box mapping — that
-  // folder was deleted after content moved to the large-box folder.)
-  { key: "large-electrical-box-frame-3000", label: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", category: "box-frames" },
-
-  // Small Pipe & Conduit Supports (legacy: Roof Pipe Support family)
-  { key: "pss-0320-roller-assembly", label: "PSS 0320 - Pipe Support Securement - Roller Assembly", category: "pipe-conduit-supports", legacyName: "Roller Pipe Support", legacyFolder: "solutions/roof-pipe/roller" },
-  { key: "pss-0310-strut-assembly", label: "PSS 0310 - Pipe Support Securement - Strut Assembly", category: "pipe-conduit-supports", legacyName: "Roof Pipe Support", legacyFolder: "solutions/roof-pipe" },
-  { key: "pss-0305-6in-base", label: "PSS 0305 - Pipe Securement - 6\" Base", category: "pipe-conduit-supports", legacyName: "Single Pipe Support", legacyFolder: "solutions/roof-pipe/single" },
-  { key: "pss-0300-12in-base", label: "PSS 0300 - Pipe Securement - 12\" Base", category: "pipe-conduit-supports", legacyName: "Double Pipe Support", legacyFolder: "solutions/roof-pipe/double" },
-  { key: "pipe-securement-utility-corridor", label: "Pipe Securement - Utility Corridor", category: "pipe-conduit-supports", comingSoon: true },
+  // Solar Solutions
+  { key: "solar", label: "Solar Securement", category: "solar", comingSoon: true, legacyFolder: "solutions/rooftop-solar" },
 
   // Snow Retention
-  { key: "snow-retention-system", label: "Snow Retention System", category: "snow-retention", comingSoon: true, legacyFolder: "solutions/snow-retention" },
-  { key: "snow-retention-8ft-kit", label: "8' Snow Retention Kit", category: "snow-retention", legacyName: "2-Pipe Snow Fence", legacyFolder: "solutions/snow-retention/2-pipe-snow-fence" },
-  { key: "snow-cleat-kit", label: "Snow Cleat Kit", category: "snow-retention", comingSoon: true, legacyFolder: "solutions/snow-retention" },
+  { key: "snow", label: "Snow Retention", category: "snow", legacyName: "2 Pipe Snow Retention", legacyFolder: "solutions/snow-retention-system" },
 
-  // Elevated Structure Securement (legacy: Roof-Mounted Elevated Stack)
-  { key: "tower-stack-securement-2000", label: "Tower/Stack Securement - 2000 Series U-Anchor", category: "elevated-structure-securement", legacyName: "Roof-Mounted Elevated Stack", legacyFolder: "solutions/elevated-stack/roof-stack" },
-  { key: "weather-stand-equipment-2000", label: "Weather/Stand Equipment - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/weather-station" },
-  { key: "tower-securement-non-penetrating-base-2000", label: "Tower Securement, Non Penetrating Base - 2000 Series U-Anchor", category: "elevated-structure-securement", comingSoon: true, legacyFolder: "solutions/elevated-stack/roof-stack" },
+  // Mechanical, Electrical & Plumbing
+  { key: "roof-mounted-h-frame", label: "Roof Mounted H-Frame", category: "mep", legacyFolder: "solutions/pipe-frame/attached" },
+  { key: "existing-mechanical-tie-down", label: "Existing Mechanical Tie Down", category: "mep", legacyName: "Existing Mechanical Tie-Down", legacyFolder: "solutions/existing-mechanical-tie-down" },
+  { key: "duct-frame", label: "Duct Frame", category: "mep", legacyFolder: "solutions/duct-securement" },
+  { key: "large-electrical-box-frame", label: "Large Electrical Box Frame", category: "mep", legacyName: "Large Electrical Box Frame - w/ 3000 Series U-Anchor", legacyFolder: "solutions/large-electrical-box-frame-w-3000-series-u-anchor" },
+  { key: "medium-electrical-box-frame", label: "Medium Electrical Box Frame", category: "mep", legacyName: "Medium Electrical Box Frame - w/ 3000 Series U-Anchor", legacyFolder: "solutions/medium-electrical-box-frame-w-3000-series-u-anchor" },
+  // Pipe Support Securement (one page on the website)
+  { key: "pss-0300-12in-base", label: "PSS 0300 - Pipe Securement - 12\" Base", category: "mep", legacyFolder: "solutions/pss-0300-pipe-securement-12-base" },
+  { key: "pss-0305-6in-base", label: "PSS 0305 - Pipe Securement - 6\" Base", category: "mep", legacyFolder: "solutions/pss-0305-pipe-securement-6-base" },
+  { key: "pss-0310-strut-assembly", label: "PSS 0310 - Pipe Support Securement - Strut Assembly", category: "mep", legacyFolder: "solutions/pss-0310-pipe-support-securement-strut-assembly" },
+  { key: "pss-0320-roller-assembly", label: "PSS 0320 - Pipe Support Securement - Roller Assembly", category: "mep", legacyFolder: "solutions/pss-0320-pipe-support-securement-roller-assembly" },
+  { key: "pipe-securement-utility-corridor", label: "Pipe Securement - Utility Corridor", category: "mep", legacyFolder: "solutions/pipe-securement-utility-corridor" },
+  { key: "small-electrical-box-frame", label: "Small Electrical Box Frame", category: "mep", legacyName: "Small Electrical Box Frame - w/ 3000 Series U-Anchor", legacyFolder: "solutions/small-electrical-box-frame-w-3000-series-u-anchor" },
+  { key: "wall-electrical-box", label: "Wall Mounted Electrical Box", category: "mep", legacyName: "Wall Mounted Box", legacyFolder: "solutions/wall-box" },
+  { key: "wall-tower-stack", label: "Wall Mounted Tower/Stack Securement", category: "mep", legacyName: "Wall-Mounted Elevated Stack Securement", legacyFolder: "solutions/elevated-stack/wall-stack" },
+  { key: "roof-tower-stack", label: "Roof Mounted Tower/Stack Securement", category: "mep", legacyName: "Tower/Stack Securement - 2000 Series U-Anchor", legacyFolder: "solutions/elevated-stack/Tower" },
+  { key: "mechanical-support", label: "Mechanical Support", category: "mep", legacyName: "Mechanical Support - U-Anchor", legacyFolder: "solutions/mechanical-support-u-anchor" },
+  { key: "existing-h-frame", label: "Existing H-Frame", category: "mep", legacyFolder: "solutions/pipe-frame/exisiting" },
 
-  // Large Pipe & Duct Securements — collapsed to the 3 products shown on the website
-  // Resource Library tab. Each maps to its knowledge-bucket folder via the
-  // matching active `products` row (resolved by legacyName → SPECIAL_PREFIXES).
-  { key: "duct-securement", label: "Duct Securement", category: "h-frame-supports", legacyName: "Duct Securement", legacyFolder: "solutions/duct-securement" },
-  { key: "existing-h-frame", label: "Existing Pipe Frame", category: "h-frame-supports", legacyName: "Existing Pipe Frame", legacyFolder: "solutions/pipe-frame/exisiting" },
-  { key: "attached-h-frame", label: "Attached Pipe Frame", category: "h-frame-supports", legacyName: "Attached Pipe Frame", legacyFolder: "solutions/pipe-frame/attached" },
+  // Safety, Access & Egress
+  { key: "roof-mounted-guardrail", label: "Roof Mounted Guardrail", category: "safety", legacyFolder: "solutions/roof-guardrail" },
+  { key: "wall-guardrail", label: "Wall Mounted Guardrail", category: "safety", legacyFolder: "solutions/wall-guardrail" },
+  { key: "crossover-stair", label: "Crossover & Stair Securements", category: "safety", legacyFolder: "solutions/roof-stairs-walkways" },
+  { key: "roof-ladder", label: "Roof Ladder", category: "safety", legacyFolder: "solutions/roof-ladder" },
 
-  // Rooftop Solar (all coming soon — legacyFolder points at existing solar docs for chatbot context)
-  { key: "solar-panel-claw-hibred", label: "Solar Mount Panel Claw HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-panel-claw-fully-attached", label: "Solar Mount Panel Claw Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-unirac-hibred", label: "Solar Mount Unirac HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-unirac-fully-attached", label: "Solar Mount Unirac Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-kb-racking", label: "Solar Mount KB Racking", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-aerocompact-hibred", label: "Solar Mount AeroCompact HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-aerocompact-fully-attached", label: "Solar Mount AeroCompact Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-pegasus-hibred", label: "Solar Mount Pegasus HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-pegasus-fully-attached", label: "Solar Mount Pegasus Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-sollega-hibred", label: "Solar Mount Sollega HiBred", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-sollega-fully-attached", label: "Solar Mount Sollega Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-iron-ridge-rail-fully-attached", label: "Solar Mount Iron Ridge Rail System Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-unirac-rail-fully-attached", label: "Solar Mount Unirac Rail Fully Attached", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-skyrack-rail", label: "Solar Mount Solar SkyRack Rail", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
-  { key: "solar-slip-sheets", label: "Slip Sheets", category: "rooftop-solar", comingSoon: true, legacyFolder: "solutions/solar" },
+  // Communications
+  { key: "satellite-mount", label: "Satellite Dish Mount", category: "communications", legacyName: "Satellite Dish", legacyFolder: "solutions/satellite-dish" },
+  { key: "weather-station", label: "Weather Station", category: "communications", legacyName: "Weather Stations", legacyFolder: "solutions/weather-station" },
 
-  // Equipment Screen (all coming soon, legacy: Equipment Screen)
-  { key: "u-screen-6ft-metal-panel-louver", label: "6' U-Screen Support Frame - Metal Panel & Louver", category: "equipment-screen", comingSoon: true, legacyFolder: "solutions/equipment-screen" },
-  { key: "u-screen-6ft-narrow", label: "6' U-Screen Support Frame - Narrow", category: "equipment-screen", comingSoon: true, legacyFolder: "solutions/equipment-screen" },
-
-  // Safety & Access
-  { key: "travel-restraint-anchorage", label: "Travel Restraint Anchorage", category: "safety-access", comingSoon: true, legacyFolder: "solutions/roof-guardrail" },
-  { key: "guardrail-panel-base-anchorage", label: "Guardrail Panel Base Anchorage", category: "safety-access", comingSoon: true, legacyFolder: "solutions/roof-guardrail" },
-  { key: "fixfast-guardrail", label: "FixFast Guardrail", category: "safety-access", comingSoon: true, legacyFolder: "solutions/roof-guardrail" },
-  { key: "wall-mounted-guardrail", label: "Wall Mounted Guardrail", category: "safety-access", legacyName: "Wall Guardrail", legacyFolder: "solutions/wall-guardrail" },
-  { key: "stairs", label: "Stairs", category: "safety-access", comingSoon: true },
-  { key: "crossover", label: "Crossover", category: "safety-access", comingSoon: true },
-
-  // Lightning Protection (all coming soon, legacy: Lightning Protection)
-  { key: "lightning-arrester-securement", label: "Lightning Arrester Securement", category: "lightning-protection", comingSoon: true, legacyFolder: "solutions/lightning" },
-  { key: "lightning-cable-securement", label: "Lightning Cable Securement", category: "lightning-protection", comingSoon: true, legacyFolder: "solutions/lightning" },
-
-  // Security, Monitoring, & Communication (all coming soon)
-  { key: "camera-mounting-plate", label: "Camera w/ Mounting Plate", category: "security-monitoring-communication", legacyFolder: "solutions/camera-mount" },
-  { key: "roof-wall-mount-light-no-plate", label: "Roof Mount & Wall Mount Light w/o Mounting Plate", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/light-mount" },
-  { key: "satellite-dish-mount-roof-wall", label: "Satellite Dish Mount - Roof or Wall", category: "security-monitoring-communication", comingSoon: true, legacyName: "Satellite Dish", legacyFolder: "solutions/satellite-dish" },
-  { key: "radio-tower-securement", label: "Radio Tower Securement", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
-  { key: "weather-station", label: "Weather Station", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/weather-station" },
-  { key: "antenna-securement-w-base", label: "Antenna Securement w/ Base", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
-  { key: "antenna-guy-wire-securement", label: "Antenna Guy Wire Securement", category: "security-monitoring-communication", comingSoon: true, legacyFolder: "solutions/antenna" },
+  // Rooftop Accessories
+  { key: "equipment-screen", label: "Equipment Screen", category: "accessories", legacyName: "6' U-Screen Support Frame - Metal Panel & Louver", legacyFolder: "solutions/6-u-screen-support-frame-metal-panel-and-louver" },
+  { key: "camera-mount", label: "Camera & Light Mount", category: "accessories", legacyName: "Roof Mount & Wall Mount Light w/o Mounting Plate", legacyFolder: "solutions/light-mount" },
+  { key: "guy-wire-kit", label: "Guy Wire Kit", category: "accessories", legacyFolder: "solutions/guy-wire-kit" },
 ];
 
 export function getCategoryLabel(key: SolutionCategoryKey): string {

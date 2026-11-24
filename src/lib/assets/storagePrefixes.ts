@@ -85,6 +85,14 @@ export const SPECIAL_PREFIXES_BY_NAME: Record<string, string[]> = {
   "Wall Mounted Guardrail": ["solutions/wall-guardrail"],
   "Wall Mounted Box": ["solutions/wall-box"],
   "Weather Stations": ["solutions/weather-station"],
+  // Folders the website reads for these pages (anchorp-website
+  // src/lib/literatureLinks.ts). The H-frame rows were renamed on the website
+  // 11/24; the folders kept their old paths because those paths are links.
+  "Roof Mounted H-Frame": ["solutions/pipe-frame/attached"],
+  "Existing H-Frame": ["solutions/pipe-frame/exisiting"],
+  "Duct Frame": ["solutions/duct-securement"],
+  "2 Pipe Snow Retention": ["solutions/snow-retention-system"],
+  "Crossover & Stair Securements": ["solutions/roof-stairs-walkways"],
 
   // Anchors
   "U2000 KEE": ["anchor/u-anchors/u2000/kee"],
@@ -138,6 +146,22 @@ export const SHARED_FILE_TITLES: Record<string, string> = {
 export function sharedFilesForPrefixes(prefixes: string[]): string[] {
   const hit = prefixes.some((p) => /^anchor\/u-anchors\/u[23]\d{3}\//.test(normalizePrefix(p) + "/"));
   return hit ? [U_ANCHOR_SPEC_PATH] : [];
+}
+
+/* ---------------------------------------------
+   Merged folders
+   One tackle box that also lists a second folder's files, for a website page
+   that covers two old boxes. Camera & Light Mount is one page on anchorp.com
+   (camera-mount + light-mount); its box is the light-mount product, and this
+   adds the camera sheets to it.
+--------------------------------------------- */
+
+export const MERGED_FOLDERS_BY_NAME: Record<string, string[]> = {
+  "Roof Mount & Wall Mount Light w/o Mounting Plate": ["solutions/camera-mount"],
+};
+
+export function mergedFoldersForProduct(name: string): string[] {
+  return MERGED_FOLDERS_BY_NAME[name] ?? [];
 }
 
 export const SERIES_ROOTS_BY_SERIES: Record<string, string[]> = {

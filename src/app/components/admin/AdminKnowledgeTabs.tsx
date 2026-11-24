@@ -166,17 +166,7 @@ export default function AdminKnowledgeTabs({ role }: { role: Role }) {
     }
 
     const titles: Record<string, string> = {
-      "mechanical": "Mechanical",
-      "box-frames": "Electrical Box Frames",
-      "pipe-conduit-supports": "Small Pipe & Conduit Supports",
-      "snow-retention": "Snow Retention",
-      "elevated-structure-securement": "Elevated Structure Securement",
-      "h-frame-supports": "Large Pipe & Duct Securements",
-      "rooftop-solar": "Rooftop Solar",
-      "equipment-screen": "Equipment Screen",
-      "safety-access": "Safety & Access",
-      "lightning-protection": "Lightning Protection",
-      "security-monitoring-communication": "Security, Monitoring, & Communication",
+      ...Object.fromEntries(SOLUTION_CATEGORIES.map((c) => [c.key, c.label])),
       "uncategorized": "Uncategorized",
     };
 

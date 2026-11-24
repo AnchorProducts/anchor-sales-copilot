@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
-import { prefixCandidatesForProduct, sharedFilesForPrefixes, SHARED_FILE_TITLES } from "@/lib/assets/storagePrefixes";
+import { prefixCandidatesForProduct, sharedFilesForPrefixes, mergedFoldersForProduct, SHARED_FILE_TITLES } from "@/lib/assets/storagePrefixes";
 import { getViewAs } from "@/lib/role/viewAs";
 import { compressImages } from "@/lib/media/compressImage";
 import { isArchivePath, withArchivePrefix } from "@/lib/library/archive";
@@ -581,8 +581,17 @@ export default function ProductTackleBox({ productId }: { productId: string }) {
 
       setStoragePrefix(normalizePrefix(pickedPrefix));
 
+      // A second folder this box also lists (one website page = two old boxes).
+      for (const folder of mergedFoldersForProduct((p as ProductRow).name)) {
+        try {
+          paths = [...paths, ...(await fetchKnowledgePaths(supabase, folder))];
+        } catch (e) {
+          console.warn("knowledge-list failed for merged folder:", folder, e);
+        }
+      }
+
       // Files shared across many tackle boxes (e.g. the U-anchor master spec)
-      paths = [...paths, ...sharedFilesForPrefixes(candidates)];
+      paths = Array.from(new Set([...paths, ...sharedFilesForPrefixes(candidates)]));
 
       // Build storage-derived assets
       const derived: AssetRow[] = paths.map((path) => ({

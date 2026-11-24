@@ -5,6 +5,7 @@ import { resolveCanonicalSolution } from "@/lib/solutions/resolveCanonicalSoluti
 import { CANONICAL_SOLUTIONS, type CanonicalSolution } from "@/lib/solutions/canonicalSolutions";
 import {
   SOLUTION_CATALOG,
+  SOLUTION_CATEGORIES,
   findCatalogMatch,
   folderCandidatesForCatalog,
 } from "@/lib/solutions/solutionCatalog";
@@ -58,26 +59,19 @@ function anchorContact() {
 // Distinctive tokens that signal a user is asking about a coming-soon solution.
 // Derived from the SOLUTION_CATALOG coming-soon labels — kept narrow so we don't
 // accidentally suppress docs for adjacent live solutions.
+// Equipment Screen, Crossover & Stair, Snow Retention, Utility Corridor and
+// Mechanical Support are live on anchorp.com and have documents, so their
+// tokens are no longer here. What remains is not sold on the site yet.
 const COMING_SOON_TOKENS: string[] = [
-  // Rooftop Solar — all coming soon
+  // Rooftop Solar — coming soon
   "panel claw", "unirac", "kb racking", "aerocompact", "pegasus", "sollega",
   "iron ridge", "ironridge", "skyrack", "sky rack", "slip sheet",
-  // Equipment Screen
-  "u-screen", "u screen",
-  // Safety & Access
-  "travel restraint", "guardrail panel", "fixfast", "fix fast", "crossover",
-  // Snow Retention coming-soon variants
-  "snow cleat", "snow retention system",
-  // Lightning Protection
+  // Not offered on anchorp.com yet
+  "travel restraint", "guardrail panel", "fixfast", "fix fast",
+  "snow cleat",
   "lightning arrester", "lightning arrestor", "lightning cable",
-  // Security/Monitoring/Communication
   "radio tower", "antenna guy wire", "non penetrating", "non-penetrating",
-  // H-Frame coming-soon
-  "corridor support", "rigid knee", "knee bracing",
-  // Pipe utility corridor
-  "utility corridor",
-  // Mechanical support coming-soon
-  "mechanical support",
+  "corridor support", "rigid knee",
 ];
 
 function isComingSoonQuery(text: string): boolean {
@@ -667,37 +661,24 @@ ${(() => {
     arr.push(line);
     groups.set(item.category, arr);
   }
-  const titles: Record<string, string> = {
-    "mechanical": "Mechanical",
-    "box-frames": "Electrical Box Frames",
-    "pipe-conduit-supports": "Small Pipe & Conduit Supports",
-    "snow-retention": "Snow Retention",
-    "elevated-structure-securement": "Elevated Structure Securement",
-    "h-frame-supports": "Large Pipe & Duct Securements",
-    "rooftop-solar": "Rooftop Solar",
-    "equipment-screen": "Equipment Screen",
-    "safety-access": "Safety & Access",
-    "lightning-protection": "Lightning Protection",
-    "security-monitoring-communication": "Security, Monitoring, & Communication",
-  };
+  const titles: Record<string, string> = Object.fromEntries(
+    SOLUTION_CATEGORIES.map((c) => [c.key, c.label]),
+  );
   return Array.from(groups.entries())
     .map(([key, lines]) => `${titles[key] || key}:\n${lines.join("\n")}`)
     .join("\n\n");
 })()}
 
 NOTES ON CATALOG NAMING:
-- "PSS 0300 / 0305 / 0310 / 0320" are the new product codes for the horizontal Pipe Support family (single base, double base, strut assembly, roller assembly).
-- "Existing Mechanical Tie Down - 2000 Series U-Anchor" is the new name for what reps may still call the HVAC / RTU tie-down.
-- "Tower/Stack Securement - 2000 Series U-Anchor" is the new name for the previous roof-mounted elevated stack offering.
-- NAMING — "Large Pipe & Duct Securements": this whole family (attached + existing) was formerly called "H-Frame" / "roof-mounted H-frame". It is the SAME product line, but we NO LONGER call it an H-frame. In replies use "Large Pipe & Duct Securement", "attached pipe & duct frame", or "existing pipe & duct frame". Still recognize "H-frame" as a legacy synonym when a user types it. ATTACHED = a NEW pipe/duct frame install; EXISTING = pipe/duct already in place being (re)secured (e.g. a deteriorated pitch pocket that is supporting a pipe needs an EXISTING pipe frame).
-- "Existing H-Frame Securement - Exterior/Interior Bracing" is a legacy label for the existing pipe & duct re-secure category (do not call it an H-frame in replies).
-- "Pipe Hanger Frame", "Strut Frame Securement", and the "24"/36"/36x48 Standard H-Frame" entries are all variants of the attached pipe & duct frame family (legacy names — recognize but don't use "H-frame").
-- "Duct Frame", "Existing Duct Frame Securement", and "Existing Duct Securement" are the duct-securement variants.
-- "Medium Electrical Box Frame" is the new name for the previous Roof Mounted Box; "Small" and "Large" Electrical Box Frames are new offerings being built out.
-- "Wall Mounted Guardrail" is the previous Wall Guardrail.
-- All Rooftop Solar entries (Solar Mount + brand: Panel Claw, Unirac, KB Racking, AeroCompact, Pegasus, Sollega, Iron Ridge, SkyRack, Slip Sheets) are currently coming soon — handle them with the high-level rule above.
-- All Security/Monitoring/Communication entries (Camera w/ Mounting Plate, Roof/Wall Mount Light, Satellite Dish Mount, Radio Tower, Weather Station, Antenna w/ Base, Antenna Guy Wire) are coming soon.
-- All Lightning Protection entries (Lightning Arrester Securement, Lightning Cable Securement) are coming soon.
+- The groups and names above match anchorp.com's solutions menu. Use these names in replies.
+- "PSS 0300 / 0305 / 0310 / 0320" and "Pipe Securement - Utility Corridor" are the Pipe Support Securement family (anchorp.com lists them on one Pipe Support Securement page): 12" base, 6" base, strut assembly, roller assembly, utility corridor.
+- "Existing Mechanical Tie Down" is what reps may still call the HVAC / RTU tie-down. "Mechanical Support" is the U-Anchor RTU / mechanical support.
+- H-FRAMES: "Roof Mounted H-Frame" (formerly "Attached Pipe Frame") is a NEW H-frame install that carries grouped pipe runs. "Existing H-Frame" (formerly "Existing Pipe Frame") re-secures an H-frame already in place (e.g. a deteriorated pitch pocket supporting a pipe). "Duct Frame" (formerly "Duct Securement") comes in two variations, roof mounted and existing (existing hold-down / tie-back). Recognize the old names as synonyms.
+- "Roof Mounted Tower/Stack Securement" is the previous "Tower/Stack Securement - 2000 Series U-Anchor" / roof-mounted elevated stack; "Wall Mounted Tower/Stack Securement" is the previous wall-mounted elevated stack.
+- "Medium Electrical Box Frame" is the previous Roof Mounted Box. "Wall Mounted Electrical Box" is the previous Wall Mounted Box.
+- "Wall Mounted Guardrail" is the previous Wall Guardrail. "Crossover & Stair Securements" covers roof stairs, crossovers and walkways.
+- "Equipment Screen" is the U-Screen support frame (metal panel & louver). "Camera & Light Mount" covers camera mounts and roof / wall light mounts. "Satellite Dish Mount" is the previous Satellite Dish.
+- "Solar Securement" is coming soon — handle it with the high-level rule above.
 
 MATERIAL OPTIONS (applies to EVERY solution):
 - Anchor products are galvanized steel by default. STAINLESS STEEL is available as an option for ANY solution / product family.
