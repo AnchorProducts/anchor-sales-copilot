@@ -24,6 +24,7 @@ export default function AddressAutocomplete({
   className = "",
   autoComplete = "street-address",
   id,
+  country = "us",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -35,6 +36,8 @@ export default function AddressAutocomplete({
   className?: string;
   autoComplete?: string;
   id?: string;
+  // ISO 3166-1 alpha-2 code the typeahead searches within. Defaults to the US.
+  country?: string;
 }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -83,7 +86,10 @@ export default function AddressAutocomplete({
     const seq = ++requestSeq.current;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/address?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/address?q=${encodeURIComponent(q)}&country=${encodeURIComponent(country)}`,
+          { cache: "no-store" }
+        );
         const json = await res.json().catch(() => null);
         if (seq !== requestSeq.current) return; // a newer keystroke won
         if (json?.configured === false) {
@@ -99,7 +105,7 @@ export default function AddressAutocomplete({
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [value, configured]);
+  }, [value, configured, country]);
 
   // Close when focus or a click goes elsewhere.
   useEffect(() => {

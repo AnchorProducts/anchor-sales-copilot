@@ -27,9 +27,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const GEOAPIFY_BASE = "https://api.geoapify.com/v1/geocode";
-// US-only: every state dropdown in the app is US, and restricting the provider
-// keeps irrelevant foreign matches out of the list.
-const COUNTRY_FILTER = "countrycode:us";
+// US by default: most forms are US-only, and restricting the provider keeps
+// irrelevant foreign matches out of the list. Marketing order ship-to also
+// allows Canada, Mexico, and South America, and passes ?country=xx.
+const DEFAULT_COUNTRY = "us";
+const ALLOWED_COUNTRIES = new Set([
+  "us", "ca", "mx",
+  "ar", "bo", "br", "cl", "co", "ec", "gy", "py", "pe", "sr", "uy", "ve",
+]);
 const LIMIT = 6;
 
 function apiKey(): string {
@@ -56,6 +61,8 @@ export async function GET(req: Request) {
     const q = (url.searchParams.get("q") || "").trim();
     const lat = url.searchParams.get("lat");
     const lng = url.searchParams.get("lng");
+    const requested = (url.searchParams.get("country") || "").trim().toLowerCase();
+    const country = ALLOWED_COUNTRIES.has(requested) ? requested : DEFAULT_COUNTRY;
 
     // No key configured: report it plainly so the input can hide its dropdown
     // and location button rather than failing on every keystroke.
@@ -89,7 +96,7 @@ export async function GET(req: Request) {
     if (q.length < 3) return NextResponse.json({ configured: true, suggestions: [] });
 
     const json = await geoapifyGet(
-      `/autocomplete?text=${encodeURIComponent(q)}&filter=${COUNTRY_FILTER}` +
+      `/autocomplete?text=${encodeURIComponent(q)}&filter=countrycode:${country}` +
         `&format=json&limit=${LIMIT}&apiKey=${encodeURIComponent(key)}`
     );
     return NextResponse.json({
