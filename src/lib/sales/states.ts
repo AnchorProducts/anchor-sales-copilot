@@ -29,3 +29,21 @@ export const SHIP_COUNTRIES: { code: string; name: string; group: "North America
   { code: "UY", name: "Uruguay", group: "South America" },
   { code: "VE", name: "Venezuela", group: "South America" },
 ];
+
+export function shipCountryName(code: string): string {
+  return SHIP_COUNTRIES.find((c) => c.code === code)?.name || code;
+}
+
+// Dropdown options for the state/province field: US states, Canadian
+// provinces, or null (free text) for everywhere else.
+export function regionOptionsFor(country: string): string[] | null {
+  if (country === "US") return US_STATES;
+  if (country === "CA") return CA_PROVINCES;
+  return null;
+}
+
+export function regionLabelFor(country: string): string {
+  if (country === "US" || country === "MX") return "State";
+  if (country === "CA") return "Province";
+  return "Region";
+}

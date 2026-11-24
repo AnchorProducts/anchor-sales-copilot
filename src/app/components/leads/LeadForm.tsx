@@ -10,7 +10,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
-import { US_STATES } from "@/lib/sales/states";
+import { regionLabelFor, regionOptionsFor } from "@/lib/sales/states";
 import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import {
   SOLUTION_CATALOG,
@@ -585,6 +585,7 @@ export default function LeadForm() {
               ship_city: form.city,
               ship_state: form.state,
               ship_zip: form.zip,
+              ship_country: form.country,
               project_description: followUp,
             }),
           });
@@ -714,6 +715,7 @@ export default function LeadForm() {
               showCurrentLocation
               className="h-11 px-3 text-sm"
               placeholder={t("jobSiteStreetAddress")}
+              country={form.country.toLowerCase()}
             />
           </div>
 
@@ -723,15 +725,19 @@ export default function LeadForm() {
           </label>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">{t("state")}</span>
-            <Select value={form.state} onChange={(e) => update("state", e.target.value)} className="h-11 px-3 text-sm">
-              <option value="">{t("statePlain")}</option>
-              {US_STATES.map((state) => (<option key={state} value={state}>{state}</option>))}
-            </Select>
+            <span className="font-semibold">{form.country === "US" ? t("state") : regionLabelFor(form.country)}</span>
+            {regionOptionsFor(form.country) ? (
+              <Select value={form.state} onChange={(e) => update("state", e.target.value)} className="h-11 px-3 text-sm">
+                <option value="">{form.country === "US" ? t("statePlain") : regionLabelFor(form.country)}</option>
+                {regionOptionsFor(form.country)!.map((state) => (<option key={state} value={state}>{state}</option>))}
+              </Select>
+            ) : (
+              <Input value={form.state} onChange={(e) => update("state", e.target.value)} className="h-11 px-3 text-sm" placeholder={regionLabelFor(form.country)} />
+            )}
           </label>
 
           <label className="grid gap-1.5 text-sm">
-            <span className="font-semibold">{t("zip")}</span>
+            <span className="font-semibold">{form.country === "US" ? t("zip") : "Postal code"}</span>
             <Input value={form.zip} onChange={(e) => update("zip", e.target.value)} className="h-11 px-3 text-sm" placeholder={t("zipPlain")} />
             {clean(form.state).toUpperCase() === "TX" && (
               <span className="text-[11px] text-[var(--anchor-gray)]">
@@ -742,7 +748,12 @@ export default function LeadForm() {
 
           <label className="grid gap-1.5 text-sm">
             <span className="font-semibold">{t("country")}</span>
-            <Select value={form.country} onChange={(e) => update("country", e.target.value)} className="h-11 px-3 text-sm">
+            <Select
+              value={form.country}
+              // A US state means nothing in another country, so start it fresh.
+              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value, state: "", zip: "" }))}
+              className="h-11 px-3 text-sm"
+            >
               {COUNTRIES.map((country) => (<option key={country.value} value={country.value}>{country.label}</option>))}
             </Select>
           </label>

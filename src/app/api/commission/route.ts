@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { generateCommissionClaimPdf } from "@/lib/pdf/commissionClaimPdf";
 import { sendPushToTool } from "@/lib/push/send";
 import { getToolRecipientEmails, mergeEmails } from "@/lib/push/recipients";
+import { shipCountryName } from "@/lib/sales/states";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -193,7 +194,13 @@ export async function POST(req: Request) {
     const ship_to_address = clean(body.ship_to_address) || null;
     const ship_city = clean(body.ship_city) || null;
     const ship_state = clean(body.ship_state) || null;
-    const ship_zip = clean(body.ship_zip) || null;
+    // No country column: outside the US, the country rides on the end of the
+    // postal code so every "City, ST, ZIP" line (admin, PDF, email) ends with it.
+    const ship_country = clean(body.ship_country).toUpperCase() || "US";
+    const ship_zip =
+      [clean(body.ship_zip), ship_country !== "US" ? shipCountryName(ship_country) : ""]
+        .filter(Boolean)
+        .join(", ") || null;
     const project_description = clean(body.project_description) || null;
 
     if (!company_placing_order) {

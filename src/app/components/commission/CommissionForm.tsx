@@ -9,7 +9,7 @@ import { Input, Select, Textarea } from "@/app/components/ui/Field";
 import { MultiSelect } from "@/app/components/ui/MultiSelect";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { ROOF_BRANDS, ROOF_TYPES } from "@/lib/roofing/options";
-import { US_STATES } from "@/lib/sales/states";
+import { CA_PROVINCES, SHIP_COUNTRIES, US_STATES, regionLabelFor, regionOptionsFor } from "@/lib/sales/states";
 import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import { SOLUTION_CATALOG, SOLUTION_CATEGORIES } from "@/lib/solutions/solutionCatalog";
 import { U_ANCHOR_OPTIONS, OTHER_ITEMS } from "@/lib/sales/uAnchors";
@@ -42,6 +42,8 @@ type FormState = {
   ship_city: string;
   ship_state: string;
   ship_zip: string;
+  // ISO alpha-2 from SHIP_COUNTRIES; "US" unless changed.
+  ship_country: string;
   project_description: string;
 };
 
@@ -72,6 +74,7 @@ const INITIAL_FORM: FormState = {
   ship_city: "",
   ship_state: "",
   ship_zip: "",
+  ship_country: "US",
   project_description: "",
 };
 
@@ -113,6 +116,9 @@ export default function CommissionForm() {
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Ship-to state/province: dropdown for US and Canada, free text elsewhere.
+  const shipRegions = regionOptionsFor(form.ship_country);
 
 
   function validate() {
@@ -172,6 +178,7 @@ export default function CommissionForm() {
           ship_city: form.ship_city,
           ship_state: form.ship_state,
           ship_zip: form.ship_zip,
+          ship_country: form.ship_country,
           project_description: form.project_description,
         }),
       });
@@ -361,7 +368,12 @@ export default function CommissionForm() {
               <span className="font-semibold">{t("shipState")}</span>
               <Select value={form.order_state} onChange={(e) => update("order_state", e.target.value)} className="h-10 px-3 text-sm">
                 <option value="">{t("selectState")}</option>
-                {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                <optgroup label="United States">
+                  {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </optgroup>
+                <optgroup label="Canada">
+                  {CA_PROVINCES.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </optgroup>
               </Select>
             </label>
           </div>
@@ -401,6 +413,25 @@ export default function CommissionForm() {
             <MultiSelect options={OTHER_ITEMS} sections={OTHER_ITEMS_SECTIONS} value={form.other_items} onChange={(v) => update("other_items", v)} placeholder={t("selectSolutions")} />
           </label>
 
+          <label className="grid gap-1 text-sm">
+            <span className="font-semibold">{t("country")}</span>
+            <Select
+              value={form.ship_country}
+              // A US state or ZIP means nothing in another country, so start those fresh.
+              onChange={(e) => setForm((f) => ({ ...f, ship_country: e.target.value, ship_state: "", ship_zip: "" }))}
+              className="h-10 px-3 text-sm"
+              autoComplete="country"
+            >
+              {(["North America", "South America"] as const).map((g) => (
+                <optgroup key={g} label={g}>
+                  {SHIP_COUNTRIES.filter((c) => c.group === g).map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+          </label>
+
           <div className="grid gap-1 text-sm">
             <span className="font-semibold">{t("shipToAddress")}</span>
             <AddressAutocomplete
@@ -414,6 +445,7 @@ export default function CommissionForm() {
               }}
               className="h-10 px-3 text-sm"
               placeholder={t("streetAddress")}
+              country={form.ship_country.toLowerCase()}
             />
           </div>
 
@@ -423,15 +455,19 @@ export default function CommissionForm() {
               <Input value={form.ship_city} onChange={(e) => update("ship_city", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("cityPlain")} />
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">{t("shipState")}</span>
-              <Select value={form.ship_state} onChange={(e) => update("ship_state", e.target.value)} className="h-10 px-3 text-sm">
-                <option value="">{t("selectState")}</option>
-                {US_STATES.map((s) => (<option key={s} value={s}>{s}</option>))}
-              </Select>
+              <span className="font-semibold">{form.ship_country === "US" ? t("shipState") : regionLabelFor(form.ship_country)}</span>
+              {shipRegions ? (
+                <Select value={form.ship_state} onChange={(e) => update("ship_state", e.target.value)} className="h-10 px-3 text-sm">
+                  <option value="">{form.ship_country === "US" ? t("selectState") : "—"}</option>
+                  {shipRegions.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </Select>
+              ) : (
+                <Input value={form.ship_state} onChange={(e) => update("ship_state", e.target.value)} className="h-10 px-3 text-sm" placeholder={regionLabelFor(form.ship_country)} />
+              )}
             </label>
             <label className="grid gap-1 text-sm">
-              <span className="font-semibold">{t("zipCode")}</span>
-              <Input value={form.ship_zip} onChange={(e) => update("ship_zip", e.target.value)} className="h-10 px-3 text-sm" placeholder={t("zipPlain")} />
+              <span className="font-semibold">{form.ship_country === "US" ? t("zipCode") : "Postal code"}</span>
+              <Input value={form.ship_zip} onChange={(e) => update("ship_zip", e.target.value)} className="h-10 px-3 text-sm" placeholder={form.ship_country === "US" ? t("zipPlain") : "Postal code"} />
             </label>
           </div>
 
