@@ -48,6 +48,7 @@ async function sendCommissionEmail(params: {
   shipCity: string | null;
   shipState: string | null;
   shipZip: string | null;
+  shipCountry: string | null;
   projectDescription: string | null;
   certified: boolean;
   unawareOtherSalesperson: string | null;
@@ -99,7 +100,7 @@ async function sendCommissionEmail(params: {
   lines.push(`Other Items: ${params.otherItems || "—"}`);
   lines.push("");
   lines.push(`Ship To: ${params.shipToAddress || "—"}`);
-  lines.push(`City/State/Zip: ${[params.shipCity, params.shipState, params.shipZip].filter(Boolean).join(", ") || "—"}`);
+  lines.push(`City/State/Zip: ${[params.shipCity, params.shipState, params.shipZip, params.shipCountry].filter(Boolean).join(", ") || "—"}`);
   lines.push("");
   lines.push(`Project Description: ${params.projectDescription || "—"}`);
 
@@ -131,6 +132,7 @@ async function sendCommissionEmail(params: {
     shipCity: params.shipCity,
     shipState: params.shipState,
     shipZip: params.shipZip,
+    shipCountry: params.shipCountry,
     projectDescription: params.projectDescription,
   });
 
@@ -194,13 +196,10 @@ export async function POST(req: Request) {
     const ship_to_address = clean(body.ship_to_address) || null;
     const ship_city = clean(body.ship_city) || null;
     const ship_state = clean(body.ship_state) || null;
-    // No country column: outside the US, the country rides on the end of the
-    // postal code so every "City, ST, ZIP" line (admin, PDF, email) ends with it.
+    const ship_zip = clean(body.ship_zip) || null;
     const ship_country = clean(body.ship_country).toUpperCase() || "US";
-    const ship_zip =
-      [clean(body.ship_zip), ship_country !== "US" ? shipCountryName(ship_country) : ""]
-        .filter(Boolean)
-        .join(", ") || null;
+    // Shown after "City, ST, ZIP" in the email/PDF; US addresses don't need it.
+    const ship_country_label = ship_country !== "US" ? shipCountryName(ship_country) : null;
     const project_description = clean(body.project_description) || null;
 
     if (!company_placing_order) {
@@ -212,9 +211,7 @@ export async function POST(req: Request) {
     const rep_phone = clean(profile.phone) || null;
     const rep_email = clean(profile.email) || clean(user.email) || null;
 
-    const { data: claim, error: insertErr } = await supabaseAdmin
-      .from("commission_claims")
-      .insert({
+    const row = {
         created_by: user.id,
         rep_name,
         rep_company,
@@ -237,10 +234,24 @@ export async function POST(req: Request) {
         ship_city,
         ship_state,
         ship_zip,
+        ship_country,
         project_description,
-      })
-      .select("id")
-      .single();
+    };
+    const insertClaim = (r: Record<string, unknown>) =>
+      supabaseAdmin.from("commission_claims").insert(r).select("id").single();
+
+    let { data: claim, error: insertErr } = await insertClaim(row);
+    // Until migration 20261124_000001 is run (and the schema cache reloads),
+    // ship_country doesn't exist; save anyway with the country folded onto the
+    // postal code so the claim isn't lost.
+    if (insertErr && /ship_country/.test(insertErr.message || "")) {
+      const { ship_country: _omit, ...legacy } = row;
+      void _omit;
+      ({ data: claim, error: insertErr } = await insertClaim({
+        ...legacy,
+        ship_zip: [ship_zip, ship_country_label].filter(Boolean).join(", ") || null,
+      }));
+    }
 
     if (insertErr) {
       console.error("commission insert error", insertErr);
@@ -285,6 +296,7 @@ export async function POST(req: Request) {
         shipCity: ship_city,
         shipState: ship_state,
         shipZip: ship_zip,
+        shipCountry: ship_country_label,
         projectDescription: project_description,
         certified,
         unawareOtherSalesperson: unaware_other_salesperson,

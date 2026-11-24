@@ -27,6 +27,8 @@ export type CommissionClaimPdfData = {
   shipCity: string | null;
   shipState: string | null;
   shipZip: string | null;
+  // Country name for non-US ship-tos; null for the US.
+  shipCountry?: string | null;
   projectDescription: string | null;
 };
 
@@ -185,7 +187,7 @@ export function generateCommissionClaimPdf(c: CommissionClaimPdfData): {
   row("Address", c.shipToAddress);
   row(
     "City / State / Zip",
-    [c.shipCity, c.shipState, c.shipZip].filter(Boolean).join(", ") || null
+    [c.shipCity, c.shipState, c.shipZip, c.shipCountry].filter(Boolean).join(", ") || null
   );
   y += 4;
   divider();

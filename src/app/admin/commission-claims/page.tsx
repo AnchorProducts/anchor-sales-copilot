@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppNavbar } from "@/app/components/ui/AppNavbar";
 import { Card } from "@/app/components/ui/Card";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { shipCountryName } from "@/lib/sales/states";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ type Claim = {
   ship_city: string | null;
   ship_state: string | null;
   ship_zip: string | null;
+  ship_country?: string | null;
   project_description: string | null;
 };
 
@@ -278,7 +280,7 @@ export default function AdminCommissionClaimsPage() {
                                 <Field
                                   label="City/State/Zip"
                                   value={
-                                    [c.ship_city, c.ship_state, c.ship_zip].filter(Boolean).join(", ") || null
+                                    [c.ship_city, c.ship_state, c.ship_zip, c.ship_country && c.ship_country !== "US" ? shipCountryName(c.ship_country) : null].filter(Boolean).join(", ") || null
                                   }
                                 />
                               </Section>
